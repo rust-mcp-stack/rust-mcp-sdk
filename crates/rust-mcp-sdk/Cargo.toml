@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-sdk"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Ali Hashemi"]
 categories = ["data-structures", "parser-implementations", "parsing"]
 description = "An asynchronous SDK and framework for building MCP-Servers and MCP-Clients, leveraging the rust-mcp-schema for type safe MCP Schema Objects."

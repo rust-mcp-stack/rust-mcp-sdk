@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-transport"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Ali Hashemi"]
 categories = ["data-structures"]
 description = "Transport implementations for the MCP (Model Context Protocol) within the rust-mcp-sdk ecosystem, enabling asynchronous data exchange and efficient message handling between MCP clients and servers."

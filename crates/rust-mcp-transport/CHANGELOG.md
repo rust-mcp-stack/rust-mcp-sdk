@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.1.0...rust-mcp-transport-v0.1.1) (2025-03-29)
+
+
+### Bug Fixes
+
+* Update crate readme links and docs ([#2](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/2)) ([4f8a5b7](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4f8a5b74559b97bf9e7229c120c383caf7f53a36))
+
 ## [0.1.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.1.0...rust-mcp-transport-v0.1.0) (2025-03-29)
 
 
