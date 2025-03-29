@@ -1,6 +1,6 @@
 # rust-mcp-transport.
 
-`rust-mcp-transport` is a part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem, offering transport implementations for the MCP (Model Context Protocol). It enables asynchronous data exchange and efficient MCP message handling between MCP Clients and Servers.
+`rust-mcp-transport` is a part of the [rust-mcp-sdk](https://crates.io/crates/rust-mcp-sdk) ecosystem, offering transport implementations for the MCP (Model Context Protocol). It enables asynchronous data exchange and efficient MCP message handling between MCP Clients and Servers.
 
 **⚠️WARNING**: Currently, only Standard Input/Output (stdio) transport is supported. Server-Sent Events (SSE) transport is under development and will be available soon.
 
@@ -16,7 +16,7 @@ let transport = StdioTransport::new(TransportOptions { timeout: 60_000 })?;
 
 ```
 
-Refer to the [Hello World MCP Server](../../examples/hello-world-mcp-server/) example for a complete demonstration.
+Refer to the [Hello World MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) example for a complete demonstration.
 
 ### For MCP Client
 
@@ -53,4 +53,10 @@ let transport = StdioTransport::create_with_server_launch(
 )?;
 ```
 
-Refer to the [Simple MCP Client](../../examples/simple-mcp-client/) example for a complete demonstration.
+Refer to the [Simple MCP Client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) example for a complete demonstration.
+
+---
+
+<img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Check out [rust-mcp-sdk](https://crates.io/crates/rust-mcp-sdk) , a high-performance, asynchronous toolkit for building MCP servers and clients. Focus on your app's logic while [rust-mcp-sdk](https://crates.io/crates/rust-mcp-sdk) takes care of the rest!
+
+---

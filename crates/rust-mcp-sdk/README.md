@@ -102,7 +102,7 @@ impl ServerHandler for MyServerHandler {
 
 See hello-world-mcp-server example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
-![mcp-server in rust](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/assets/examples/hello-world-mcp-server.gif)
+![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
 
 ---
 
@@ -207,7 +207,7 @@ Here is the output :
 
 The same principles outlined above apply to the client-side handlers, `mcp_client_handler` and `mcp_client_handler_core`.  
 Use `client_runtime::create_client()` or `client_runtime_core::create_client()` , respectively.  
-Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/hello-world-mcp-server-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core).
+Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core).
 
 ## License
 
