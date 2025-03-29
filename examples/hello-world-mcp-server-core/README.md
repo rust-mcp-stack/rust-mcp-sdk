@@ -31,4 +31,4 @@ cargo build -p hello-world-mcp-server-core --release
 
 Here you can see it in action :
 
-![hello-world-mcp-server-core](../../assets/examples/hello-world-mcp-server-core.gif)
+![hello-world-mcp-server-core]![hello-world-mcp-server](../../assets/examples/hello-world-mcp-server.gif)
