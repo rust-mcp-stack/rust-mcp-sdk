@@ -68,3 +68,10 @@ pub mod mcp_server {
 
 pub use mcp_traits::mcp_client::*;
 pub use mcp_traits::mcp_server::*;
+
+pub use rust_mcp_transport::*;
+
+#[cfg(feature = "macros")]
+pub mod macros {
+    pub use rust_mcp_macros::*;
+}

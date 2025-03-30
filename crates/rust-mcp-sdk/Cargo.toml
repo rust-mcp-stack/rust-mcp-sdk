@@ -13,6 +13,7 @@ edition = "2021"
 [dependencies]
 rust-mcp-schema = { workspace = true }
 rust-mcp-transport = { workspace = true }
+rust-mcp-macros = { workspace = true, optional = true }
 
 tokio.workspace = true
 serde = { workspace = true }
@@ -21,6 +22,9 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 
+[features]
+default = ["macros"]         # Default features
+macros = ["rust-mcp-macros"]
 
 [lints]
 workspace = true
