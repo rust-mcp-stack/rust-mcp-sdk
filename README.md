@@ -189,7 +189,7 @@ Here is the output :
 
 ## Getting Started
 
-If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/GETTING_STARTED_MCP_SERVER.md)
+If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
 
 ### Choosing Between `mcp_server_handler` and `mcp_server_handler_core`
 
