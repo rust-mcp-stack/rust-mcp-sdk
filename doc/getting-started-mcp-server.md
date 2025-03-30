@@ -22,7 +22,7 @@ cd hello-world-mcp-server
 
 Next, we’ll add the Rust MCP dependencies for the toolkit, schema, and runtime support. We’ll also include `tokio` and `async-trait` for async functionality, plus `serde` and `serde_json` to enable [rust-mcp-macros](https://crates.io/crates/rust-mcp-macros) for MCP tool development.
 
-```toml
+```sh
 # rust-mcp dependencies
 cargo add rust-mcp-sdk rust-mcp-schema
 
