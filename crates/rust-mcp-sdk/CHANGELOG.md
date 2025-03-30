@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.1.1...rust-mcp-sdk-v0.1.2) (2025-03-30)
+
+
+### 🚀 Features
+
+* Re-export transport and macros for seamless user experience ([#4](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/4)) ([ff9e3af](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ff9e3af0e43a6e915f968445b1fbdb54a5069a8b))
+
+
+### 📚 Documentation
+
+* Add step by step guide to the project to help getting started quickly ([#6](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/6)) ([571f36a](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/571f36a452164bea24065eddb8d8591f665f2d80))
+
 ## [0.1.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.1.0...rust-mcp-sdk-v0.1.1) (2025-03-29)
 
 

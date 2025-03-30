@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-macros"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Ali Hashemi"]
 categories = ["data-structures", "parser-implementations", "parsing"]
 description = "A procedural macro that derives the MCPToolSchema implementation for structs or enums, generating a tool_input_schema function used with rust_mcp_schema::Tool."
