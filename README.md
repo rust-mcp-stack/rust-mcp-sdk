@@ -183,7 +183,7 @@ async fn main() -> SdkResult<()> {
 
 Here is the output :
 
-![rust-mcp-sdk-client-output](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/assets/sample/mcp-client-sample-code.jpg)
+![rust-mcp-sdk-client-output](assets/examples/mcp-client-sample-code.jpg)
 
 > your results may vary slightly depending on the version of the MCP Server in use when you run it.
 
