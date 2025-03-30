@@ -57,7 +57,8 @@ use rust_mcp_sdk::error::SdkResult;
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    println!("Hello, world!");
+
+    // The main function will be completed in the following steps.
 
     Ok(())
 }
