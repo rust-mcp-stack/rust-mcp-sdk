@@ -6,7 +6,7 @@ In this example, the MCP server we are building includes two MCP tools, `say_hel
 
 ## Prerequisites
 
-- Rust 1.65 or later (install via [rustup](https://rustup.rs/))
+- Rust (install via [rustup](https://rustup.rs/))
 - Cargo (comes with Rust)
 
 ## Step 1: Create a new project
