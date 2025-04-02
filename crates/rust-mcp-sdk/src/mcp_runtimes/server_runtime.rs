@@ -7,22 +7,22 @@ use rust_mcp_schema::schema_utils::MessageFromServer;
 use rust_mcp_schema::{
     self, schema_utils, InitializeRequestParams, InitializeResult, JsonrpcErrorError,
 };
-use rust_mcp_transport::{IOStream, MCPDispatch, MessageDispatcher, Transport};
+use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use schema_utils::ClientMessage;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::SdkResult;
-use crate::mcp_traits::mcp_handler::MCPServerHandler;
-use crate::mcp_traits::mcp_server::MCPServer;
+use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::mcp_traits::mcp_server::McpServer;
 
 /// Struct representing the runtime core of the MCP server, handling transport and client details
 pub struct ServerRuntime {
     // The transport interface for handling messages between client and server
     transport: Box<dyn Transport<ClientMessage, MessageFromServer>>,
     // The handler for processing MCP messages
-    handler: Box<dyn MCPServerHandler>,
+    handler: Box<dyn McpServerHandler>,
     // Information about the server
     server_details: InitializeResult,
     // Details about the connected client
@@ -33,7 +33,7 @@ pub struct ServerRuntime {
 }
 
 #[async_trait]
-impl MCPServer for ServerRuntime {
+impl McpServer for ServerRuntime {
     /// Set the client details, storing them in client_details
     fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
         match self.client_details.write() {
@@ -50,12 +50,12 @@ impl MCPServer for ServerRuntime {
 
     /// Returns the server's details, including server capability,
     /// instructions, protocol_version , server_info and optional meta data
-    fn get_server_info(&self) -> &InitializeResult {
+    fn server_info(&self) -> &InitializeResult {
         &self.server_details
     }
 
     /// Returns the client information if available, after successful initialization , otherwise returns None
-    fn get_client_info(&self) -> Option<InitializeRequestParams> {
+    fn client_info(&self) -> Option<InitializeRequestParams> {
         if let Ok(details) = self.client_details.read() {
             details.clone()
         } else {
@@ -64,9 +64,9 @@ impl MCPServer for ServerRuntime {
         }
     }
 
-    async fn get_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
+    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
     where
-        MessageDispatcher<ClientMessage>: MCPDispatch<ClientMessage, MessageFromServer>,
+        MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>,
     {
         (&self.message_sender) as _
     }
@@ -81,12 +81,12 @@ impl MCPServer for ServerRuntime {
 
         self.set_message_sender(sender).await;
 
-        if let IOStream::Writable(error_stream) = error_io {
+        if let IoStream::Writable(error_stream) = error_io {
             self.set_error_stream(error_stream).await;
         }
 
-        let sender = self.get_sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::MCPSdkError::SdkError(
+        let sender = self.sender().await.read().await;
+        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
             schema_utils::SdkError::connection_closed(),
         ))?;
 
@@ -156,7 +156,7 @@ impl ServerRuntime {
     pub(crate) fn new(
         server_details: InitializeResult,
         transport: impl Transport<ClientMessage, MessageFromServer>,
-        handler: Box<dyn MCPServerHandler>,
+        handler: Box<dyn McpServerHandler>,
     ) -> Self {
         Self {
             server_details,

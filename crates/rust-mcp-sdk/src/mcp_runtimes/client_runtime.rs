@@ -9,26 +9,26 @@ use rust_mcp_schema::{
     InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
     JsonrpcErrorError, ServerResult,
 };
-use rust_mcp_transport::{IOStream, MCPDispatch, MessageDispatcher, Transport};
+use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 
-use crate::error::{MCPSdkError, SdkResult};
-use crate::mcp_traits::mcp_client::MCPClient;
-use crate::mcp_traits::mcp_handler::MCPClientHandler;
+use crate::error::{McpSdkError, SdkResult};
+use crate::mcp_traits::mcp_client::McpClient;
+use crate::mcp_traits::mcp_handler::McpClientHandler;
 
 pub struct ClientRuntime {
     // The transport interface for handling messages between client and server
     transport: Box<dyn Transport<ServerMessage, MessageFromClient>>,
     // The handler for processing MCP messages
-    handler: Box<dyn MCPClientHandler>,
+    handler: Box<dyn McpClientHandler>,
     // // Information about the server
     client_details: InitializeRequestParams,
     // Details about the connected server
     server_details: Arc<RwLock<Option<InitializeResult>>>,
     message_sender: tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>,
-    handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), MCPSdkError>>>>,
+    handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), McpSdkError>>>>,
 }
 
 impl ClientRuntime {
@@ -40,7 +40,7 @@ impl ClientRuntime {
     pub(crate) fn new(
         client_details: InitializeRequestParams,
         transport: impl Transport<ServerMessage, MessageFromClient>,
-        handler: Box<dyn MCPClientHandler>,
+        handler: Box<dyn McpClientHandler>,
     ) -> Self {
         Self {
             transport: Box::new(transport),
@@ -72,10 +72,10 @@ impl ClientRuntime {
 }
 
 #[async_trait]
-impl MCPClient for ClientRuntime {
-    async fn get_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
+impl McpClient for ClientRuntime {
+    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
     where
-        MessageDispatcher<ServerMessage>: MCPDispatch<ServerMessage, MessageFromClient>,
+        MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>,
     {
         (&self.message_sender) as _
     }
@@ -90,8 +90,8 @@ impl MCPClient for ClientRuntime {
         let self_clone_err = Arc::clone(&self);
 
         let main_task = tokio::spawn(async move {
-            let sender = self_clone.get_sender().await.read().await;
-            let sender = sender.as_ref().ok_or(crate::error::MCPSdkError::SdkError(
+            let sender = self_clone.sender().await.read().await;
+            let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
                 schema_utils::SdkError::connection_closed(),
             ))?;
 
@@ -129,13 +129,13 @@ impl MCPClient for ClientRuntime {
                     ServerMessage::Response(_) => {}
                 }
             }
-            Ok::<(), MCPSdkError>(())
+            Ok::<(), McpSdkError>(())
         });
 
         let err_task = tokio::spawn(async move {
             let self_ref = &*self_clone_err;
 
-            if let IOStream::Readable(error_input) = error_io {
+            if let IoStream::Readable(error_input) = error_io {
                 let mut reader = BufReader::new(error_input).lines();
                 loop {
                     tokio::select! {
@@ -165,7 +165,7 @@ impl MCPClient for ClientRuntime {
                     }
                 }
             }
-            Ok::<(), MCPSdkError>(())
+            Ok::<(), McpSdkError>(())
         });
 
         let mut lock = self.handlers.lock().await;
@@ -187,10 +187,10 @@ impl MCPClient for ClientRuntime {
                 .into()),
         }
     }
-    fn get_client_info(&self) -> &InitializeRequestParams {
+    fn client_info(&self) -> &InitializeRequestParams {
         &self.client_details
     }
-    fn get_server_info(&self) -> Option<InitializeResult> {
+    fn server_info(&self) -> Option<InitializeResult> {
         if let Ok(details) = self.server_details.read() {
             details.clone()
         } else {

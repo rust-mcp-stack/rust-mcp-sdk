@@ -3,7 +3,7 @@ use rust_mcp_schema::{
     schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
     JsonrpcErrorError,
 };
-use rust_mcp_sdk::{mcp_client::ClientHandlerCore, MCPClient};
+use rust_mcp_sdk::{mcp_client::ClientHandlerCore, McpClient};
 pub struct MyClientHandler;
 
 // To check out a list of all the methods in the trait that you can override, take a look at
@@ -14,7 +14,7 @@ impl ClientHandlerCore for MyClientHandler {
     async fn handle_request(
         &self,
         request: RequestFromServer,
-        _runtime: &dyn MCPClient,
+        _runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, JsonrpcErrorError> {
         match request {
             RequestFromServer::ServerRequest(server_request) => match server_request {
@@ -39,7 +39,7 @@ impl ClientHandlerCore for MyClientHandler {
     async fn handle_notification(
         &self,
         _notification: NotificationFromServer,
-        _runtime: &dyn MCPClient,
+        _runtime: &dyn McpClient,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         Err(JsonrpcErrorError::internal_error()
             .with_message("handle_notification() Not implemented".to_string()))
@@ -48,7 +48,7 @@ impl ClientHandlerCore for MyClientHandler {
     async fn handle_error(
         &self,
         _error: JsonrpcErrorError,
-        _runtime: &dyn MCPClient,
+        _runtime: &dyn McpClient,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         Err(JsonrpcErrorError::internal_error()
             .with_message("handle_error() Not implemented".to_string()))

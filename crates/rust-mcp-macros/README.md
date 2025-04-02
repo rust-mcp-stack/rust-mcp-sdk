@@ -5,7 +5,7 @@ A procedural macro, part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack
 The `mcp_tool` macro generates an implementation for the annotated struct that includes:
 
 - A `tool_name()` method returning the tool's name as a string.
-- A `get_tool()` method returning a `rust_mcp_schema::Tool` instance with the tool's name,
+- A `tool()` method returning a `rust_mcp_schema::Tool` instance with the tool's name,
   description, and input schema derived from the struct's fields.
 
 ## Attributes
@@ -32,7 +32,7 @@ fn main() {
 
     assert_eq!(WriteFileTool::tool_name(), "write_file");
 
-    let tool: rust_mcp_schema::Tool = WriteFileTool::get_tool();
+    let tool: rust_mcp_schema::Tool = WriteFileTool::tool();
     assert_eq!(tool.name, "write_file");
     assert_eq!( tool.description.unwrap(),"Create a new file or completely overwrite an existing file with new content.");
 

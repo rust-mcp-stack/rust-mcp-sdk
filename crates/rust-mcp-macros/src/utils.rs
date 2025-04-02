@@ -28,7 +28,7 @@ pub fn is_vec(ty: &Type) -> bool {
 
 // Extract the inner type from Vec<T> or Option<T>
 #[allow(unused)]
-pub fn get_inner_type(ty: &Type) -> Option<&Type> {
+pub fn inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         if type_path.path.segments.len() == 1 {
             let segment = &type_path.path.segments[0];
@@ -46,7 +46,7 @@ pub fn get_inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-fn get_doc_comment(attrs: &[Attribute]) -> Option<String> {
+fn doc_comment(attrs: &[Attribute]) -> Option<String> {
     let mut docs = Vec::new();
     for attr in attrs {
         if attr.path().is_ident("doc") {
@@ -86,7 +86,7 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
     let number_types = [
         "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
     ];
-    let doc_comment = get_doc_comment(attrs);
+    let doc_comment = doc_comment(attrs);
     let description = doc_comment.as_ref().map(|desc| {
         quote! {
             map.insert("description".to_string(), serde_json::Value::String(#desc.to_string()));

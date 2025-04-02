@@ -8,17 +8,17 @@ repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
 documentation = "https://docs.rs/rust-mcp-transport"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 rust-mcp-schema = { workspace = true }
 
 async-trait = { workspace = true }
-tokio = { workspace = true }
 futures = { workspace = true }
-thiserror = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

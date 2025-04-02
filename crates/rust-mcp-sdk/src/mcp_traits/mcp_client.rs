@@ -16,41 +16,41 @@ use rust_mcp_schema::{
     ServerCapabilities, SetLevelRequest, SetLevelRequestParams, SubscribeRequest,
     SubscribeRequestParams, UnsubscribeRequest, UnsubscribeRequestParams,
 };
-use rust_mcp_transport::{MCPDispatch, MessageDispatcher};
+use rust_mcp_transport::{McpDispatch, MessageDispatcher};
 
 use crate::{error::SdkResult, utils::format_assertion_message};
 
 #[async_trait]
-pub trait MCPClient: Sync + Send {
+pub trait McpClient: Sync + Send {
     async fn start(self: Arc<Self>) -> SdkResult<()>;
     fn set_server_details(&self, server_details: InitializeResult) -> SdkResult<()>;
 
     async fn shut_down(&self) -> SdkResult<()>;
     async fn is_shut_down(&self) -> bool;
 
-    async fn get_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
+    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
     where
-        MessageDispatcher<ServerMessage>: MCPDispatch<ServerMessage, MessageFromClient>;
+        MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>;
 
-    fn get_client_info(&self) -> &InitializeRequestParams;
-    fn get_server_info(&self) -> Option<InitializeResult>;
+    fn client_info(&self) -> &InitializeRequestParams;
+    fn server_info(&self) -> Option<InitializeResult>;
 
     /// Checks whether the server has been initialized with client
     fn is_initialized(&self) -> bool {
-        self.get_server_info().is_some()
+        self.server_info().is_some()
     }
 
     /// Returns the server's name and version information once initialization is complete.
     /// This method retrieves the server details, if available, after successful initialization.
-    fn get_server_version(&self) -> Option<Implementation> {
-        self.get_server_info()
+    fn server_version(&self) -> Option<Implementation> {
+        self.server_info()
             .map(|server_details| server_details.server_info)
     }
 
     /// Returns the server's capabilities.
     /// After initialization has completed, this will be populated with the server's reported capabilities.
-    fn get_server_capabilities(&self) -> Option<ServerCapabilities> {
-        self.get_server_info().map(|item| item.capabilities)
+    fn server_capabilities(&self) -> Option<ServerCapabilities> {
+        self.server_info().map(|item| item.capabilities)
     }
 
     /// Checks if the server has tools available.
@@ -68,7 +68,7 @@ pub trait MCPClient: Sync + Send {
     /// println!("{}",1);
     /// ```
     fn server_has_tools(&self) -> Option<bool> {
-        self.get_server_info()
+        self.server_info()
             .map(|server_details| server_details.capabilities.tools.is_some())
     }
 
@@ -84,7 +84,7 @@ pub trait MCPClient: Sync + Send {
     /// - `Some(true)` if prompts are available on the server.
     /// - `Some(false)` if no prompts are available on the server.
     fn server_has_prompts(&self) -> Option<bool> {
-        self.get_server_info()
+        self.server_info()
             .map(|server_details| server_details.capabilities.prompts.is_some())
     }
 
@@ -100,7 +100,7 @@ pub trait MCPClient: Sync + Send {
     /// - `Some(true)` if experimental capabilities are available on the server.
     /// - `Some(false)` if no experimental capabilities are available on the server.
     fn server_has_experimental(&self) -> Option<bool> {
-        self.get_server_info()
+        self.server_info()
             .map(|server_details| server_details.capabilities.experimental.is_some())
     }
 
@@ -116,7 +116,7 @@ pub trait MCPClient: Sync + Send {
     /// - `Some(true)` if resources are available on the server.
     /// - `Some(false)` if no resources are available on the server.
     fn server_has_resources(&self) -> Option<bool> {
-        self.get_server_info()
+        self.server_info()
             .map(|server_details| server_details.capabilities.resources.is_some())
     }
 
@@ -132,12 +132,12 @@ pub trait MCPClient: Sync + Send {
     /// - `Some(true)` if logging is supported by the server.
     /// - `Some(false)` if logging is not supported by the server.
     fn server_supports_logging(&self) -> Option<bool> {
-        self.get_server_info()
+        self.server_info()
             .map(|server_details| server_details.capabilities.logging.is_some())
     }
 
-    fn get_instructions(&self) -> Option<String> {
-        self.get_server_info()?.instructions
+    fn instructions(&self) -> Option<String> {
+        self.server_info()?.instructions
     }
 
     /// Sends a request to the server and processes the response.
@@ -146,8 +146,8 @@ pub trait MCPClient: Sync + Send {
     /// and handles the result. If the response is empty or of an invalid type, an error is returned.
     /// Otherwise, it returns the result from the server.
     async fn request(&self, request: RequestFromClient) -> SdkResult<ResultFromServer> {
-        let sender = self.get_sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::MCPSdkError::SdkError(
+        let sender = self.sender().await.read().await;
+        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
             schema_utils::SdkError::connection_closed(),
         ))?;
 
@@ -172,8 +172,8 @@ pub trait MCPClient: Sync + Send {
     /// to return any response. The method asynchronously sends the notification using
     /// the transport layer and does not wait for any acknowledgement or result.
     async fn send_notification(&self, notification: NotificationFromClient) -> SdkResult<()> {
-        let sender = self.get_sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::MCPSdkError::SdkError(
+        let sender = self.sender().await.read().await;
+        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
             schema_utils::SdkError::connection_closed(),
         ))?;
         sender
@@ -216,7 +216,7 @@ pub trait MCPClient: Sync + Send {
         Ok(response.try_into()?)
     }
 
-    async fn get_prompt(
+    async fn prompt(
         &self,
         params: GetPromptRequestParams,
     ) -> SdkResult<rust_mcp_schema::GetPromptResult> {
@@ -315,7 +315,7 @@ pub trait MCPClient: Sync + Send {
     fn assert_server_capabilities(&self, request_method: &String) -> SdkResult<()> {
         let entity = "Server";
 
-        let capabilities = self.get_server_capabilities().ok_or::<JsonrpcErrorError>(
+        let capabilities = self.server_capabilities().ok_or::<JsonrpcErrorError>(
             JsonrpcErrorError::internal_error()
                 .with_message("Server is not initialized!".to_string()),
         )?;
@@ -377,7 +377,7 @@ pub trait MCPClient: Sync + Send {
         notification_method: &String,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         let entity = "Client";
-        let capabilities = &self.get_client_info().capabilities;
+        let capabilities = &self.client_info().capabilities;
 
         if *notification_method == RootsListChangedNotification::method_name()
             && capabilities.roots.is_some()
@@ -399,7 +399,7 @@ pub trait MCPClient: Sync + Send {
         request_method: &String,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         let entity = "Client";
-        let capabilities = &self.get_client_info().capabilities;
+        let capabilities = &self.client_info().capabilities;
 
         if *request_method == CreateMessageRequest::method_name() && capabilities.sampling.is_some()
         {

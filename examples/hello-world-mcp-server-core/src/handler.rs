@@ -4,7 +4,7 @@ use rust_mcp_schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
     ClientRequest, JsonrpcErrorError, ListToolsResult,
 };
-use rust_mcp_sdk::{mcp_server::ServerHandlerCore, MCPServer};
+use rust_mcp_sdk::{mcp_server::ServerHandlerCore, McpServer};
 
 use crate::tools::GreetingTools;
 
@@ -19,22 +19,20 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_request(
         &self,
         request: RequestFromClient,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
         let method_name = &request.method().to_owned();
         match request {
             //Handle client requests according to their specific type.
             RequestFromClient::ClientRequest(client_request) => match client_request {
                 // Handle the initialization request
-                ClientRequest::InitializeRequest(_) => {
-                    Ok(runtime.get_server_info().to_owned().into())
-                }
+                ClientRequest::InitializeRequest(_) => Ok(runtime.server_info().to_owned().into()),
 
                 // Handle ListToolsRequest, return list of available tools
                 ClientRequest::ListToolsRequest(_) => Ok(ListToolsResult {
                     meta: None,
                     next_cursor: None,
-                    tools: GreetingTools::get_tools(),
+                    tools: GreetingTools::tools(),
                 }
                 .into()),
 
@@ -76,7 +74,7 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_notification(
         &self,
         notification: NotificationFromClient,
-        _: &dyn MCPServer,
+        _: &dyn McpServer,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         Ok(())
     }
@@ -85,7 +83,7 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_error(
         &self,
         error: JsonrpcErrorError,
-        _: &dyn MCPServer,
+        _: &dyn McpServer,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         Ok(())
     }

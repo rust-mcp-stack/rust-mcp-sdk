@@ -3,7 +3,7 @@ use rust_mcp_schema::{
     schema_utils::CallToolError, CallToolRequest, CallToolResult, JsonrpcErrorError,
     ListToolsRequest, ListToolsResult,
 };
-use rust_mcp_sdk::{mcp_server::ServerHandler, MCPServer};
+use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
 
 use crate::tools::GreetingTools;
 
@@ -20,12 +20,12 @@ impl ServerHandler for MyServerHandler {
     async fn handle_list_tools_request(
         &self,
         request: ListToolsRequest,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> std::result::Result<ListToolsResult, JsonrpcErrorError> {
         Ok(ListToolsResult {
             meta: None,
             next_cursor: None,
-            tools: GreetingTools::get_tools(),
+            tools: GreetingTools::tools(),
         })
     }
 
@@ -33,7 +33,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request(
         &self,
         request: CallToolRequest,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =

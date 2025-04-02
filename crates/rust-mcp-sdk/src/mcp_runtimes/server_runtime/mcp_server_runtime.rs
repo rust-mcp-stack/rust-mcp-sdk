@@ -11,7 +11,7 @@ use rust_mcp_transport::Transport;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
-    mcp_traits::{mcp_handler::MCPServerHandler, mcp_server::MCPServer},
+    mcp_traits::{mcp_handler::McpServerHandler, mcp_server::McpServer},
 };
 
 use super::ServerRuntime;
@@ -56,11 +56,11 @@ impl ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 }
 
 #[async_trait]
-impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
+impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
         match client_jsonrpc_request {
             rust_mcp_schema::schema_utils::RequestFromClient::ClientRequest(client_request) => {
@@ -115,9 +115,9 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                             .map(|value| value.into())
                     }
 
-                    rust_mcp_schema::ClientRequest::GetPromptRequest(get_prompt_request) => self
+                    rust_mcp_schema::ClientRequest::GetPromptRequest(prompt_request) => self
                         .handler
-                        .handle_get_prompt_request(get_prompt_request, runtime)
+                        .handle_prompt_request(prompt_request, runtime)
                         .await
                         .map(|value| value.into()),
                     rust_mcp_schema::ClientRequest::ListToolsRequest(list_tools_request) => self
@@ -159,7 +159,7 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_error(
         &self,
         jsonrpc_error: JsonrpcErrorError,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -168,7 +168,7 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         match client_jsonrpc_notification {
             rust_mcp_schema::schema_utils::NotificationFromClient::ClientNotification(
@@ -214,7 +214,7 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         Ok(())
     }
 
-    async fn on_server_started(&self, runtime: &dyn MCPServer) {
+    async fn on_server_started(&self, runtime: &dyn McpServer) {
         self.handler.on_server_started(runtime).await;
     }
 }

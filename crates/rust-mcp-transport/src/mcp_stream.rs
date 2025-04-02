@@ -1,7 +1,7 @@
 use crate::{
     error::{GenericSendError, TransportError},
     message_dispatcher::MessageDispatcher,
-    IOStream,
+    IoStream,
 };
 use futures::Stream;
 use rust_mcp_schema::{schema_utils::RPCMessage, JsonrpcErrorError, RequestId};
@@ -22,23 +22,23 @@ pub struct MCPStream {}
 
 impl MCPStream {
     /// Creates a new asynchronous stream and associated components for handling I/O operations.
-    /// This function takes in a readable stream, a writable stream wrapped in a `Mutex`, and an `IOStream`
+    /// This function takes in a readable stream, a writable stream wrapped in a `Mutex`, and an `IoStream`
     /// # Returns
     ///
     /// A tuple containing:
     /// - A `Pin<Box<dyn Stream<Item = R> + Send>>`: A stream that yields items of type `R`.
     /// - A `MessageDispatcher<R>`: A sender that can be used to send messages of type `R`.
-    /// - An `IOStream`: An error handling stream for managing error I/O (stderr).
+    /// - An `IoStream`: An error handling stream for managing error I/O (stderr).
     pub fn create<R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
-        error_io: IOStream,
+        error_io: IoStream,
         timeout_msec: u64,
         shutdown_rx: Receiver<bool>,
     ) -> (
         Pin<Box<dyn Stream<Item = R> + Send>>,
         MessageDispatcher<R>,
-        IOStream,
+        IoStream,
     )
     where
         R: RPCMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,

@@ -8,8 +8,8 @@ use rust_mcp_transport::Transport;
 
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
-use crate::mcp_traits::mcp_handler::MCPServerHandler;
-use crate::mcp_traits::mcp_server::MCPServer;
+use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::mcp_traits::mcp_server::McpServer;
 
 use super::ServerRuntime;
 
@@ -54,11 +54,11 @@ impl RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>> {
 }
 
 #[async_trait]
-impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>> {
+impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>> {
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
         // store the client details if the request is a client initialization request
         if let schema_utils::RequestFromClient::ClientRequest(
@@ -81,7 +81,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     async fn handle_error(
         &self,
         jsonrpc_error: JsonrpcErrorError,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -89,7 +89,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
-        runtime: &dyn MCPServer,
+        runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         // Trigger the `on_initialized()` callback if an `initialized_notification` is received from the client.
         if client_jsonrpc_notification.is_initialized_notification() {
@@ -102,7 +102,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
             .await?;
         Ok(())
     }
-    async fn on_server_started(&self, runtime: &dyn MCPServer) {
+    async fn on_server_started(&self, runtime: &dyn McpServer) {
         self.handler.on_server_started(runtime).await;
     }
 }

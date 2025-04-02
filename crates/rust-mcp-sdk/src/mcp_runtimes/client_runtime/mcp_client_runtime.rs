@@ -11,8 +11,8 @@ use rust_mcp_schema::{
 use rust_mcp_transport::Transport;
 
 use crate::{
-    error::SdkResult, mcp_client::ClientHandler, mcp_traits::mcp_handler::MCPClientHandler,
-    MCPClient,
+    error::SdkResult, mcp_client::ClientHandler, mcp_traits::mcp_handler::McpClientHandler,
+    McpClient,
 };
 
 use super::ClientRuntime;
@@ -61,15 +61,15 @@ impl ClientInternalHandler<Box<dyn ClientHandler>> {
     }
 }
 
-/// Implementation of the `MCPClientHandler` trait for `ClientInternalHandler`.
+/// Implementation of the `McpClientHandler` trait for `ClientInternalHandler`.
 /// This handles requests, notifications, and errors from the server by calling proper function of self.handler
 #[async_trait]
-impl MCPClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
+impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     /// Handles a request received from the server by passing the request to self.handler
     async fn handle_request(
         &self,
         server_jsonrpc_request: RequestFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, JsonrpcErrorError> {
         match server_jsonrpc_request {
             RequestFromServer::ServerRequest(request) => match request {
@@ -103,7 +103,7 @@ impl MCPClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     async fn handle_error(
         &self,
         jsonrpc_error: JsonrpcErrorError,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -113,7 +113,7 @@ impl MCPClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     async fn handle_notification(
         &self,
         server_jsonrpc_notification: NotificationFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         match server_jsonrpc_notification {
             NotificationFromServer::ServerNotification(server_notification) => {
@@ -198,7 +198,7 @@ impl MCPClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     async fn handle_process_error(
         &self,
         error_message: String,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         self.handler
             .handle_process_error(error_message, runtime)

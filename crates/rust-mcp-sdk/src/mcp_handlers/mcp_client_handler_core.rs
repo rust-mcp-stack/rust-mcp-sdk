@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::*;
 use rust_mcp_schema::*;
 
-use crate::mcp_traits::mcp_client::MCPClient;
+use crate::mcp_traits::mcp_client::McpClient;
 
 /// Defines the `ClientHandlerCore` trait for handling Model Context Protocol (MCP) client operations.
 /// Unlike `ClientHandler`, this trait offers no default implementations, providing full control over MCP message handling
@@ -19,7 +19,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     async fn handle_request(
         &self,
         request: RequestFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, JsonrpcErrorError>;
 
     /// Asynchronously handles an incoming notification from the server.
@@ -29,7 +29,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     async fn handle_notification(
         &self,
         notification: NotificationFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<(), JsonrpcErrorError>;
 
     /// Asynchronously handles an error received from the server.
@@ -39,13 +39,13 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     async fn handle_error(
         &self,
         error: JsonrpcErrorError,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<(), JsonrpcErrorError>;
 
     async fn handle_process_error(
         &self,
         error_message: String,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         if !runtime.is_shut_down().await {
             eprintln!("Process error: {}", error_message);

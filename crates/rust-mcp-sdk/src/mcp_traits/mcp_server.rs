@@ -14,37 +14,37 @@ use rust_mcp_schema::{
     ResourceUpdatedNotificationParams, ServerCapabilities, SetLevelRequest,
     ToolListChangedNotification, ToolListChangedNotificationParams,
 };
-use rust_mcp_transport::{MCPDispatch, MessageDispatcher};
+use rust_mcp_transport::{McpDispatch, MessageDispatcher};
 
 use crate::{error::SdkResult, utils::format_assertion_message};
 
 //TODO: support options , such as enforceStrictCapabilities
 #[async_trait]
-pub trait MCPServer: Sync + Send {
+pub trait McpServer: Sync + Send {
     async fn start(&self) -> SdkResult<()>;
     fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()>;
-    fn get_server_info(&self) -> &InitializeResult;
-    fn get_client_info(&self) -> Option<InitializeRequestParams>;
+    fn server_info(&self) -> &InitializeResult;
+    fn client_info(&self) -> Option<InitializeRequestParams>;
 
-    async fn get_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
+    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
     where
-        MessageDispatcher<ClientMessage>: MCPDispatch<ClientMessage, MessageFromServer>;
+        MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>;
 
     /// Checks whether the server has been initialized with client
     fn is_initialized(&self) -> bool {
-        self.get_client_info().is_some()
+        self.client_info().is_some()
     }
 
     /// Returns the client's name and version information once initialization is complete.
     /// This method retrieves the client details, if available, after successful initialization.
-    fn get_client_version(&self) -> Option<Implementation> {
-        self.get_client_info()
+    fn client_version(&self) -> Option<Implementation> {
+        self.client_info()
             .map(|client_details| client_details.client_info)
     }
 
     /// Returns the server's capabilities.
-    fn get_capabilities(&self) -> &ServerCapabilities {
-        &self.get_server_info().capabilities
+    fn capabilities(&self) -> &ServerCapabilities {
+        &self.server_info().capabilities
     }
 
     /// Sends a request to the client and processes the response.
@@ -53,7 +53,7 @@ pub trait MCPServer: Sync + Send {
     /// and handles the result. If the response is empty or of an invalid type, an error is returned.
     /// Otherwise, it returns the result from the client.
     async fn request(&self, request: RequestFromServer) -> SdkResult<ResultFromClient> {
-        let sender = self.get_sender().await;
+        let sender = self.sender().await;
         let sender = sender.read().await;
         let sender = sender.as_ref().unwrap();
 
@@ -77,7 +77,7 @@ pub trait MCPServer: Sync + Send {
     /// to return any response. The method asynchronously sends the notification using
     /// the transport layer and does not wait for any acknowledgement or result.
     async fn send_notification(&self, notification: NotificationFromServer) -> SdkResult<()> {
-        let sender = self.get_sender().await;
+        let sender = self.sender().await;
         let sender = sender.read().await;
         let sender = sender.as_ref().unwrap();
 
@@ -200,7 +200,7 @@ pub trait MCPServer: Sync + Send {
     /// - `Some(true)` if sampling is supported by the client.
     /// - `Some(false)` if sampling is not supported by the client.
     fn client_supports_sampling(&self) -> Option<bool> {
-        self.get_client_info()
+        self.client_info()
             .map(|client_details| client_details.capabilities.sampling.is_some())
     }
 
@@ -216,7 +216,7 @@ pub trait MCPServer: Sync + Send {
     /// - `Some(true)` if listing roots is supported by the client.
     /// - `Some(false)` if listing roots is not supported by the client.
     fn client_supports_root_list(&self) -> Option<bool> {
-        self.get_client_info()
+        self.client_info()
             .map(|client_details| client_details.capabilities.roots.is_some())
     }
 
@@ -232,7 +232,7 @@ pub trait MCPServer: Sync + Send {
     /// - `Some(true)` if experimental capabilities are available on the client.
     /// - `Some(false)` if no experimental capabilities are available on the client.
     fn client_supports_experimental(&self) -> Option<bool> {
-        self.get_client_info()
+        self.client_info()
             .map(|client_details| client_details.capabilities.experimental.is_some())
     }
 
@@ -273,7 +273,7 @@ pub trait MCPServer: Sync + Send {
     ) -> std::result::Result<(), JsonrpcErrorError> {
         let entity = "Server";
 
-        let capabilities = &self.get_server_info().capabilities;
+        let capabilities = &self.server_info().capabilities;
 
         if *notification_method == LoggingMessageNotification::method_name()
             && capabilities.logging.is_none()
@@ -320,7 +320,7 @@ pub trait MCPServer: Sync + Send {
         request_method: &String,
     ) -> std::result::Result<(), JsonrpcErrorError> {
         let entity = "Server";
-        let capabilities = &self.get_server_info().capabilities;
+        let capabilities = &self.server_info().capabilities;
 
         if *request_method == SetLevelRequest::method_name() && capabilities.logging.is_none() {
             return Err(JsonrpcErrorError::internal_error()

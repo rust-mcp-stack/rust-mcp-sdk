@@ -14,13 +14,13 @@ use tokio::sync::Mutex;
 
 use crate::error::TransportResult;
 use crate::utils::await_timeout;
-use crate::MCPDispatch;
+use crate::McpDispatch;
 
 /// Provides a dispatcher for sending MCP messages and handling responses.
 ///
 /// `MessageDispatcher` facilitates MCP communication by managing message sending, request tracking,
 /// and response handling. It supports both client-to-server and server-to-client message flows through
-/// implementations of the `MCPDispatch` trait. The dispatcher uses a transport mechanism
+/// implementations of the `McpDispatch` trait. The dispatcher uses a transport mechanism
 /// (e.g., stdin/stdout) to serialize and send messages, and it tracks pending requests with
 /// a configurable timeout mechanism for asynchronous responses.
 pub struct MessageDispatcher<R> {
@@ -90,7 +90,7 @@ impl<R> MessageDispatcher<R> {
 }
 
 #[async_trait]
-impl MCPDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerMessage> {
+impl McpDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerMessage> {
     /// Sends a message from the client to the server and awaits a response if applicable.
     ///
     /// Serializes the `MessageFromClient` to JSON, writes it to the transport, and waits for a
@@ -158,7 +158,7 @@ impl MCPDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
 }
 
 #[async_trait]
-impl MCPDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientMessage> {
+impl McpDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientMessage> {
     /// Sends a message from the server to the client and awaits a response if applicable.
     ///
     /// Serializes the `MessageFromServer` to JSON, writes it to the transport, and waits for a

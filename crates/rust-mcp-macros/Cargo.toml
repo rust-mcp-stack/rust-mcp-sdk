@@ -8,20 +8,20 @@ repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
 documentation = "https://docs.rs/rust-mcp-macros"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "macros"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 
 [package.metadata.docs]
 description = "A procedural macro, part of the rust-mcp-sdk ecosystem, that derives the MCPToolSchema implementation for structs or enums, generating a tool_input_schema function used with rust_mcp_schema::Tool."
 
 [dependencies]
+proc-macro2 = "1"
+quote = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-syn = "2.0"
-quote = "1.0"
-proc-macro2 = "1.0"
+syn = "2"
 
 [dev-dependencies]
-rust-mcp-schema = { version = "0.2.1" }
+rust-mcp-schema = "0.2"
 
 [lints]
 workspace = true

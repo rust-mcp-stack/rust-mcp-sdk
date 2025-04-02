@@ -19,12 +19,12 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 /// * `name` - An optional string representing the tool's name.
 /// * `description` - An optional string describing the tool.
 ///
-struct MCPToolMacroAttributes {
+struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
 }
 
-impl Parse for MCPToolMacroAttributes {
+impl Parse for McpToolMacroAttributes {
     /// Parses the macro attributes from a `ParseStream`.
     ///
     /// This implementation extracts `name` and `description` from the attribute input,
@@ -96,7 +96,7 @@ impl Parse for MCPToolMacroAttributes {
 ///
 /// The `mcp_tool` macro generates an implementation for the annotated struct that includes:
 /// - A `tool_name()` method returning the tool's name as a string.
-/// - A `get_tool()` method returning a `rust_mcp_schema::Tool` instance with the tool's name,
+/// - A `tool()` method returning a `rust_mcp_schema::Tool` instance with the tool's name,
 ///   description, and input schema derived from the struct's fields.
 ///
 /// # Attributes
@@ -116,7 +116,7 @@ impl Parse for MCPToolMacroAttributes {
 /// }
 ///
 /// assert_eq!(ExampleTool::tool_name() , "example_tool");
-/// let tool : rust_mcp_schema::Tool = ExampleTool::get_tool();
+/// let tool : rust_mcp_schema::Tool = ExampleTool::tool();
 /// assert_eq!(tool.name , "example_tool");
 /// assert_eq!(tool.description.unwrap() , "An example tool");
 ///
@@ -131,7 +131,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput); // Parse the input as a function
     let input_ident = &input.ident;
 
-    let macro_attributes = parse_macro_input!(attributes as MCPToolMacroAttributes);
+    let macro_attributes = parse_macro_input!(attributes as McpToolMacroAttributes);
 
     let tool_name = macro_attributes.name.unwrap_or_default();
     let tool_description = macro_attributes.description.unwrap_or_default();
@@ -147,7 +147,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// The tool includes the name, description, and input schema derived from
             /// the struct's attributes.
-            pub fn get_tool()-> rust_mcp_schema::Tool
+            pub fn tool()-> rust_mcp_schema::Tool
             {
                 let json_schema = &#input_ident::json_schema();
 

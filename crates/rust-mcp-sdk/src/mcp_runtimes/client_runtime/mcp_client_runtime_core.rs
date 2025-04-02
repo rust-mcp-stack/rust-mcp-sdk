@@ -13,7 +13,7 @@ use rust_mcp_transport::Transport;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_client_handler_core::ClientHandlerCore,
-    mcp_traits::{mcp_client::MCPClient, mcp_handler::MCPClientHandler},
+    mcp_traits::{mcp_client::McpClient, mcp_handler::McpClientHandler},
 };
 
 use super::ClientRuntime;
@@ -62,11 +62,11 @@ impl ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> {
 }
 
 #[async_trait]
-impl MCPClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> {
+impl McpClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> {
     async fn handle_request(
         &self,
         server_jsonrpc_request: RequestFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, JsonrpcErrorError> {
         // handle request and get the result
         self.handler
@@ -77,7 +77,7 @@ impl MCPClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> 
     async fn handle_error(
         &self,
         jsonrpc_error: JsonrpcErrorError,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -85,7 +85,7 @@ impl MCPClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> 
     async fn handle_notification(
         &self,
         server_jsonrpc_notification: NotificationFromServer,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         // handle notification
         self.handler
@@ -97,7 +97,7 @@ impl MCPClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> 
     async fn handle_process_error(
         &self,
         error_message: String,
-        runtime: &dyn MCPClient,
+        runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         self.handler
             .handle_process_error(error_message, runtime)

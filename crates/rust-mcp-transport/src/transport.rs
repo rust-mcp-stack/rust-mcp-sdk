@@ -18,7 +18,7 @@ const DEFAULT_TIMEOUT_MSEC: u64 = 60_000;
 /// - `Readable`: A stream that implements the `AsyncRead` trait for reading data asynchronously.
 /// - `Writable`: A stream that implements the `AsyncWrite` trait for writing data asynchronously.
 ///
-pub enum IOStream {
+pub enum IoStream {
     Readable(Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>),
     Writable(Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>),
 }
@@ -43,7 +43,7 @@ impl Default for TransportOptions {
 ///
 ///It is intended to be implemented by types that send messages in the MCP protocol, such as servers or clients.
 ///
-/// The `MCPDispatch` trait requires two associated types:
+/// The `McpDispatch` trait requires two associated types:
 /// - `R`: The type of the response, which must implement the `MCPMessage` trait and be capable of deserialization.
 /// - `S`: The type of the message to send, which must be serializable and cloneable.
 ///
@@ -72,11 +72,11 @@ impl Default for TransportOptions {
 ///
 /// # Example
 ///
-/// let sender: Box<dyn MCPDispatch<MyResponse, MyMessage>> = ...;
+/// let sender: Box<dyn McpDispatch<MyResponse, MyMessage>> = ...;
 /// let result = sender.send(my_message, Some(request_id)).await;
 ///
 #[async_trait]
-pub trait MCPDispatch<R, S>: Send + Sync + 'static
+pub trait McpDispatch<R, S>: Send + Sync + 'static
 where
     R: MCPMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: Clone + Send + Sync + serde::Serialize + 'static,
@@ -109,10 +109,10 @@ where
     ) -> TransportResult<(
         Pin<Box<dyn Stream<Item = R> + Send>>,
         MessageDispatcher<R>,
-        IOStream,
+        IoStream,
     )>
     where
-        MessageDispatcher<R>: MCPDispatch<R, S>;
+        MessageDispatcher<R>: McpDispatch<R, S>;
     async fn shut_down(&self) -> TransportResult<()>;
     async fn is_shut_down(&self) -> bool;
 }

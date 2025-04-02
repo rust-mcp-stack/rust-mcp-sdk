@@ -8,19 +8,19 @@ repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
 documentation = "https://docs.rs/rust-mcp-sdk"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 rust-mcp-schema = { workspace = true }
 rust-mcp-transport = { workspace = true }
 rust-mcp-macros = { workspace = true, optional = true }
 
-tokio.workspace = true
-serde = { workspace = true }
-serde_json = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
 
 [features]
 default = ["macros"]         # Default features
