@@ -5,13 +5,13 @@ use rust_mcp_schema::{
         ResultFromClient,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
-    GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult, JsonrpcErrorError,
+    GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
     ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest,
     ListRootsRequestParams, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
     LoggingMessageNotificationParams, PingRequest, PromptListChangedNotification,
     PromptListChangedNotificationParams, ReadResourceRequest, ResourceListChangedNotification,
     ResourceListChangedNotificationParams, ResourceUpdatedNotification,
-    ResourceUpdatedNotificationParams, ServerCapabilities, SetLevelRequest,
+    ResourceUpdatedNotificationParams, RpcError, ServerCapabilities, SetLevelRequest,
     ToolListChangedNotification, ToolListChangedNotificationParams,
 };
 use rust_mcp_transport::{MCPDispatch, MessageDispatcher};
@@ -62,7 +62,7 @@ pub trait MCPServer: Sync + Send {
             .send(MessageFromServer::RequestFromServer(request), None)
             .await?;
         let client_message = response.ok_or_else(|| {
-            JsonrpcErrorError::internal_error()
+            RpcError::internal_error()
                 .with_message("An empty response was received from the client.".to_string())
         })?;
 
@@ -249,20 +249,29 @@ pub trait MCPServer: Sync + Send {
     fn assert_client_capabilities(
         &self,
         request_method: &String,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         let entity = "Client";
         if *request_method == CreateMessageRequest::method_name()
             && !self.client_supports_sampling().unwrap_or(false)
         {
-            return Err(JsonrpcErrorError::internal_error()
-                .with_message(format_assertion_message(entity, "sampling", request_method)));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "sampling",
+                    request_method,
+                )),
+            );
         }
         if *request_method == ListRootsRequest::method_name()
             && !self.client_supports_root_list().unwrap_or(false)
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "listing roots", request_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "listing roots",
+                    request_method,
+                )),
+            );
         }
         Ok(())
     }
@@ -270,7 +279,7 @@ pub trait MCPServer: Sync + Send {
     fn assert_server_notification_capabilities(
         &self,
         notification_method: &String,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         let entity = "Server";
 
         let capabilities = &self.get_server_info().capabilities;
@@ -278,38 +287,46 @@ pub trait MCPServer: Sync + Send {
         if *notification_method == LoggingMessageNotification::method_name()
             && capabilities.logging.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "logging", notification_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "logging",
+                    notification_method,
+                )),
+            );
         }
         if *notification_method == ResourceUpdatedNotification::method_name()
             && capabilities.resources.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "notifying about resources", notification_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "notifying about resources",
+                    notification_method,
+                )),
+            );
         }
         if *notification_method == ToolListChangedNotification::method_name()
             && capabilities.tools.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
                     entity,
                     "notifying of tool list changes",
                     notification_method,
-                ),
-            ));
+                )),
+            );
         }
         if *notification_method == PromptListChangedNotification::method_name()
             && capabilities.prompts.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
                     entity,
                     "notifying of prompt list changes",
                     notification_method,
-                ),
-            ));
+                )),
+            );
         }
 
         Ok(())
@@ -318,13 +335,18 @@ pub trait MCPServer: Sync + Send {
     fn assert_server_request_capabilities(
         &self,
         request_method: &String,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         let entity = "Server";
         let capabilities = &self.get_server_info().capabilities;
 
         if *request_method == SetLevelRequest::method_name() && capabilities.logging.is_none() {
-            return Err(JsonrpcErrorError::internal_error()
-                .with_message(format_assertion_message(entity, "logging", request_method)));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "logging",
+                    request_method,
+                )),
+            );
         }
         if [
             GetPromptRequest::method_name(),
@@ -333,8 +355,13 @@ pub trait MCPServer: Sync + Send {
         .contains(request_method)
             && capabilities.prompts.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error()
-                .with_message(format_assertion_message(entity, "prompts", request_method)));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "prompts",
+                    request_method,
+                )),
+            );
         }
         if [
             ListResourcesRequest::method_name(),
@@ -344,9 +371,13 @@ pub trait MCPServer: Sync + Send {
         .contains(request_method)
             && capabilities.resources.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "resources", request_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "resources",
+                    request_method,
+                )),
+            );
         }
         if [
             CallToolRequest::method_name(),
@@ -355,8 +386,13 @@ pub trait MCPServer: Sync + Send {
         .contains(request_method)
             && capabilities.tools.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error()
-                .with_message(format_assertion_message(entity, "tools", request_method)));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "tools",
+                    request_method,
+                )),
+            );
         }
         Ok(())
     }

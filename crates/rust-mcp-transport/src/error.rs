@@ -1,4 +1,4 @@
-use rust_mcp_schema::{schema_utils::SdkError, JsonrpcErrorError};
+use rust_mcp_schema::{schema_utils::SdkError, RpcError};
 use thiserror::Error;
 
 use core::fmt;
@@ -86,7 +86,7 @@ pub enum TransportError {
     #[error("Send Error: {0}")]
     StdioError(#[from] std::io::Error),
     #[error("{0}")]
-    JsonrpcError(#[from] JsonrpcErrorError),
+    JsonrpcError(#[from] RpcError),
     #[error("{0}")]
     SdkError(#[from] SdkError),
     #[error("Process error{0}")]

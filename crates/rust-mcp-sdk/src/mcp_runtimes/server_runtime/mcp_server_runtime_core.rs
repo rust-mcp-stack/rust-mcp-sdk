@@ -3,7 +3,7 @@ use rust_mcp_schema::schema_utils::{
     self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
     ResultFromServer,
 };
-use rust_mcp_schema::{InitializeResult, JsonrpcErrorError};
+use rust_mcp_schema::{InitializeResult, RpcError};
 use rust_mcp_transport::Transport;
 
 use crate::error::SdkResult;
@@ -59,7 +59,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
         &self,
         client_jsonrpc_request: RequestFromClient,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
+    ) -> std::result::Result<ResultFromServer, RpcError> {
         // store the client details if the request is a client initialization request
         if let schema_utils::RequestFromClient::ClientRequest(
             rust_mcp_schema::ClientRequest::InitializeRequest(initialize_request),
@@ -68,9 +68,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
             // keep a copy of the InitializeRequestParams which includes client_info and capabilities
             runtime
                 .set_client_details(initialize_request.params.clone())
-                .map_err(|err| {
-                    JsonrpcErrorError::internal_error().with_message(format!("{}", err))
-                })?;
+                .map_err(|err| RpcError::internal_error().with_message(format!("{}", err)))?;
         }
 
         // handle request and get the result
@@ -80,7 +78,7 @@ impl MCPServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     }
     async fn handle_error(
         &self,
-        jsonrpc_error: JsonrpcErrorError,
+        jsonrpc_error: RpcError,
         runtime: &dyn MCPServer,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;

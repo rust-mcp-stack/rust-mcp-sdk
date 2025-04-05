@@ -178,7 +178,7 @@ dependencies = [
  "async-trait",
  "futures",
  "rust-mcp-macros",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "rust-mcp-sdk",
  "rust-mcp-transport",
  "serde",
@@ -193,7 +193,7 @@ dependencies = [
  "async-trait",
  "futures",
  "rust-mcp-macros",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "rust-mcp-sdk",
  "rust-mcp-transport",
  "serde",
@@ -326,7 +326,7 @@ version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.2.2",
  "serde",
  "serde_json",
  "syn",
@@ -343,13 +343,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-mcp-schema"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ec89fb6e23c83d24643baa0002dd1f465f6951d46322e18c6f8e41aac270327"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rust-mcp-sdk"
 version = "0.1.2"
 dependencies = [
  "async-trait",
  "futures",
  "rust-mcp-macros",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "rust-mcp-transport",
  "serde",
  "serde_json",
@@ -363,7 +373,7 @@ version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "serde",
  "serde_json",
  "thiserror",
@@ -436,7 +446,7 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "rust-mcp-sdk",
  "rust-mcp-transport",
  "serde",
@@ -452,7 +462,7 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
+ "rust-mcp-schema 0.3.0",
  "rust-mcp-sdk",
  "rust-mcp-transport",
  "serde",

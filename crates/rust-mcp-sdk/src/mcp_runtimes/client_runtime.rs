@@ -7,7 +7,7 @@ use futures::StreamExt;
 use rust_mcp_schema::schema_utils::{self, MessageFromClient, ServerMessage};
 use rust_mcp_schema::{
     InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
-    JsonrpcErrorError, ServerResult,
+    RpcError, ServerResult,
 };
 use rust_mcp_transport::{IOStream, MCPDispatch, MessageDispatcher, Transport};
 use std::sync::{Arc, RwLock};
@@ -63,7 +63,7 @@ impl ClientRuntime {
             self.send_notification(InitializedNotification::new(None).into())
                 .await?;
         } else {
-            return Err(JsonrpcErrorError::invalid_params()
+            return Err(RpcError::invalid_params()
                 .with_message("Incorrect response to InitializeRequest!".into())
                 .into());
         }
@@ -182,7 +182,7 @@ impl MCPClient for ClientRuntime {
                 Ok(())
             }
             // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            Err(_) => Err(JsonrpcErrorError::internal_error()
+            Err(_) => Err(RpcError::internal_error()
                 .with_message("Internal Error: Failed to acquire write lock.".to_string())
                 .into()),
         }

@@ -4,7 +4,7 @@ use crate::{
     IOStream,
 };
 use futures::Stream;
-use rust_mcp_schema::{schema_utils::RPCMessage, JsonrpcErrorError, RequestId};
+use rust_mcp_schema::{schema_utils::RPCMessage, RequestId, RpcError};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -98,7 +98,7 @@ impl MCPStream {
                                             // deserialize and send it to the stream
                                             let message: R = serde_json::from_str(&line).map_err(|_| {
                                                 crate::error::TransportError::JsonrpcError(
-                                                    JsonrpcErrorError::parse_error(),
+                                                    RpcError::parse_error(),
                                                 )
                                             })?;
 
@@ -109,7 +109,7 @@ impl MCPStream {
                                                     if let Some(tx_response) = pending_requests.remove(request_id) {
                                                         tx_response.send(message).map_err(|_| {
                                                             crate::error::TransportError::JsonrpcError(
-                                                                JsonrpcErrorError::internal_error(),
+                                                                RpcError::internal_error(),
                                                             )
                                                         })?;
                                                     } else if message.is_error() {

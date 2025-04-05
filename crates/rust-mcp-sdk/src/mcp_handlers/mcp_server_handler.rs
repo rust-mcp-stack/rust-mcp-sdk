@@ -30,10 +30,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         initialize_request: InitializeRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<InitializeResult, JsonrpcErrorError> {
+    ) -> std::result::Result<InitializeResult, RpcError> {
         runtime
             .set_client_details(initialize_request.params.clone())
-            .map_err(|err| JsonrpcErrorError::internal_error().with_message(format!("{}", err)))?;
+            .map_err(|err| RpcError::internal_error().with_message(format!("{}", err)))?;
 
         Ok(runtime.get_server_info().to_owned())
     }
@@ -47,7 +47,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         _: PingRequest,
         _: &dyn MCPServer,
-    ) -> std::result::Result<Result, JsonrpcErrorError> {
+    ) -> std::result::Result<Result, RpcError> {
         Ok(Result::default())
     }
 
@@ -59,9 +59,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: ListResourcesRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ListResourcesResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ListResourcesResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -75,9 +75,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: ListResourceTemplatesRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ListResourceTemplatesResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -91,9 +91,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: ReadResourceRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ReadResourceResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ReadResourceResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -107,9 +107,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: SubscribeRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<Result, JsonrpcErrorError> {
+    ) -> std::result::Result<Result, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -123,9 +123,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: UnsubscribeRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<Result, JsonrpcErrorError> {
+    ) -> std::result::Result<Result, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -139,9 +139,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: ListPromptsRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ListPromptsResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ListPromptsResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -155,9 +155,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: GetPromptRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<GetPromptResult, JsonrpcErrorError> {
+    ) -> std::result::Result<GetPromptResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -171,9 +171,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: ListToolsRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ListToolsResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ListToolsResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -202,9 +202,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: SetLevelRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<Result, JsonrpcErrorError> {
+    ) -> std::result::Result<Result, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -218,9 +218,9 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: CompleteRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<CompleteResult, JsonrpcErrorError> {
+    ) -> std::result::Result<CompleteResult, RpcError> {
         runtime.assert_server_request_capabilities(request.method())?;
-        Err(JsonrpcErrorError::method_not_found().with_message(format!(
+        Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             request.method(),
         )))
@@ -234,8 +234,8 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         request: Value,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<Value, JsonrpcErrorError> {
-        Err(JsonrpcErrorError::method_not_found()
+    ) -> std::result::Result<Value, RpcError> {
+        Err(RpcError::method_not_found()
             .with_message("No handler is implemented for custom requests.".to_string()))
     }
 
@@ -247,7 +247,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         notification: InitializedNotification,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
@@ -257,7 +257,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         notification: CancelledNotification,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
@@ -267,7 +267,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         notification: ProgressNotification,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
@@ -277,7 +277,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         notification: RootsListChangedNotification,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
@@ -286,7 +286,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_custom_notification(
         &self,
         notification: Value,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
@@ -300,9 +300,9 @@ pub trait ServerHandler: Send + Sync + 'static {
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_error(
         &self,
-        error: JsonrpcErrorError,
+        error: RpcError,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 

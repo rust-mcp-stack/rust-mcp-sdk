@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-    JsonrpcErrorError,
+    RpcError,
 };
 use rust_mcp_sdk::{mcp_client::ClientHandlerCore, MCPClient};
 pub struct MyClientHandler;
@@ -15,23 +15,23 @@ impl ClientHandlerCore for MyClientHandler {
         &self,
         request: RequestFromServer,
         _runtime: &dyn MCPClient,
-    ) -> std::result::Result<ResultFromClient, JsonrpcErrorError> {
+    ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
             RequestFromServer::ServerRequest(server_request) => match server_request {
                 rust_mcp_schema::ServerRequest::PingRequest(_) => {
                     return Ok(rust_mcp_schema::Result::default().into());
                 }
                 rust_mcp_schema::ServerRequest::CreateMessageRequest(_create_message_request) => {
-                    Err(JsonrpcErrorError::internal_error().with_message(
+                    Err(RpcError::internal_error().with_message(
                         "CreateMessageRequest handler is not implemented".to_string(),
                     ))
                 }
                 rust_mcp_schema::ServerRequest::ListRootsRequest(_list_roots_request) => {
-                    Err(JsonrpcErrorError::internal_error()
+                    Err(RpcError::internal_error()
                         .with_message("ListRootsRequest handler is not implemented".to_string()))
                 }
             },
-            RequestFromServer::CustomRequest(_value) => Err(JsonrpcErrorError::internal_error()
+            RequestFromServer::CustomRequest(_value) => Err(RpcError::internal_error()
                 .with_message("CustomRequest handler is not implemented".to_string())),
         }
     }
@@ -40,17 +40,16 @@ impl ClientHandlerCore for MyClientHandler {
         &self,
         _notification: NotificationFromServer,
         _runtime: &dyn MCPClient,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
-        Err(JsonrpcErrorError::internal_error()
+    ) -> std::result::Result<(), RpcError> {
+        Err(RpcError::internal_error()
             .with_message("handle_notification() Not implemented".to_string()))
     }
 
     async fn handle_error(
         &self,
-        _error: JsonrpcErrorError,
+        _error: RpcError,
         _runtime: &dyn MCPClient,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
-        Err(JsonrpcErrorError::internal_error()
-            .with_message("handle_error() Not implemented".to_string()))
+    ) -> std::result::Result<(), RpcError> {
+        Err(RpcError::internal_error().with_message("handle_error() Not implemented".to_string()))
     }
 }
