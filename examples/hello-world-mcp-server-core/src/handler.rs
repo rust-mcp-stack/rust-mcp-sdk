@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use rust_mcp_schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
-    ClientRequest, JsonrpcErrorError, ListToolsResult,
+    ClientRequest, ListToolsResult, RpcError,
 };
 use rust_mcp_sdk::{mcp_server::ServerHandlerCore, MCPServer};
 
@@ -20,7 +20,7 @@ impl ServerHandlerCore for MyServerHandler {
         &self,
         request: RequestFromClient,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
+    ) -> std::result::Result<ResultFromServer, RpcError> {
         let method_name = &request.method().to_owned();
         match request {
             //Handle client requests according to their specific type.
@@ -50,12 +50,12 @@ impl ServerHandlerCore for MyServerHandler {
                     let result = match tool_params {
                         GreetingTools::SayHelloTool(say_hello_tool) => {
                             say_hello_tool.call_tool().map_err(|err| {
-                                JsonrpcErrorError::internal_error().with_message(err.to_string())
+                                RpcError::internal_error().with_message(err.to_string())
                             })?
                         }
                         GreetingTools::SayGoodbyeTool(say_goodbye_tool) => {
                             say_goodbye_tool.call_tool().map_err(|err| {
-                                JsonrpcErrorError::internal_error().with_message(err.to_string())
+                                RpcError::internal_error().with_message(err.to_string())
                             })?
                         }
                     };
@@ -63,11 +63,11 @@ impl ServerHandlerCore for MyServerHandler {
                 }
 
                 // Return Method not found for any other requests
-                _ => Err(JsonrpcErrorError::method_not_found()
+                _ => Err(RpcError::method_not_found()
                     .with_message(format!("No handler is implemented for '{}'.", method_name,))),
             },
             // Handle custom requests
-            RequestFromClient::CustomRequest(_) => Err(JsonrpcErrorError::method_not_found()
+            RequestFromClient::CustomRequest(_) => Err(RpcError::method_not_found()
                 .with_message("No handler is implemented for custom requests.".to_string())),
         }
     }
@@ -77,16 +77,16 @@ impl ServerHandlerCore for MyServerHandler {
         &self,
         notification: NotificationFromClient,
         _: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
     // Process incoming client errors
     async fn handle_error(
         &self,
-        error: JsonrpcErrorError,
+        error: RpcError,
         _: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 }

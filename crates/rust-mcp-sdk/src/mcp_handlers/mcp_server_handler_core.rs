@@ -27,7 +27,7 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
         &self,
         request: RequestFromClient,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ResultFromServer, JsonrpcErrorError>;
+    ) -> std::result::Result<ResultFromServer, RpcError>;
 
     /// Asynchronously handles an incoming notification from the client.
     ///
@@ -37,7 +37,7 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
         &self,
         notification: NotificationFromClient,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError>;
+    ) -> std::result::Result<(), RpcError>;
 
     /// Asynchronously handles an error received from the client.
     ///
@@ -45,9 +45,9 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
     /// - `error` – The error data received from the MCP client.
     async fn handle_error(
         &self,
-        error: JsonrpcErrorError,
+        error: RpcError,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<(), JsonrpcErrorError>;
+    ) -> std::result::Result<(), RpcError>;
     async fn on_server_started(&self, runtime: &dyn MCPServer) {
         let _ = runtime
             .stderr_message("Server started successfully".into())

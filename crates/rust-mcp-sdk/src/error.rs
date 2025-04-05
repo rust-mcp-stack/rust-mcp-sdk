@@ -1,4 +1,4 @@
-use rust_mcp_schema::JsonrpcErrorError;
+use rust_mcp_schema::RpcError;
 use rust_mcp_transport::error::TransportError;
 use thiserror::Error;
 
@@ -7,7 +7,7 @@ pub type SdkResult<T> = core::result::Result<T, MCPSdkError>;
 #[derive(Debug, Error)]
 pub enum MCPSdkError {
     #[error("{0}")]
-    JsonrpcErrorError(#[from] JsonrpcErrorError),
+    RpcError(#[from] RpcError),
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("{0}")]

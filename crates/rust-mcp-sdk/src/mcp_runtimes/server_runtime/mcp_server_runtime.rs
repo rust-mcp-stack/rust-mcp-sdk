@@ -4,7 +4,7 @@ use rust_mcp_schema::{
         CallToolError, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
         ResultFromServer,
     },
-    CallToolResult, InitializeResult, JsonrpcErrorError,
+    CallToolResult, InitializeResult, RpcError,
 };
 use rust_mcp_transport::Transport;
 
@@ -61,7 +61,7 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         &self,
         client_jsonrpc_request: RequestFromClient,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ResultFromServer, JsonrpcErrorError> {
+    ) -> std::result::Result<ResultFromServer, RpcError> {
         match client_jsonrpc_request {
             rust_mcp_schema::schema_utils::RequestFromClient::ClientRequest(client_request) => {
                 match client_request {
@@ -158,7 +158,7 @@ impl MCPServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 
     async fn handle_error(
         &self,
-        jsonrpc_error: JsonrpcErrorError,
+        jsonrpc_error: RpcError,
         runtime: &dyn MCPServer,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;

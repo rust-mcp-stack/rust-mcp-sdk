@@ -4,9 +4,7 @@ pub mod mcp_server_runtime_core;
 use async_trait::async_trait;
 use futures::StreamExt;
 use rust_mcp_schema::schema_utils::MessageFromServer;
-use rust_mcp_schema::{
-    self, schema_utils, InitializeRequestParams, InitializeResult, JsonrpcErrorError,
-};
+use rust_mcp_schema::{self, schema_utils, InitializeRequestParams, InitializeResult, RpcError};
 use rust_mcp_transport::{IOStream, MCPDispatch, MessageDispatcher, Transport};
 use schema_utils::ClientMessage;
 use std::pin::Pin;
@@ -42,7 +40,7 @@ impl MCPServer for ServerRuntime {
                 Ok(())
             }
             // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            Err(_) => Err(JsonrpcErrorError::internal_error()
+            Err(_) => Err(RpcError::internal_error()
                 .with_message("Internal Error: Failed to acquire write lock.".to_string())
                 .into()),
         }

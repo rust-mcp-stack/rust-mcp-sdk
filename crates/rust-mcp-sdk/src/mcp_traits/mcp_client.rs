@@ -8,13 +8,13 @@ use rust_mcp_schema::{
     },
     CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequest, CompleteRequestParams,
     CreateMessageRequest, GetPromptRequest, GetPromptRequestParams, Implementation,
-    InitializeRequestParams, InitializeResult, JsonrpcErrorError, ListPromptsRequest,
-    ListPromptsRequestParams, ListResourceTemplatesRequest, ListResourceTemplatesRequestParams,
-    ListResourcesRequest, ListResourcesRequestParams, ListRootsRequest, ListToolsRequest,
-    ListToolsRequestParams, LoggingLevel, PingRequest, ReadResourceRequest,
-    ReadResourceRequestParams, RootsListChangedNotification, RootsListChangedNotificationParams,
-    ServerCapabilities, SetLevelRequest, SetLevelRequestParams, SubscribeRequest,
-    SubscribeRequestParams, UnsubscribeRequest, UnsubscribeRequestParams,
+    InitializeRequestParams, InitializeResult, ListPromptsRequest, ListPromptsRequestParams,
+    ListResourceTemplatesRequest, ListResourceTemplatesRequestParams, ListResourcesRequest,
+    ListResourcesRequestParams, ListRootsRequest, ListToolsRequest, ListToolsRequestParams,
+    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams,
+    RootsListChangedNotification, RootsListChangedNotificationParams, RpcError, ServerCapabilities,
+    SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
+    UnsubscribeRequest, UnsubscribeRequestParams,
 };
 use rust_mcp_transport::{MCPDispatch, MessageDispatcher};
 
@@ -157,7 +157,7 @@ pub trait MCPClient: Sync + Send {
             .await?;
 
         let server_message = response.ok_or_else(|| {
-            JsonrpcErrorError::internal_error()
+            RpcError::internal_error()
                 .with_message("An empty response was received from the server.".to_string())
         })?;
 
@@ -315,13 +315,12 @@ pub trait MCPClient: Sync + Send {
     fn assert_server_capabilities(&self, request_method: &String) -> SdkResult<()> {
         let entity = "Server";
 
-        let capabilities = self.get_server_capabilities().ok_or::<JsonrpcErrorError>(
-            JsonrpcErrorError::internal_error()
-                .with_message("Server is not initialized!".to_string()),
+        let capabilities = self.get_server_capabilities().ok_or::<RpcError>(
+            RpcError::internal_error().with_message("Server is not initialized!".to_string()),
         )?;
 
         if *request_method == SetLevelRequest::method_name() && capabilities.logging.is_none() {
-            return Err(JsonrpcErrorError::internal_error()
+            return Err(RpcError::internal_error()
                 .with_message(format_assertion_message(entity, "logging", request_method))
                 .into());
         }
@@ -333,7 +332,7 @@ pub trait MCPClient: Sync + Send {
         .contains(request_method)
             && capabilities.prompts.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error()
+            return Err(RpcError::internal_error()
                 .with_message(format_assertion_message(entity, "prompts", request_method))
                 .into());
         }
@@ -348,7 +347,7 @@ pub trait MCPClient: Sync + Send {
         .contains(request_method)
             && capabilities.resources.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error()
+            return Err(RpcError::internal_error()
                 .with_message(format_assertion_message(
                     entity,
                     "resources",
@@ -364,7 +363,7 @@ pub trait MCPClient: Sync + Send {
         .contains(request_method)
             && capabilities.tools.is_none()
         {
-            return Err(JsonrpcErrorError::internal_error()
+            return Err(RpcError::internal_error()
                 .with_message(format_assertion_message(entity, "tools", request_method))
                 .into());
         }
@@ -375,20 +374,20 @@ pub trait MCPClient: Sync + Send {
     fn assert_client_notification_capabilities(
         &self,
         notification_method: &String,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         let entity = "Client";
         let capabilities = &self.get_client_info().capabilities;
 
         if *notification_method == RootsListChangedNotification::method_name()
             && capabilities.roots.is_some()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
                     entity,
                     "roots list changed notifications",
                     notification_method,
-                ),
-            ));
+                )),
+            );
         }
 
         Ok(())
@@ -397,21 +396,29 @@ pub trait MCPClient: Sync + Send {
     fn assert_client_request_capabilities(
         &self,
         request_method: &String,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         let entity = "Client";
         let capabilities = &self.get_client_info().capabilities;
 
         if *request_method == CreateMessageRequest::method_name() && capabilities.sampling.is_some()
         {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "sampling capability", request_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "sampling capability",
+                    request_method,
+                )),
+            );
         }
 
         if *request_method == ListRootsRequest::method_name() && capabilities.roots.is_some() {
-            return Err(JsonrpcErrorError::internal_error().with_message(
-                format_assertion_message(entity, "roots capability", request_method),
-            ));
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "roots capability",
+                    request_method,
+                )),
+            );
         }
 
         Ok(())

@@ -20,7 +20,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
         &self,
         request: RequestFromServer,
         runtime: &dyn MCPClient,
-    ) -> std::result::Result<ResultFromClient, JsonrpcErrorError>;
+    ) -> std::result::Result<ResultFromClient, RpcError>;
 
     /// Asynchronously handles an incoming notification from the server.
     ///
@@ -30,7 +30,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
         &self,
         notification: NotificationFromServer,
         runtime: &dyn MCPClient,
-    ) -> std::result::Result<(), JsonrpcErrorError>;
+    ) -> std::result::Result<(), RpcError>;
 
     /// Asynchronously handles an error received from the server.
     ///
@@ -38,15 +38,15 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     /// - `error` – The error data received from the MCP server.
     async fn handle_error(
         &self,
-        error: JsonrpcErrorError,
+        error: RpcError,
         runtime: &dyn MCPClient,
-    ) -> std::result::Result<(), JsonrpcErrorError>;
+    ) -> std::result::Result<(), RpcError>;
 
     async fn handle_process_error(
         &self,
         error_message: String,
         runtime: &dyn MCPClient,
-    ) -> std::result::Result<(), JsonrpcErrorError> {
+    ) -> std::result::Result<(), RpcError> {
         if !runtime.is_shut_down().await {
             eprintln!("Process error: {}", error_message);
         }

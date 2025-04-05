@@ -70,7 +70,7 @@ pub struct MyServerHandler;
 #[async_trait]
 impl ServerHandler for MyServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
-    async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: &dyn MCPServer) -> Result<ListToolsResult, JsonrpcErrorError> {
+    async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: &dyn MCPServer) -> Result<ListToolsResult, RpcError> {
 
         Ok(ListToolsResult {
             tools: vec![SayHelloTool::get_tool()],

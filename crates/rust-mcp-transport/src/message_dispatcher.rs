@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{
     ClientMessage, FromMessage, MCPMessage, MessageFromClient, MessageFromServer, ServerMessage,
 };
-use rust_mcp_schema::{JsonrpcErrorError, RequestId};
+use rust_mcp_schema::{RequestId, RpcError};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::AtomicI64;
@@ -138,9 +138,8 @@ impl MCPDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
         let mpc_message: ClientMessage = ClientMessage::from_message(message, outgoing_request_id)?;
 
         //serialize the message and write it to the writable_std
-        let message_str = serde_json::to_string(&mpc_message).map_err(|_| {
-            crate::error::TransportError::JsonrpcError(JsonrpcErrorError::parse_error())
-        })?;
+        let message_str = serde_json::to_string(&mpc_message)
+            .map_err(|_| crate::error::TransportError::JsonrpcError(RpcError::parse_error()))?;
 
         writable_std.write_all(message_str.as_bytes()).await?;
         writable_std.write_all(b"\n").await?; // new line
@@ -206,9 +205,8 @@ impl MCPDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientM
         let mpc_message: ServerMessage = ServerMessage::from_message(message, outgoing_request_id)?;
 
         //serialize the message and write it to the writable_std
-        let message_str = serde_json::to_string(&mpc_message).map_err(|_| {
-            crate::error::TransportError::JsonrpcError(JsonrpcErrorError::parse_error())
-        })?;
+        let message_str = serde_json::to_string(&mpc_message)
+            .map_err(|_| crate::error::TransportError::JsonrpcError(RpcError::parse_error()))?;
 
         writable_std.write_all(message_str.as_bytes()).await?;
         writable_std.write_all(b"\n").await?; // new line

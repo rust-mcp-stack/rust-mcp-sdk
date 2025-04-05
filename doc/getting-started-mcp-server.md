@@ -145,7 +145,7 @@ Here is the code for `handler.rs` :
 
 use async_trait::async_trait;
 use rust_mcp_schema::{
-    schema_utils::CallToolError, CallToolRequest, CallToolResult, JsonrpcErrorError,
+    schema_utils::CallToolError, CallToolRequest, CallToolResult, RpcError,
     ListToolsRequest, ListToolsResult,
 };
 use rust_mcp_sdk::{mcp_server::ServerHandler, MCPServer};
@@ -162,7 +162,7 @@ impl ServerHandler for MyServerHandler {
         &self,
         request: ListToolsRequest,
         runtime: &dyn MCPServer,
-    ) -> std::result::Result<ListToolsResult, JsonrpcErrorError> {
+    ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             meta: None,
             next_cursor: None,
