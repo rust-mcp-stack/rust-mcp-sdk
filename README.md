@@ -213,6 +213,21 @@ The same principles outlined above apply to the client-side handlers, `mcp_clien
 Use `client_runtime::create_client()` or `client_runtime_core::create_client()` , respectively.  
 Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core).
 
+## Contributing
+
+We welcome everyone who wishes to contribute! Please refer to the [contributing](CONTRIBUTING.md) guidelines for more details.
+
+Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
+
+All contributions, including issues and pull requests, must follow
+Rust's Code of Conduct.
+
+Unless explicitly stated otherwise, any contribution you submit for inclusion in rust-mcp-sdk is provided under the terms of the MIT License, without any additional conditions or restrictions.
+
+## Development
+
+Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
+
 ## License
 
 This project is licensed under the MIT License. see the [LICENSE](LICENSE) file for details.
