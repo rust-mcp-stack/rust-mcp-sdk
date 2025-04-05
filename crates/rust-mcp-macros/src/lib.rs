@@ -296,3 +296,60 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
     };
     TokenStream::from(expanded)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_str;
+    #[test]
+    fn test_valid_macro_attributes() {
+        let input = r#"name = "test_tool", description = "A test tool.""#;
+        let parsed: MCPToolMacroAttributes = parse_str(input).unwrap();
+
+        assert_eq!(parsed.name.unwrap(), "test_tool");
+        assert_eq!(parsed.description.unwrap(), "A test tool.");
+    }
+
+    #[test]
+    fn test_missing_name() {
+        let input = r#"description = "Only description""#;
+        let result: Result<MCPToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "The 'name' attribute is required."
+        )
+    }
+
+    #[test]
+    fn test_missing_description() {
+        let input = r#"name = "OnlyName""#;
+        let result: Result<MCPToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "The 'description' attribute is required."
+        )
+    }
+
+    #[test]
+    fn test_empty_name_field() {
+        let input = r#"name = "", description = "something""#;
+        let result: Result<MCPToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "The 'name' attribute should not be an empty string."
+        );
+    }
+    #[test]
+    fn test_empty_description_field() {
+        let input = r#"name = "my-tool", description = """#;
+        let result: Result<MCPToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "The 'description' attribute should not be an empty string."
+        );
+    }
+}
