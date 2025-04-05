@@ -236,3 +236,326 @@ pub fn renamed_field(attrs: &[Attribute]) -> Option<String> {
 
     renamed
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quote::quote;
+    use syn::parse_quote;
+
+    fn render(ts: proc_macro2::TokenStream) -> String {
+        ts.to_string().replace(char::is_whitespace, "")
+    }
+
+    #[test]
+    fn test_is_option() {
+        let ty: Type = parse_quote!(Option<String>);
+        assert!(is_option(&ty));
+
+        let ty: Type = parse_quote!(Vec<String>);
+        assert!(!is_option(&ty));
+    }
+
+    #[test]
+    fn test_is_vec() {
+        let ty: Type = parse_quote!(Vec<i32>);
+        assert!(is_vec(&ty));
+
+        let ty: Type = parse_quote!(Option<i32>);
+        assert!(!is_vec(&ty));
+    }
+
+    #[test]
+    fn test_get_inner_type() {
+        let ty: Type = parse_quote!(Option<String>);
+        let inner = get_inner_type(&ty);
+        assert!(inner.is_some());
+        let inner = inner.unwrap();
+        assert_eq!(quote!(#inner).to_string(), quote!(String).to_string());
+
+        let ty: Type = parse_quote!(Vec<i32>);
+        let inner = get_inner_type(&ty);
+        assert!(inner.is_some());
+        let inner = inner.unwrap();
+        assert_eq!(quote!(#inner).to_string(), quote!(i32).to_string());
+
+        let ty: Type = parse_quote!(i32);
+        assert!(get_inner_type(&ty).is_none());
+    }
+
+    #[test]
+    fn test_might_be_struct() {
+        let ty: Type = parse_quote!(MyStruct);
+        assert!(might_be_struct(&ty));
+
+        let ty: Type = parse_quote!(String);
+        assert!(!might_be_struct(&ty));
+    }
+
+    #[test]
+    fn test_type_to_json_schema_string() {
+        let ty: Type = parse_quote!(String);
+        let attrs: Vec<Attribute> = vec![];
+        let tokens = type_to_json_schema(&ty, &attrs);
+        let output = tokens.to_string();
+        assert!(output.contains("\"string\""));
+    }
+
+    #[test]
+    fn test_type_to_json_schema_option() {
+        let ty: Type = parse_quote!(Option<i32>);
+        let attrs: Vec<Attribute> = vec![];
+        let tokens = type_to_json_schema(&ty, &attrs);
+        let output = tokens.to_string();
+        assert!(output.contains("\"nullable\""));
+    }
+
+    #[test]
+    fn test_type_to_json_schema_vec() {
+        let ty: Type = parse_quote!(Vec<String>);
+        let attrs: Vec<Attribute> = vec![];
+        let tokens = type_to_json_schema(&ty, &attrs);
+        let output = tokens.to_string();
+        assert!(output.contains("\"array\""));
+    }
+
+    #[test]
+    fn test_has_derive() {
+        let attr: Attribute = parse_quote!(#[derive(Clone, Debug)]);
+        assert!(has_derive(&[attr.clone()], "Debug"));
+        assert!(!has_derive(&[attr], "Serialize"));
+    }
+
+    #[test]
+    fn test_renamed_field() {
+        let attr: Attribute = parse_quote!(#[serde(rename = "renamed")]);
+        assert_eq!(renamed_field(&[attr]), Some("renamed".to_string()));
+
+        let attr: Attribute = parse_quote!(#[serde(skip_serializing_if = "Option::is_none")]);
+        assert_eq!(renamed_field(&[attr]), None);
+    }
+
+    #[test]
+    fn test_get_doc_comment_single_line() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[doc = "This is a test comment."])];
+        let result = super::get_doc_comment(&attrs);
+        assert_eq!(result, Some("This is a test comment.".to_string()));
+    }
+
+    #[test]
+    fn test_get_doc_comment_multi_line() {
+        let attrs: Vec<Attribute> = vec![
+            parse_quote!(#[doc = "Line one."]),
+            parse_quote!(#[doc = "Line two."]),
+            parse_quote!(#[doc = "Line three."]),
+        ];
+        let result = super::get_doc_comment(&attrs);
+        assert_eq!(
+            result,
+            Some("Line one.\nLine two.\nLine three.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_doc_comment_no_doc() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[allow(dead_code)])];
+        let result = super::get_doc_comment(&attrs);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_get_doc_comment_trim_whitespace() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[doc = "  Trimmed line.  "])];
+        let result = super::get_doc_comment(&attrs);
+        assert_eq!(result, Some("Trimmed line.".to_string()));
+    }
+
+    #[test]
+    fn test_renamed_field_basic() {
+        let attrs = vec![parse_quote!(#[serde(rename = "new_name")])];
+        let result = renamed_field(&attrs);
+        assert_eq!(result, Some("new_name".to_string()));
+    }
+
+    #[test]
+    fn test_renamed_field_without_rename() {
+        let attrs = vec![parse_quote!(#[serde(default)])];
+        let result = renamed_field(&attrs);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_renamed_field_with_multiple_attrs() {
+        let attrs = vec![
+            parse_quote!(#[serde(default)]),
+            parse_quote!(#[serde(rename = "actual_name")]),
+        ];
+        let result = renamed_field(&attrs);
+        assert_eq!(result, Some("actual_name".to_string()));
+    }
+
+    #[test]
+    fn test_renamed_field_irrelevant_attribute() {
+        let attrs = vec![parse_quote!(#[some_other_attr(value = "irrelevant")])];
+        let result = renamed_field(&attrs);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_renamed_field_ignores_other_serde_keys() {
+        let attrs = vec![parse_quote!(#[serde(skip_serializing_if = "Option::is_none")])];
+        let result = renamed_field(&attrs);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_has_derive_positive() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[derive(Debug, Clone)])];
+        assert!(has_derive(&attrs, "Debug"));
+        assert!(has_derive(&attrs, "Clone"));
+    }
+
+    #[test]
+    fn test_has_derive_negative() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[derive(Serialize, Deserialize)])];
+        assert!(!has_derive(&attrs, "Debug"));
+    }
+
+    #[test]
+    fn test_has_derive_no_derive_attr() {
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[allow(dead_code)])];
+        assert!(!has_derive(&attrs, "Debug"));
+    }
+
+    #[test]
+    fn test_has_derive_multiple_attrs() {
+        let attrs: Vec<Attribute> = vec![
+            parse_quote!(#[allow(unused)]),
+            parse_quote!(#[derive(PartialEq)]),
+            parse_quote!(#[derive(Eq)]),
+        ];
+        assert!(has_derive(&attrs, "PartialEq"));
+        assert!(has_derive(&attrs, "Eq"));
+        assert!(!has_derive(&attrs, "Clone"));
+    }
+
+    #[test]
+    fn test_has_derive_empty_attrs() {
+        let attrs: Vec<Attribute> = vec![];
+        assert!(!has_derive(&attrs, "Debug"));
+    }
+
+    #[test]
+    fn test_might_be_struct_with_custom_type() {
+        let ty: syn::Type = parse_quote!(MyStruct);
+        assert!(might_be_struct(&ty));
+    }
+
+    #[test]
+    fn test_might_be_struct_with_primitive_type() {
+        let primitives = [
+            "i32", "u64", "bool", "f32", "String", "Option", "Vec", "char", "str",
+        ];
+        for ty_str in &primitives {
+            let ty: syn::Type = syn::parse_str(ty_str).unwrap();
+            assert!(
+                !might_be_struct(&ty),
+                "Expected '{}' to be not a struct",
+                ty_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_might_be_struct_with_namespaced_type() {
+        let ty: syn::Type = parse_quote!(std::collections::HashMap<String, i32>);
+        assert!(!might_be_struct(&ty)); // segments.len() > 1
+    }
+
+    #[test]
+    fn test_might_be_struct_with_generic_arguments() {
+        let ty: syn::Type = parse_quote!(MyStruct<T>);
+        assert!(!might_be_struct(&ty)); // has type arguments
+    }
+
+    #[test]
+    fn test_might_be_struct_with_empty_type_path() {
+        let ty: syn::Type = parse_quote!(());
+        assert!(!might_be_struct(&ty));
+    }
+
+    #[test]
+    fn test_json_schema_string() {
+        let ty: syn::Type = parse_quote!(String);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"string\".to_string())"));
+    }
+
+    #[test]
+    fn test_json_schema_number() {
+        let ty: syn::Type = parse_quote!(i32);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"number\".to_string())"));
+    }
+
+    #[test]
+    fn test_json_schema_boolean() {
+        let ty: syn::Type = parse_quote!(bool);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"boolean\".to_string())"));
+    }
+
+    #[test]
+    fn test_json_schema_vec_of_string() {
+        let ty: syn::Type = parse_quote!(Vec<String>);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"array\".to_string())"));
+        assert!(output.contains("\"items\".to_string(),serde_json::Value::Object"));
+    }
+
+    #[test]
+    fn test_json_schema_option_of_number() {
+        let ty: syn::Type = parse_quote!(Option<u64>);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output.contains("\"nullable\".to_string(),serde_json::Value::Bool(true)"));
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"number\".to_string())"));
+    }
+
+    #[test]
+    fn test_json_schema_custom_struct() {
+        let ty: syn::Type = parse_quote!(MyStruct);
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output.contains("MyStruct::json_schema()"));
+    }
+
+    #[test]
+    fn test_json_schema_with_doc_comment() {
+        let ty: syn::Type = parse_quote!(String);
+        let attrs: Vec<Attribute> = vec![parse_quote!(#[doc = "A user name."])];
+        let tokens = type_to_json_schema(&ty, &attrs);
+        let output = render(tokens);
+        assert!(output.contains(
+            "\"description\".to_string(),serde_json::Value::String(\"Ausername.\".to_string())"
+        ));
+    }
+
+    #[test]
+    fn test_json_schema_fallback_unknown() {
+        let ty: syn::Type = parse_quote!((i32, i32));
+        let tokens = type_to_json_schema(&ty, &[]);
+        let output = render(tokens);
+        assert!(output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"unknown\".to_string())"));
+    }
+}

@@ -7,8 +7,6 @@ pub mod common;
 fn test_rename() {
     let schema = EditOperation::json_schema();
 
-    println!(">>> schema {:?} ", schema);
-
     assert_eq!(schema.len(), 3);
 
     assert!(schema.contains_key("properties"));
