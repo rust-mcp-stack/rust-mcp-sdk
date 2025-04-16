@@ -15,7 +15,7 @@ A high-performance, asynchronous toolkit for building MCP servers and clients.
 Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 
 **rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.  
-Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate for type safe MCP schema objects and MCP type utilities simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
+Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
 
 **⚠️WARNING**: This project only supports Standard Input/Output (stdio) transport at this time, with support for SSE (Server-Sent Events) transport still in progress and not yet available. Project is currently under development and should be used at your own risk.
 
