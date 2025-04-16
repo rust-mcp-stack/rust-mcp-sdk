@@ -52,5 +52,8 @@ jobs:
           Cargo.toml
 
           git add ./Cargo.toml
-          git commit -m "chore: update Cargo.toml for release"
-          git push
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update Cargo.toml for release"
+            git push
+          fi
