@@ -6,7 +6,7 @@ use rust_mcp_schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
-use rust_mcp_sdk::MCPServer;
+use rust_mcp_sdk::McpServer;
 use rust_mcp_sdk::{error::SdkResult, mcp_server::server_runtime_core};
 use rust_mcp_transport::{StdioTransport, TransportOptions};
 

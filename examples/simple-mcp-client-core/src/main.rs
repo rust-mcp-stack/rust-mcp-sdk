@@ -7,7 +7,7 @@ use inquiry_utils::InquiryUtils;
 use rust_mcp_schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, JSONRPC_VERSION,
 };
-use rust_mcp_sdk::MCPClient;
+use rust_mcp_sdk::McpClient;
 use rust_mcp_sdk::{error::SdkResult, mcp_client::client_runtime_core};
 use rust_mcp_transport::{StdioTransport, TransportOptions};
 use std::sync::Arc;

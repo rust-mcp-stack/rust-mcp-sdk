@@ -2,7 +2,7 @@
 
 use colored::Colorize;
 use rust_mcp_schema::CallToolRequestParams;
-use rust_mcp_sdk::MCPClient;
+use rust_mcp_sdk::McpClient;
 use rust_mcp_sdk::{error::SdkResult, mcp_client::ClientRuntime};
 use serde_json::json;
 use std::io::Write;
@@ -33,7 +33,7 @@ impl InquiryUtils {
 
     pub fn print_server_info(&self) {
         self.print_header("Server info");
-        let server_version = self.client.get_server_version().unwrap();
+        let server_version = self.client.server_version().unwrap();
         println!("{} {}", "Server name:".bold(), server_version.name.cyan());
         println!(
             "{} {}",

@@ -10,7 +10,7 @@ use rust_mcp_schema::{
 use rust_mcp_sdk::{
     error::SdkResult,
     mcp_server::{server_runtime, ServerRuntime},
-    MCPServer,
+    McpServer,
 };
 
 use rust_mcp_transport::{StdioTransport, TransportOptions};

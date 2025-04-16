@@ -9,7 +9,7 @@ use rust_mcp_schema::{
 };
 use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::mcp_client::client_runtime;
-use rust_mcp_sdk::MCPClient;
+use rust_mcp_sdk::McpClient;
 use rust_mcp_transport::{StdioTransport, TransportOptions};
 use std::sync::Arc;
 

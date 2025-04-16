@@ -28,7 +28,7 @@ pub fn is_vec(ty: &Type) -> bool {
 
 // Extract the inner type from Vec<T> or Option<T>
 #[allow(unused)]
-pub fn get_inner_type(ty: &Type) -> Option<&Type> {
+pub fn inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         if type_path.path.segments.len() == 1 {
             let segment = &type_path.path.segments[0];
@@ -46,7 +46,7 @@ pub fn get_inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-fn get_doc_comment(attrs: &[Attribute]) -> Option<String> {
+fn doc_comment(attrs: &[Attribute]) -> Option<String> {
     let mut docs = Vec::new();
     for attr in attrs {
         if attr.path().is_ident("doc") {
@@ -86,7 +86,7 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
     let number_types = [
         "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
     ];
-    let doc_comment = get_doc_comment(attrs);
+    let doc_comment = doc_comment(attrs);
     let description = doc_comment.as_ref().map(|desc| {
         quote! {
             map.insert("description".to_string(), serde_json::Value::String(#desc.to_string()));
@@ -266,21 +266,21 @@ mod tests {
     }
 
     #[test]
-    fn test_get_inner_type() {
+    fn test_inner_type() {
         let ty: Type = parse_quote!(Option<String>);
-        let inner = get_inner_type(&ty);
+        let inner = inner_type(&ty);
         assert!(inner.is_some());
         let inner = inner.unwrap();
         assert_eq!(quote!(#inner).to_string(), quote!(String).to_string());
 
         let ty: Type = parse_quote!(Vec<i32>);
-        let inner = get_inner_type(&ty);
+        let inner = inner_type(&ty);
         assert!(inner.is_some());
         let inner = inner.unwrap();
         assert_eq!(quote!(#inner).to_string(), quote!(i32).to_string());
 
         let ty: Type = parse_quote!(i32);
-        assert!(get_inner_type(&ty).is_none());
+        assert!(inner_type(&ty).is_none());
     }
 
     #[test]
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_get_doc_comment_single_line() {
         let attrs: Vec<Attribute> = vec![parse_quote!(#[doc = "This is a test comment."])];
-        let result = super::get_doc_comment(&attrs);
+        let result = super::doc_comment(&attrs);
         assert_eq!(result, Some("This is a test comment.".to_string()));
     }
 
@@ -349,7 +349,7 @@ mod tests {
             parse_quote!(#[doc = "Line two."]),
             parse_quote!(#[doc = "Line three."]),
         ];
-        let result = super::get_doc_comment(&attrs);
+        let result = super::doc_comment(&attrs);
         assert_eq!(
             result,
             Some("Line one.\nLine two.\nLine three.".to_string())
@@ -359,14 +359,14 @@ mod tests {
     #[test]
     fn test_get_doc_comment_no_doc() {
         let attrs: Vec<Attribute> = vec![parse_quote!(#[allow(dead_code)])];
-        let result = super::get_doc_comment(&attrs);
+        let result = super::doc_comment(&attrs);
         assert_eq!(result, None);
     }
 
     #[test]
     fn test_get_doc_comment_trim_whitespace() {
         let attrs: Vec<Attribute> = vec![parse_quote!(#[doc = "  Trimmed line.  "])];
-        let result = super::get_doc_comment(&attrs);
+        let result = super::doc_comment(&attrs);
         assert_eq!(result, Some("Trimmed line.".to_string()));
     }
 

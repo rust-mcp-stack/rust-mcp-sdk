@@ -11,7 +11,7 @@ use crate::error::{GenericWatchSendError, TransportError, TransportResult};
 use crate::mcp_stream::MCPStream;
 use crate::message_dispatcher::MessageDispatcher;
 use crate::transport::Transport;
-use crate::{IOStream, MCPDispatch, TransportOptions};
+use crate::{IoStream, McpDispatch, TransportOptions};
 
 /// Implements a standard I/O transport for MCP communication.
 ///
@@ -101,7 +101,7 @@ impl StdioTransport {
     ///
     /// # Returns
     /// A tuple of the command string and its arguments.
-    fn get_launch_commands(&self) -> (String, Vec<std::string::String>) {
+    fn launch_commands(&self) -> (String, Vec<std::string::String>) {
         #[cfg(windows)]
         {
             let command = "cmd.exe".to_string();
@@ -134,7 +134,7 @@ where
     /// A `TransportResult` containing:
     /// - A pinned stream of incoming messages.
     /// - A `MessageDispatcher<R>` for sending messages.
-    /// - An `IOStream` for stderr (readable) or stdout (writable) depending on the mode.
+    /// - An `IoStream` for stderr (readable) or stdout (writable) depending on the mode.
     ///
     /// # Errors
     /// Returns a `TransportError` if the subprocess fails to spawn or stdio streams cannot be accessed.
@@ -143,10 +143,10 @@ where
     ) -> TransportResult<(
         Pin<Box<dyn Stream<Item = R> + Send>>,
         MessageDispatcher<R>,
-        IOStream,
+        IoStream,
     )>
     where
-        MessageDispatcher<R>: MCPDispatch<R, S>,
+        MessageDispatcher<R>: McpDispatch<R, S>,
     {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
@@ -154,7 +154,7 @@ where
         *lock = Some(shutdown_tx);
 
         if self.command.is_some() {
-            let (command_name, command_args) = self.get_launch_commands();
+            let (command_name, command_args) = self.launch_commands();
 
             let mut command = Command::new(command_name);
             command
@@ -193,7 +193,7 @@ where
             let (stream, sender, error_stream) = MCPStream::create(
                 Box::pin(stdout),
                 Mutex::new(Box::pin(stdin)),
-                IOStream::Readable(Box::pin(stderr)),
+                IoStream::Readable(Box::pin(stderr)),
                 self.options.timeout,
                 shutdown_rx,
             );
@@ -203,7 +203,7 @@ where
             let (stream, sender, error_stream) = MCPStream::create(
                 Box::pin(tokio::io::stdin()),
                 Mutex::new(Box::pin(tokio::io::stdout())),
-                IOStream::Writable(Box::pin(tokio::io::stderr())),
+                IoStream::Writable(Box::pin(tokio::io::stderr())),
                 self.options.timeout,
                 shutdown_rx,
             );

@@ -5,7 +5,7 @@
 ///
 /// This macro creates:
 /// - An enum with the specified name containing variants for each mcp tool
-/// - A `get_tools()` function returning a vector of supported tools
+/// - A `tools()` function returning a vector of supported tools
 /// - A `TryFrom<CallToolRequestParams>` implementation for converting requests to tool instances
 ///
 /// # Arguments
@@ -22,8 +22,8 @@
 /// //     EditFileTool(EditFileTool),
 /// //     SearchFilesTool(SearchFilesTool),
 /// // }
-/// // pub fn get_tools() -> Vec<Tool> {
-/// //     vec![ReadFileTool::get_tool(), EditFileTool::get_tool(), SearchFilesTool::get_tool()]
+/// // pub fn tools() -> Vec<Tool> {
+/// //     vec![ReadFileTool::tool(), EditFileTool::tool(), SearchFilesTool::tool()]
 /// // }
 ///
 /// // impl TryFrom<CallToolRequestParams> for FileSystemTools {
@@ -50,10 +50,10 @@ macro_rules! tool_box {
             }
 
             /// Returns a vector containing instances of all supported tools
-            pub fn get_tools() -> Vec<rust_mcp_schema::Tool> {
+            pub fn tools() -> Vec<rust_mcp_schema::Tool> {
                 vec![
                     $(
-                        $tool::get_tool(),
+                        $tool::tool(),
                     )*
                 ]
             }
