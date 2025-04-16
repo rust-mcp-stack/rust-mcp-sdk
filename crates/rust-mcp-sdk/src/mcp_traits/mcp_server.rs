@@ -26,6 +26,16 @@ pub trait McpServer: Sync + Send {
     fn server_info(&self) -> &InitializeResult;
     fn client_info(&self) -> Option<InitializeRequestParams>;
 
+    #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
+    fn get_client_info(&self) -> Option<InitializeRequestParams> {
+        self.client_info()
+    }
+
+    #[deprecated(since = "0.2.0", note = "Use `server_info()` instead.")]
+    fn get_server_info(&self) -> &InitializeResult {
+        self.server_info()
+    }
+
     async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
     where
         MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>;

@@ -188,6 +188,49 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
                 }
             }
+
+            #[deprecated(since = "0.2.0", note = "Use `tool()` instead.")]
+            pub fn get_tool()-> rust_mcp_schema::Tool
+            {
+                let json_schema = &#input_ident::json_schema();
+
+                let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
+                    Some(arr) => arr
+                        .iter()
+                        .filter_map(|item| item.as_str().map(String::from))
+                        .collect(),
+                    None => Vec::new(), // Default to an empty vector if "required" is missing or not an array
+                };
+
+                let properties: Option<
+                    std::collections::HashMap<String, serde_json::Map<String, serde_json::Value>>,
+                > = json_schema
+                    .get("properties")
+                    .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
+                    .map(|properties| {
+                        properties
+                            .iter()
+                            .filter_map(|(key, value)| {
+                                serde_json::to_value(value)
+                                    .ok() // If serialization fails, return None.
+                                    .and_then(|v| {
+                                        if let serde_json::Value::Object(obj) = v {
+                                            Some(obj)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .map(|obj| (key.to_string(), obj)) // Return the (key, value) tuple
+                            })
+                            .collect()
+                    });
+
+                rust_mcp_schema::Tool {
+                    name: #tool_name.to_string(),
+                    description: Some(#tool_description.to_string()),
+                    input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
+                }
+            }
         }
         // Retain the original item (struct definition)
         #input

@@ -80,7 +80,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: &dyn MCPServer) -> Result<ListToolsResult, RpcError> {
 
         Ok(ListToolsResult {
-            tools: vec![SayHelloTool::get_tool()],
+            tools: vec![SayHelloTool::tool()],
             meta: None,
             next_cursor: None,
         })
@@ -160,7 +160,7 @@ async fn main() -> SdkResult<()> {
     // STEP 7: use client methods to communicate with the MCP Server as you wish
 
     // Retrieve and display the list of tools available on the server
-    let server_version = client.get_server_version().unwrap();
+    let server_version = client.server_version().unwrap();
     let tools = client.list_tools(None).await?.tools;
 
     println!("List of tools for {}@{}", server_version.name, server_version.version);
