@@ -30,3 +30,26 @@ jobs:
           token: ${{ secrets.RP_SECRET }}
           config-file: .release-config.json
           manifest-file: .release-manifest.json
+
+      - name: Parse release-please head branch
+        if: ${{ steps.release.outputs.prs_created }}
+        run: |
+          BRANCH=$(echo '${{ steps.release.outputs.pr }}' | jq -r '.headBranchName')
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Update Cargo.toml
+        if: ${{ steps.release.outputs.prs_created }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch
+          git checkout $BRANCH
+
+          echo "Updating root Cargo.toml"
+          sed -i -e "s/rust-mcp-macros = { version = \"[^\"]*\",/rust-mcp-macros = { version = \"$(grep '^version = ' crates/rust-mcp-macros/Cargo.toml | cut -d' ' -f3 | tr -d '\"')\",/" \
+          -e "s/rust-mcp-transport = { version = \"[^\"]*\",/rust-mcp-transport = { version = \"$(grep '^version = ' crates/rust-mcp-transport/Cargo.toml | cut -d' ' -f3 | tr -d '\"')\",/" \
+          Cargo.toml
+
+          git add ./Cargo.toml
+          git commit -m "chore: update Cargo.toml for release"
+          git push
