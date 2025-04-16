@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.1.2...rust-mcp-macros-v0.2.0) (2025-04-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* naming & less constrained dependencies ([#8](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/8))
+
+### 🚜 Code Refactoring
+
+* Naming & less constrained dependencies ([#8](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/8)) ([2aa469b](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/2aa469b1f7f53f6cda23141c961467ece738047e))
+
 ## [0.1.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.1.1...rust-mcp-macros-v0.1.2) (2025-03-30)
 
 
