@@ -19,3 +19,6 @@ pub enum McpSdkError {
     #[error("{0}")]
     SdkError(#[from] rust_mcp_schema::schema_utils::SdkError),
 }
+
+#[deprecated(since = "0.2.0", note = "Use `McpSdkError` instead.")]
+pub type MCPSdkError = McpSdkError;

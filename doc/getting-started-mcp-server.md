@@ -166,7 +166,7 @@ impl ServerHandler for MyServerHandler {
         Ok(ListToolsResult {
             meta: None,
             next_cursor: None,
-            tools: GreetingTools::get_tools(),
+            tools: GreetingTools::tools(),
         })
     }
 
