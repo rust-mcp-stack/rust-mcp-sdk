@@ -5,6 +5,7 @@ mod mcp_runtimes;
 mod mcp_traits;
 mod utils;
 
+#[cfg(feature = "client")]
 pub mod mcp_client {
     //! Includes the runtimes and traits required to create a type-safe MCP client.
     //!
@@ -35,6 +36,7 @@ pub mod mcp_client {
     pub use super::mcp_runtimes::client_runtime::ClientRuntime;
 }
 
+#[cfg(feature = "server")]
 pub mod mcp_server {
     //! Includes the runtimes and traits required to create a type-safe MCP server.
     //!
@@ -66,9 +68,13 @@ pub mod mcp_server {
     pub use super::mcp_runtimes::server_runtime::ServerRuntime;
 }
 
+#[cfg(feature = "client")]
 pub use mcp_traits::mcp_client::*;
+
+#[cfg(feature = "server")]
 pub use mcp_traits::mcp_server::*;
 
+pub use rust_mcp_transport::error::*;
 pub use rust_mcp_transport::*;
 
 #[cfg(feature = "macros")]

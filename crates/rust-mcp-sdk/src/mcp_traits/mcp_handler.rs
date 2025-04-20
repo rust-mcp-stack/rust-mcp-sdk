@@ -1,16 +1,21 @@
 use async_trait::async_trait;
-use rust_mcp_schema::{
-    schema_utils::{
-        NotificationFromClient, NotificationFromServer, RequestFromClient, RequestFromServer,
-        ResultFromClient, ResultFromServer,
-    },
-    RpcError,
-};
+
+#[cfg(feature = "server")]
+use rust_mcp_schema::schema_utils::{NotificationFromClient, RequestFromClient, ResultFromServer};
+
+#[cfg(feature = "client")]
+use rust_mcp_schema::schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient};
+
+use rust_mcp_schema::RpcError;
 
 use crate::error::SdkResult;
 
-use super::{mcp_client::McpClient, mcp_server::McpServer};
+#[cfg(feature = "client")]
+use super::mcp_client::McpClient;
+#[cfg(feature = "server")]
+use super::mcp_server::McpServer;
 
+#[cfg(feature = "server")]
 #[async_trait]
 pub trait McpServerHandler: Send + Sync {
     async fn on_server_started(&self, runtime: &dyn McpServer);
@@ -28,6 +33,7 @@ pub trait McpServerHandler: Send + Sync {
     ) -> SdkResult<()>;
 }
 
+#[cfg(feature = "client")]
 #[async_trait]
 pub trait McpClientHandler: Send + Sync {
     async fn handle_request(

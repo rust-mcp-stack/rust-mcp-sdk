@@ -10,11 +10,10 @@ members = [
     "examples/hello-world-mcp-server-core",
 ]
 
-
 [workspace.dependencies]
 # Workspace member crates
 rust-mcp-transport = { version = "0.2.0", path = "crates/rust-mcp-transport" }
-rust-mcp-sdk = { path = "crates/rust-mcp-sdk" }
+rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
 rust-mcp-macros = { version = "0.2.0", path = "crates/rust-mcp-macros" }
 
 # External crates

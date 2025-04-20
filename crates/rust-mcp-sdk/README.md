@@ -206,6 +206,55 @@ Here is the output :
 
 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
 
+## Features
+
+The `rust-mcp-sdk` crate provides three optional features: `server` , `client` and `macros`. By default, all features are enabled for maximum functionality. You can customize which features to include based on your project's needs.
+
+### Available Features
+
+- `server`: Activates MCP server capabilities in `rust-mcp-sdk`, providing modules and APIs for building and managing MCP services.
+- `client`: Activates MCP client capabilities, offering modules and APIs for client development and communicating with MCP servers.
+- `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
+
+### Default Behavior
+
+All features (server, client, and macros) are enabled by default. When you include rust-mcp-sdk as a dependency without specifying features, all will be included:
+
+<!-- x-release-please-start-version -->
+
+```toml
+[dependencies]
+rust-mcp-sdk = "0.2.0"
+```
+
+<!-- x-release-please-end -->
+
+### Using Only the server Feature
+
+If you only need the MCP Server functionality, you can disable the default features and explicitly enable the server feature. Add the following to your Cargo.toml:
+
+<!-- x-release-please-start-version -->
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros"] }
+```
+
+<!-- x-release-please-end -->
+
+### Using Only the client Feature
+
+If you only need the MCP Client functionality, you can disable the default features and explicitly enable the client feature. Add the following to your Cargo.toml:
+
+<!-- x-release-please-start-version -->
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client"] }
+```
+
+<!-- x-release-please-end -->
+
 ### Choosing Between `mcp_server_handler` and `mcp_server_handler_core`
 
 [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) provides two type of handler traits that you can chose from:
