@@ -4,13 +4,28 @@
 
 # Rust MCP SDK
 
-A high-performance, asynchronous toolkit for building MCP servers and clients.
+[<img alt="crates.io" src="https://img.shields.io/crates/v/rust-mcp-sdk?style=for-the-badge&logo=rust&color=FE965D" height="22">](https://crates.io/crates/rust-mcp-sdk)
+[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs" height="22">](https://docs.rs/rust-mcp-sdk)
+[<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/ci.yml?style=for-the-badge" height="22">
+](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/ci.yml)
+[<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
+](examples/hello-world-mcp-server)
+
+A high-performance, asynchronous toolkit for building MCP servers and clients.  
 Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 
-**rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.
-Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate for type safe MCP schema objects and MCP type utilities simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
+**rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.  
+Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
 
 **⚠️WARNING**: This project only supports Standard Input/Output (stdio) transport at this time, with support for SSE (Server-Sent Events) transport still in progress and not yet available. Project is currently under development and should be used at your own risk.
+
+## Projects using `rust-mcp-sdk`
+
+Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their name, description, and links to their repositories or project pages.
+
+| Icon | Name | Description | Link |
+|------|------|-------------|------|
+| <a href="https://rust-mcp-stack.github.io/rust-mcp-filesystem"><img src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-filesystem/refs/heads/main/docs/_media/rust-mcp-filesystem.png" width="64"/></a> | [Rust MCP Filesystem](https://rust-mcp-stack.github.io/rust-mcp-filesystem) | Fast, asynchronous MCP server for seamless filesystem operations offering enhanced capabilities, improved performance, and a robust feature set tailored for modern filesystem interactions. | [GitHub](https://github.com/rust-mcp-stack/rust-mcp-filesystem) |
 
 ## Usage Examples
 
@@ -195,10 +210,10 @@ If you are looking for a step-by-step tutorial on how to get started with `rust-
 
 [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) provides two type of handler traits that you can chose from:
 
-- **mcp_server_handler**: This is the recommended trait for your MCP project, offering a default implementation for all types of MCP messages. It includes predefined implementations within the trait, such as handling initialization or responding to ping requests, so you only need to override and customize the handler functions relevant to your specific needs.
+- **mcp_server_handler**: This is the recommended trait for your MCP project, offering a default implementation for all types of MCP messages. It includes predefined implementations within the trait, such as handling initialization or responding to ping requests, so you only need to override and customize the handler functions relevant to your specific needs.  
   Refer to [examples/hello-world-mcp-server/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server/src/handler.rs) for an example.
 
-- **mcp_server_handler_core**: If you need more control over MCP messages, consider using `mcp_server_handler_core`. It offers three primary methods to manage the three MCP message types: `request`, `notification`, and `error`. While still providing type-safe objects in these methods, it allows you to determine how to handle each message based on its type and parameters.
+- **mcp_server_handler_core**: If you need more control over MCP messages, consider using `mcp_server_handler_core`. It offers three primary methods to manage the three MCP message types: `request`, `notification`, and `error`. While still providing type-safe objects in these methods, it allows you to determine how to handle each message based on its type and parameters.  
   Refer to [examples/hello-world-mcp-server-core/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core/src/handler.rs) for an example.
 
 ---
@@ -209,9 +224,24 @@ If you are looking for a step-by-step tutorial on how to get started with `rust-
 
 ### Choosing Between `mcp_client_handler` and `mcp_client_handler_core`
 
-The same principles outlined above apply to the client-side handlers, `mcp_client_handler` and `mcp_client_handler_core`.
-Use `client_runtime::create_client()` or `client_runtime_core::create_client()` , respectively.
+The same principles outlined above apply to the client-side handlers, `mcp_client_handler` and `mcp_client_handler_core`.  
+Use `client_runtime::create_client()` or `client_runtime_core::create_client()` , respectively.  
 Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core).
+
+## Contributing
+
+We welcome everyone who wishes to contribute! Please refer to the [contributing](CONTRIBUTING.md) guidelines for more details.
+
+Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
+
+All contributions, including issues and pull requests, must follow
+Rust's Code of Conduct.
+
+Unless explicitly stated otherwise, any contribution you submit for inclusion in rust-mcp-sdk is provided under the terms of the MIT License, without any additional conditions or restrictions.
+
+## Development
+
+Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
 
 ## License
 
