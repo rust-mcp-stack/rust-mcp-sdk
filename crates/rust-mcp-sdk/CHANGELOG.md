@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.0...rust-mcp-sdk-v0.2.1) (2025-04-20)
+
+
+### 🚀 Features
+
+* Introduce Cargo features to isolate client and server code ([#18](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/18)) ([1fa9a6f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1fa9a6f60ec2ece34b68e49855c13489a0889d48))
+
+
+### 📚 Documentation
+
+* Add projects list to readme ([#16](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/16)) ([deee010](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/deee010c84228c00a7f4426d560f7ceb5d2d274f))
+
 ## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.1.3...rust-mcp-sdk-v0.2.0) (2025-04-16)
 
 
