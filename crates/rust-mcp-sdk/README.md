@@ -229,7 +229,7 @@ rust-mcp-sdk = "0.2.0"
 
 <!-- x-release-please-end -->
 
-### Using Only the client Feature
+### Using Only the server Feature
 
 If you only need the MCP Server functionality, you can disable the default features and explicitly enable the server feature. Add the following to your Cargo.toml:
 
