@@ -10,10 +10,8 @@ use rust_mcp_schema::{
 use rust_mcp_sdk::{
     error::SdkResult,
     mcp_server::{server_runtime, ServerRuntime},
-    McpServer,
+    McpServer, StdioTransport, TransportOptions,
 };
-
-use rust_mcp_transport::{StdioTransport, TransportOptions};
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {

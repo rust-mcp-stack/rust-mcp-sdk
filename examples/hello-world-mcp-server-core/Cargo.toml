@@ -7,9 +7,10 @@ license = "MIT"
 
 
 [dependencies]
-rust-mcp-sdk = { workspace = true }
-rust-mcp-transport = { workspace = true }
-rust-mcp-macros = { workspace = true }
+rust-mcp-sdk = { workspace = true, default-features = false, features = [
+    "server",
+    "macros",
+] }
 rust-mcp-schema = { workspace = true }
 
 tokio = { workspace = true }

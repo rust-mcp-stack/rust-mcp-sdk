@@ -23,8 +23,11 @@ futures = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["macros"]         # Default features
+default = ["client", "server", "macros"] # All features enabled by default
+server = []                              # Server feature
+client = []                              # Client feature
 macros = ["rust-mcp-macros"]
+
 
 [lints]
 workspace = true
