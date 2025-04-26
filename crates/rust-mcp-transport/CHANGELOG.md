@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.0...rust-mcp-transport-v0.2.1) (2025-04-26)
+
+
+### 🚀 Features
+
+* Upgrade to rust-mcp-schema v0.4.0 ([#21](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/21)) ([819d113](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/819d1135b469e4aa8e857c81e25c81c331084fb1))
+
+
+### 🐛 Bug Fixes
+
+* Capture launch errors in client-runtime ([#19](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/19)) ([c0d05ab](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/c0d05ab73b1ac7edc7c410f2f14f0b86d4343c1d))
+
 ## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.1.2...rust-mcp-transport-v0.2.0) (2025-04-16)
 
 
