@@ -33,6 +33,7 @@ impl MCPStream {
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
         error_io: IoStream,
+        pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
         timeout_msec: u64,
         shutdown_rx: Receiver<bool>,
     ) -> (
@@ -44,7 +45,6 @@ impl MCPStream {
         R: RPCMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
         let (tx, rx) = tokio::sync::broadcast::channel::<R>(CHANNEL_CAPACITY);
-        let pending_requests = Arc::new(Mutex::new(HashMap::new()));
 
         #[allow(clippy::let_underscore_future)]
         let _ = Self::spawn_reader(readable, tx, pending_requests.clone(), shutdown_rx);

@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use futures::Stream;
 use rust_mcp_schema::schema_utils::{MCPMessage, RPCMessage};
+use rust_mcp_schema::RequestId;
 use std::collections::HashMap;
 use std::pin::Pin;
-use tokio::process::{Child, Command};
+use std::sync::Arc;
+use tokio::process::Command;
 use tokio::sync::watch::Sender;
 use tokio::sync::{watch, Mutex};
 
@@ -24,7 +26,6 @@ pub struct StdioTransport {
     command: Option<String>,
     args: Option<Vec<String>>,
     env: Option<HashMap<String, String>>,
-    process: Mutex<Option<Child>>,
     options: TransportOptions,
     shutdown_tx: tokio::sync::RwLock<Option<Sender<bool>>>,
     is_shut_down: Mutex<bool>,
@@ -49,7 +50,6 @@ impl StdioTransport {
             args: None,
             command: None,
             env: None,
-            process: Mutex::new(None),
             options,
             shutdown_tx: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
@@ -81,18 +81,10 @@ impl StdioTransport {
             args: Some(args),
             command: Some(command.into()),
             env,
-            process: Mutex::new(None),
             options,
             shutdown_tx: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
         })
-    }
-
-    /// Sets the subprocess handle for the transport.
-    async fn set_process(&self, value: Child) -> TransportResult<()> {
-        let mut process = self.process.lock().await;
-        *process = Some(value);
-        Ok(())
     }
 
     /// Retrieves the command and arguments for launching the subprocess.
@@ -188,22 +180,35 @@ where
                 .take()
                 .ok_or_else(|| TransportError::FromString("Unable to retrieve stderr.".into()))?;
 
-            self.set_process(process).await.unwrap();
+            let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>> =
+                Arc::new(Mutex::new(HashMap::new()));
+            let pending_requests_clone = Arc::clone(&pending_requests);
+
+            tokio::spawn(async move {
+                let _ = process.wait().await;
+                // clean up pending requests to cancel waiting tasks
+                let mut pending_requests = pending_requests.lock().await;
+                pending_requests.clear();
+            });
 
             let (stream, sender, error_stream) = MCPStream::create(
                 Box::pin(stdout),
                 Mutex::new(Box::pin(stdin)),
                 IoStream::Readable(Box::pin(stderr)),
+                pending_requests_clone,
                 self.options.timeout,
                 shutdown_rx,
             );
 
             Ok((stream, sender, error_stream))
         } else {
+            let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>> =
+                Arc::new(Mutex::new(HashMap::new()));
             let (stream, sender, error_stream) = MCPStream::create(
                 Box::pin(tokio::io::stdin()),
                 Mutex::new(Box::pin(tokio::io::stdout())),
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
+                pending_requests,
                 self.options.timeout,
                 shutdown_rx,
             );
@@ -233,12 +238,6 @@ where
             tx.send(true).map_err(GenericWatchSendError::new)?;
             let mut lock = self.is_shut_down.lock().await;
             *lock = true
-        }
-
-        let mut process = self.process.lock().await;
-        if let Some(p) = process.as_mut() {
-            p.kill().await?;
-            p.wait().await?;
         }
         Ok(())
     }

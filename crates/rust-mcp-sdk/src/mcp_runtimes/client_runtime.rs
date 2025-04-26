@@ -85,9 +85,46 @@ impl McpClient for ClientRuntime {
         self.set_message_sender(sender).await;
 
         let self_clone = Arc::clone(&self);
-        self_clone.initialize_request().await?;
-
         let self_clone_err = Arc::clone(&self);
+
+        let err_task = tokio::spawn(async move {
+            let self_ref = &*self_clone_err;
+
+            if let IoStream::Readable(error_input) = error_io {
+                let mut reader = BufReader::new(error_input).lines();
+                loop {
+                    tokio::select! {
+                        should_break = self_ref.transport.is_shut_down() =>{
+                            if should_break {
+                                break;
+                            }
+                        }
+                        line = reader.next_line() =>{
+                            match line {
+                                Ok(Some(error_message)) => {
+                                    self_ref
+                                        .handler
+                                        .handle_process_error(error_message, self_ref)
+                                        .await?;
+                                }
+                                Ok(None) => {
+                                    // end of input
+                                    break;
+                                }
+                                Err(e) => {
+                                    eprintln!("Error reading from std_err: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok::<(), McpSdkError>(())
+        });
+
+        // send initialize request to the MCP server
+        self_clone.initialize_request().await?;
 
         let main_task = tokio::spawn(async move {
             let sender = self_clone.sender().await.read().await;
@@ -127,42 +164,6 @@ impl McpClient for ClientRuntime {
                     }
                     // The response is the result of a request, it is processed at the transport level.
                     ServerMessage::Response(_) => {}
-                }
-            }
-            Ok::<(), McpSdkError>(())
-        });
-
-        let err_task = tokio::spawn(async move {
-            let self_ref = &*self_clone_err;
-
-            if let IoStream::Readable(error_input) = error_io {
-                let mut reader = BufReader::new(error_input).lines();
-                loop {
-                    tokio::select! {
-                        should_break = self_ref.transport.is_shut_down() =>{
-                            if should_break {
-                                break;
-                            }
-                        }
-                        line = reader.next_line() =>{
-                            match line {
-                                Ok(Some(error_message)) => {
-                                    self_ref
-                                        .handler
-                                        .handle_process_error(error_message, self_ref)
-                                        .await?;
-                                }
-                                Ok(None) => {
-                                    // end of input
-                                    break;
-                                }
-                                Err(e) => {
-                                    eprintln!("Error reading from std_err: {}", e);
-                                    break;
-                                }
-                            }
-                        }
-                    }
                 }
             }
             Ok::<(), McpSdkError>(())
