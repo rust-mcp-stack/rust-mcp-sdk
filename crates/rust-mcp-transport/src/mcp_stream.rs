@@ -4,7 +4,7 @@ use crate::{
     IoStream,
 };
 use futures::Stream;
-use rust_mcp_schema::{schema_utils::RPCMessage, RequestId, RpcError};
+use rust_mcp_schema::{schema_utils::RpcMessage, RequestId, RpcError};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -42,7 +42,7 @@ impl MCPStream {
         IoStream,
     )
     where
-        R: RPCMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
         let (tx, rx) = tokio::sync::broadcast::channel::<R>(CHANNEL_CAPACITY);
 
@@ -79,7 +79,7 @@ impl MCPStream {
         mut shutdown_rx: Receiver<bool>,
     ) -> JoinHandle<Result<(), TransportError>>
     where
-        R: RPCMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
         tokio::spawn(async move {
             let mut lines_stream = BufReader::new(readable).lines();

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures::Stream;
-use rust_mcp_schema::schema_utils::{MCPMessage, RPCMessage};
+use rust_mcp_schema::schema_utils::{McpMessage, RpcMessage};
 use rust_mcp_schema::RequestId;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -114,8 +114,8 @@ impl StdioTransport {
 #[async_trait]
 impl<R, S> Transport<R, S> for StdioTransport
 where
-    R: RPCMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
-    S: MCPMessage + Clone + Send + Sync + serde::Serialize + 'static,
+    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    S: McpMessage + Clone + Send + Sync + serde::Serialize + 'static,
 {
     /// Starts the transport, initializing streams and the message dispatcher.
     ///

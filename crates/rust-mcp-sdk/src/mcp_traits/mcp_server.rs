@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{
-        ClientMessage, MCPMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
+        ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
         ResultFromClient,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
