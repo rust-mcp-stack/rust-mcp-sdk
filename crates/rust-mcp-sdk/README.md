@@ -9,7 +9,8 @@
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/ci.yml?style=for-the-badge" height="22">
 ](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/ci.yml)
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
-](examples/hello-world-mcp-server)
+](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server#hello-world-mcp-server)
+
 
 A high-performance, asynchronous toolkit for building MCP servers and clients.  
 Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
