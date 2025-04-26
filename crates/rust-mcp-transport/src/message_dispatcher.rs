@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{
-    self, ClientMessage, FromMessage, MCPMessage, MessageFromClient, MessageFromServer,
+    self, ClientMessage, FromMessage, McpMessage, MessageFromClient, MessageFromServer,
     ServerMessage,
 };
 use rust_mcp_schema::{RequestId, RpcError};
@@ -69,7 +69,7 @@ impl<R> MessageDispatcher<R> {
     /// An `Option<RequestId>`: `Some` for requests or responses/errors, `None` for notifications.
     fn request_id_for_message(
         &self,
-        message: &impl MCPMessage,
+        message: &impl McpMessage,
         request_id: Option<RequestId>,
     ) -> Option<RequestId> {
         // we need to produce next request_id for requests

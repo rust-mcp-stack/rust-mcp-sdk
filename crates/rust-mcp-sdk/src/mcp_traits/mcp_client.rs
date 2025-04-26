@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{
-        self, MCPMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
+        self, McpMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
         ResultFromServer, ServerMessage,
     },
     CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequest, CompleteRequestParams,

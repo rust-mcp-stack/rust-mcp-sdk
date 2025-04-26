@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use rust_mcp_schema::{schema_utils::MCPMessage, RequestId};
+use rust_mcp_schema::{schema_utils::McpMessage, RequestId};
 
 use futures::Stream;
 
@@ -44,7 +44,7 @@ impl Default for TransportOptions {
 ///It is intended to be implemented by types that send messages in the MCP protocol, such as servers or clients.
 ///
 /// The `McpDispatch` trait requires two associated types:
-/// - `R`: The type of the response, which must implement the `MCPMessage` trait and be capable of deserialization.
+/// - `R`: The type of the response, which must implement the `McpMessage` trait and be capable of deserialization.
 /// - `S`: The type of the message to send, which must be serializable and cloneable.
 ///
 /// Both associated types `R` and `S` must be `Send`, `Sync`, and `'static` to ensure they can be used
@@ -52,7 +52,7 @@ impl Default for TransportOptions {
 ///
 /// # Associated Types
 ///
-/// - `R`: The response type, which must implement the `MCPMessage` trait, be `Clone`, `Send`, `Sync`, and
+/// - `R`: The response type, which must implement the `McpMessage` trait, be `Clone`, `Send`, `Sync`, and
 ///   be deserializable (`DeserializeOwned`).
 /// - `S`: The type of the message to send, which must be `Clone`, `Send`, `Sync`, and serializable (`Serialize`).
 ///
@@ -78,7 +78,7 @@ impl Default for TransportOptions {
 #[async_trait]
 pub trait McpDispatch<R, S>: Send + Sync + 'static
 where
-    R: MCPMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: McpMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: Clone + Send + Sync + serde::Serialize + 'static,
 {
     /// Sends a raw message represented by type `S` and optionally includes a `request_id`.
@@ -94,14 +94,14 @@ where
 /// and handling I/O operations.
 ///
 /// The `Transport` trait requires three associated types:
-/// - `R`: The message type to send, which must implement the `MCPMessage` trait.
+/// - `R`: The message type to send, which must implement the `McpMessage` trait.
 /// - `S`: The message type to send.
 /// - `M`: The type of message that we expect to receive as a response to the sent message.
 ///
 #[async_trait]
 pub trait Transport<R, S>: Send + Sync + 'static
 where
-    R: MCPMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: McpMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: Clone + Send + Sync + serde::Serialize + 'static,
 {
     async fn start(
