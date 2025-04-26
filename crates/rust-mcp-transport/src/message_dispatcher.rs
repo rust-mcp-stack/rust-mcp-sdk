@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{
-    ClientMessage, FromMessage, MCPMessage, MessageFromClient, MessageFromServer, ServerMessage,
+    self, ClientMessage, FromMessage, MCPMessage, MessageFromClient, MessageFromServer,
+    ServerMessage,
 };
 use rust_mcp_schema::{RequestId, RpcError};
 use std::collections::HashMap;
@@ -12,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use crate::error::TransportResult;
+use crate::error::{TransportError, TransportResult};
 use crate::utils::await_timeout;
 use crate::McpDispatch;
 
@@ -146,9 +147,15 @@ impl McpDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
         writable_std.flush().await?;
 
         if let Some(rx) = rx_response {
+            // Wait for the response with timeout
             match await_timeout(rx, Duration::from_millis(self.timeout_msec)).await {
                 Ok(response) => Ok(Some(response)),
-                Err(error) => Err(error),
+                Err(error) => match error {
+                    TransportError::OneshotRecvError(_) => {
+                        Err(schema_utils::SdkError::connection_closed().into())
+                    }
+                    _ => Err(error),
+                },
             }
         } else {
             Ok(None)
