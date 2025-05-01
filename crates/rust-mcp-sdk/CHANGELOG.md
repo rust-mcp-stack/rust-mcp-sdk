@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.3...rust-mcp-sdk-v0.2.4) (2025-05-01)
+
+
+### 📚 Documentation
+
+* Update documentation ([#26](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/26)) ([4cf3cb1](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4cf3cb1db8effe10632adb32e7a350cdcdedd69b))
+
 ## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.2...rust-mcp-sdk-v0.2.3) (2025-05-01)
 
 
