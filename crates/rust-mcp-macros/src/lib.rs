@@ -24,6 +24,20 @@ struct McpToolMacroAttributes {
     description: Option<String>,
 }
 
+use syn::parse::ParseStream;
+
+struct ExprList {
+    exprs: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for ExprList {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(ExprList {
+            exprs: Punctuated::parse_terminated(input)?,
+        })
+    }
+}
+
 impl Parse for McpToolMacroAttributes {
     /// Parses the macro attributes from a `ParseStream`.
     ///
@@ -41,51 +55,77 @@ impl Parse for McpToolMacroAttributes {
         for meta in meta_list {
             if let Meta::NameValue(meta_name_value) = meta {
                 let ident = meta_name_value.path.get_ident().unwrap();
-                if let Expr::Lit(ExprLit {
-                    lit: Lit::Str(lit_str),
-                    ..
-                }) = meta_name_value.value
-                {
-                    match ident.to_string().as_str() {
-                        "name" => name = Some(lit_str.value()),
-                        "description" => description = Some(lit_str.value()),
-                        _ => {}
+                let ident_str = ident.to_string();
+
+                let value = match &meta_name_value.value {
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(lit_str),
+                        ..
+                    }) => lit_str.value(),
+
+                    Expr::Macro(expr_macro) => {
+                        let mac = &expr_macro.mac;
+                        if mac.path.is_ident("concat") {
+                            let args: ExprList = syn::parse2(mac.tokens.clone())?;
+                            let mut result = String::new();
+
+                            for expr in args.exprs {
+                                if let Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit_str),
+                                    ..
+                                }) = expr
+                                {
+                                    result.push_str(&lit_str.value());
+                                } else {
+                                    return Err(Error::new_spanned(
+                                        expr,
+                                        "Only string literals are allowed inside concat!()",
+                                    ));
+                                }
+                            }
+
+                            result
+                        } else {
+                            return Err(Error::new_spanned(
+                                expr_macro,
+                                "Only concat!(...) is supported here",
+                            ));
+                        }
                     }
+
+                    _ => {
+                        return Err(Error::new_spanned(
+                            &meta_name_value.value,
+                            "Expected a string literal or concat!(...)",
+                        ));
+                    }
+                };
+
+                match ident_str.as_str() {
+                    "name" => name = Some(value),
+                    "description" => description = Some(value),
+                    _ => {}
                 }
-            }
-        }
-        match &name {
-            Some(tool_name) => {
-                if tool_name.trim().is_empty() {
-                    return Err(Error::new(
-                        attributes.span(),
-                        "The 'name' attribute should not be an empty string.",
-                    ));
-                }
-            }
-            None => {
-                return Err(Error::new(
-                    attributes.span(),
-                    "The 'name' attribute is required.",
-                ));
             }
         }
 
-        match &description {
-            Some(description) => {
-                if description.trim().is_empty() {
-                    return Err(Error::new(
-                        attributes.span(),
-                        "The 'description' attribute should not be an empty string.",
-                    ));
-                }
-            }
-            None => {
-                return Err(Error::new(
-                    attributes.span(),
-                    "The 'description' attribute is required.",
-                ));
-            }
+        // Validate presence and non-emptiness
+        if name.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return Err(Error::new(
+                attributes.span(),
+                "The 'name' attribute is required and must not be empty.",
+            ));
+        }
+
+        if description
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::new(
+                attributes.span(),
+                "The 'description' attribute is required and must not be empty.",
+            ));
         }
 
         Ok(Self { name, description })
@@ -360,7 +400,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap().to_string(),
-            "The 'name' attribute is required."
+            "The 'name' attribute is required and must not be empty."
         )
     }
 
@@ -371,7 +411,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap().to_string(),
-            "The 'description' attribute is required."
+            "The 'description' attribute is required and must not be empty."
         )
     }
 
@@ -382,7 +422,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap().to_string(),
-            "The 'name' attribute should not be an empty string."
+            "The 'name' attribute is required and must not be empty."
         );
     }
     #[test]
@@ -392,7 +432,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap().to_string(),
-            "The 'description' attribute should not be an empty string."
+            "The 'description' attribute is required and must not be empty."
         );
     }
 }
