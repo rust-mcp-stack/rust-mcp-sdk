@@ -26,6 +26,7 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 | Icon | Name | Description | Link |
 |------|------|-------------|------|
 | <a href="https://rust-mcp-stack.github.io/rust-mcp-filesystem"><img src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-filesystem/refs/heads/main/docs/_media/rust-mcp-filesystem.png" width="64"/></a> | [Rust MCP Filesystem](https://rust-mcp-stack.github.io/rust-mcp-filesystem) | Fast, asynchronous MCP server for seamless filesystem operations offering enhanced capabilities, improved performance, and a robust feature set tailored for modern filesystem interactions. | [GitHub](https://github.com/rust-mcp-stack/rust-mcp-filesystem) |
+| <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
 
 ## Usage Examples
 
