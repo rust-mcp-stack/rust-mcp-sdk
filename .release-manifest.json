@@ -1,9 +1,9 @@
 {
-    "crates/rust-mcp-sdk": "0.2.3",
+    "crates/rust-mcp-sdk": "0.2.4",
     "crates/rust-mcp-macros": "0.2.1",
     "crates/rust-mcp-transport": "0.2.1",
-    "examples/hello-world-mcp-server": "0.1.8",
-    "examples/hello-world-mcp-server-core": "0.1.8",
-    "examples/simple-mcp-client": "0.1.8",
-    "examples/simple-mcp-client-core": "0.1.8"
+    "examples/hello-world-mcp-server": "0.1.9",
+    "examples/hello-world-mcp-server-core": "0.1.9",
+    "examples/simple-mcp-client": "0.1.9",
+    "examples/simple-mcp-client-core": "0.1.9"
 }
