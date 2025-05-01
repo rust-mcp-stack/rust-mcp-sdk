@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.2...rust-mcp-sdk-v0.2.3) (2025-05-01)
+
+
+### 🐛 Bug Fixes
+
+* Remove unnecessary error wrapper ([#24](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/24)) ([b919fba](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b919fbabd143125df35486f9fd0d5af0c156a2d8))
+
 ## [0.2.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.1...rust-mcp-sdk-v0.2.2) (2025-04-26)
 
 
