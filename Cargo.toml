@@ -14,7 +14,7 @@ members = [
 # Workspace member crates
 rust-mcp-transport = { version = "0.2.1", path = "crates/rust-mcp-transport" }
 rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
-rust-mcp-macros = { version = "0.2.0", path = "crates/rust-mcp-macros" }
+rust-mcp-macros = { version = "0.2.1", path = "crates/rust-mcp-macros" }
 
 # External crates
 rust-mcp-schema = { version = "0.4" }
