@@ -84,9 +84,9 @@ impl McpServer for ServerRuntime {
         }
 
         let sender = self.sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
-            schema_utils::SdkError::connection_closed(),
-        ))?;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
 
         self.handler.on_server_started(self).await;
 
