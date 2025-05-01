@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.2.0...rust-mcp-macros-v0.2.1) (2025-05-01)
+
+
+### 🚀 Features
+
+* Concat support for mcp_tool macro ([#23](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/23)) ([f8bb8f2](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/f8bb8f2563cb0f1c8c693aa7ff400bf137da09d8))
+
 ## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.1.2...rust-mcp-macros-v0.2.0) (2025-04-16)
 
 
