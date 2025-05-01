@@ -128,10 +128,9 @@ impl McpClient for ClientRuntime {
 
         let main_task = tokio::spawn(async move {
             let sender = self_clone.sender().await.read().await;
-            let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
-                schema_utils::SdkError::connection_closed(),
-            ))?;
-
+            let sender = sender
+                .as_ref()
+                .ok_or(schema_utils::SdkError::connection_closed())?;
             while let Some(mcp_message) = stream.next().await {
                 let self_ref = &*self_clone;
 

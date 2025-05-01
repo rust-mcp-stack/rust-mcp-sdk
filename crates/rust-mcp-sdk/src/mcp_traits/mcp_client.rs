@@ -172,9 +172,9 @@ pub trait McpClient: Sync + Send {
     /// Otherwise, it returns the result from the server.
     async fn request(&self, request: RequestFromClient) -> SdkResult<ResultFromServer> {
         let sender = self.sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
-            schema_utils::SdkError::connection_closed(),
-        ))?;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
 
         // Send the request and receive the response.
         let response = sender
@@ -198,9 +198,9 @@ pub trait McpClient: Sync + Send {
     /// the transport layer and does not wait for any acknowledgement or result.
     async fn send_notification(&self, notification: NotificationFromClient) -> SdkResult<()> {
         let sender = self.sender().await.read().await;
-        let sender = sender.as_ref().ok_or(crate::error::McpSdkError::SdkError(
-            schema_utils::SdkError::connection_closed(),
-        ))?;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
         sender
             .send(
                 MessageFromClient::NotificationFromClient(notification),
