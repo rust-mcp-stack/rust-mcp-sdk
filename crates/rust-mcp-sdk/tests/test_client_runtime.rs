@@ -27,6 +27,7 @@ async fn tets_client_launch_npx_server() {
     assert!(server_capabilities.tools.is_some());
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn tets_client_launch_uvx_server() {
     // The Python-based MCP server should launch successfully
