@@ -78,6 +78,10 @@ jobs:
         run: npx --version
         shell: bash
 
+      - name: Install server-everything globally
+        run: npm install -g @modelcontextprotocol/server-everything
+        shell: bash
+
       # install Python and uvx that is required for tests
       - name: Setup Python
         uses: actions/setup-python@v5
