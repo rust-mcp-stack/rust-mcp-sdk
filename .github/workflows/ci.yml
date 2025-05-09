@@ -43,30 +43,6 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@nextest
 
-      # install nodejs that is required for tests
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20" # Stable Node.js version
-        # Verify npx is available
-      - name: Verify npx
-        run: npx --version
-        shell: bash
-
-      # install Python and uvx that is required for tests
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11" # Stable Python version
-
-      - name: Install uv
-        run: pip install uv
-        shell: bash
-
-      - name: Verify uvx
-        run: uvx --version
-        shell: bash
-
       - name: Run Clippy
         run: cargo make clippy
         continue-on-error: false
@@ -91,6 +67,30 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
         if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
+
+      # install nodejs that is required for tests
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Stable Node.js version
+        # Verify npx is available
+      - name: Verify npx
+        run: npx --version
+        shell: bash
+
+      # install Python and uvx that is required for tests
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # Stable Python version
+
+      - name: Install uv
+        run: pip install uv
+        shell: bash
+
+      - name: Verify uvx
+        run: uvx --version
+        shell: bash
 
       - name: Run Tests
         run: cargo make test
