@@ -46,7 +46,6 @@ jobs:
       - name: Run Clippy
         run: cargo make clippy
         continue-on-error: false
-        if: matrix.os == 'ubuntu-latest' # Run Clippy only on Linux to save time
 
       - name: Run Rustfmt
         run: cargo make fmt -- --check

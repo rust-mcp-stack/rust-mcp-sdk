@@ -5,6 +5,8 @@ use rust_mcp_schema::{
 use rust_mcp_sdk::mcp_client::ClientHandler;
 
 pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything";
+
+#[cfg(unix)]
 pub const UVX_SERVER_GIT: &str = "mcp-server-git";
 
 pub fn test_client_info() -> InitializeRequestParams {
