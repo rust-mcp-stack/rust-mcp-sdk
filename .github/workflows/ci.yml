@@ -3,24 +3,23 @@ on:
   push:
     branches:
       - main
+  # pull_request:
+  #   branches:
+  #     - "**"
   workflow_call:
-
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - "**"
-#
 
 jobs:
   rust_check:
-    name: Rust check
-    runs-on: ubuntu-latest
+    name: Rust Checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false # Continue testing other OSes even if one fails
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Cache Rust
         uses: actions/cache@v4
         with:
@@ -29,42 +28,77 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-rust-${{ steps.toolchain.outputs.cachekey }}
-          restore-keys: ${{ runner.os }}-rust-
+          key: ${{ matrix.os }}-rust-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.os }}-rust-
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          components: rustfmt
+          components: rustfmt, clippy
 
-      - uses: davidB/rust-cargo-make@v1
-      - uses: taiki-e/install-action@nextest
+      - name: Install cargo-make
+        uses: davidB/rust-cargo-make@v1
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Run Clippy
-        run: |
-          cargo make clippy
+        run: cargo make clippy
+        continue-on-error: false
 
       - name: Run Rustfmt
-        run: |
-          cargo make fmt
+        run: cargo make fmt -- --check
+        if: matrix.os == 'ubuntu-latest' # Run fmt only on Linux
 
       - name: Run cargo doc
-        run: cargo doc --no-deps
-
-      - name: Spell Check
         env:
           RUSTDOCFLAGS: "-Dwarnings"
-        uses: crate-ci/typos@master
+        run: cargo doc --no-deps
+        if: matrix.os == 'ubuntu-latest' # Run doc only on Linux
 
-      - name: Audit
+      - name: Spell Check
+        uses: crate-ci/typos@master
+        if: matrix.os == 'ubuntu-latest' # Run typos only on Linux
+
+      - name: Audit Dependencies
         uses: actions-rust-lang/audit@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+        if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
+
+      # install nodejs that is required for tests
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Stable Node.js version
+        # Verify npx is available
+      - name: Verify npx
+        run: npx --version
+        shell: bash
+
+      - name: Install server-everything globally
+        run: npm install -g @modelcontextprotocol/server-everything
+        shell: bash
+
+      # install Python and uvx that is required for tests
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # Stable Python version
+
+      - name: Install uv
+        run: pip install uv
+        shell: bash
+
+      - name: Verify uvx
+        run: uvx --version
+        shell: bash
 
       - name: Run Tests
-        run: |
-          cargo make test
+        run: cargo make test
+        shell: bash # Ensure consistent shell
+
       - name: Run Doc Tests
-        run: |
-          cargo make doc-test
+        run: cargo make doc-test
+        shell: bash # Ensure consistent shell
