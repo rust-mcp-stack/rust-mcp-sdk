@@ -185,7 +185,6 @@ pub trait McpServer: Sync + Send {
     /// # Returns
     /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
     /// If the request or conversion fails, an error is returned.
-
     async fn ping(&self, timeout: Option<Duration>) -> SdkResult<rust_mcp_schema::Result> {
         let ping_request = PingRequest::new(None);
         let response = self.request(ping_request.into(), timeout).await?;

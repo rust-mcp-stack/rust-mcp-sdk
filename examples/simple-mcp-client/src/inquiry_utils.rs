@@ -204,7 +204,7 @@ impl InquiryUtils {
         for ping_index in 1..=max_pings {
             print!("Ping the server ({} out of {})...", ping_index, max_pings);
             std::io::stdout().flush().unwrap();
-            let ping_result = self.client.ping().await;
+            let ping_result = self.client.ping(None).await;
             print!(
                 "\rPing the server ({} out of {}) : {}",
                 ping_index,
