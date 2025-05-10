@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, time::Duration};
 
 use async_trait::async_trait;
 use rust_mcp_schema::{schema_utils::McpMessage, RequestId};
@@ -29,12 +29,12 @@ pub struct TransportOptions {
     ///
     /// This value defines the maximum amount of time to wait for a response before
     /// considering the request as timed out.
-    pub timeout: u64,
+    pub timeout: Duration,
 }
 impl Default for TransportOptions {
     fn default() -> Self {
         Self {
-            timeout: DEFAULT_TIMEOUT_MSEC,
+            timeout: Duration::from_millis(DEFAULT_TIMEOUT_MSEC),
         }
     }
 }

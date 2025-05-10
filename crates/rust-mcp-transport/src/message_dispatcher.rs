@@ -28,7 +28,7 @@ pub struct MessageDispatcher<R> {
     pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
     writable_std: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
     message_id_counter: Arc<AtomicI64>,
-    timeout_msec: u64,
+    request_timeout: Duration,
 }
 
 impl<R> MessageDispatcher<R> {
@@ -38,7 +38,7 @@ impl<R> MessageDispatcher<R> {
     /// * `pending_requests` - A thread-safe map for storing pending request IDs and their response channels.
     /// * `writable_std` - A mutex-protected, pinned writer (e.g., stdout) for sending serialized messages.
     /// * `message_id_counter` - An atomic counter for generating unique request IDs.
-    /// * `timeout_msec` - The timeout duration in milliseconds for awaiting responses.
+    /// * `request_timeout` - The timeout duration in milliseconds for awaiting responses.
     ///
     /// # Returns
     /// A new `MessageDispatcher` instance configured for MCP message handling.
@@ -46,13 +46,13 @@ impl<R> MessageDispatcher<R> {
         pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
         writable_std: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
         message_id_counter: Arc<AtomicI64>,
-        timeout_msec: u64,
+        request_timeout: Duration,
     ) -> Self {
         Self {
             pending_requests,
             writable_std,
             message_id_counter,
-            timeout_msec,
+            request_timeout,
         }
     }
 
@@ -148,7 +148,7 @@ impl McpDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
 
         if let Some(rx) = rx_response {
             // Wait for the response with timeout
-            match await_timeout(rx, Duration::from_millis(self.timeout_msec)).await {
+            match await_timeout(rx, self.request_timeout).await {
                 Ok(response) => Ok(Some(response)),
                 Err(error) => match error {
                     TransportError::OneshotRecvError(_) => {
@@ -220,7 +220,7 @@ impl McpDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientM
         writable_std.flush().await?;
 
         if let Some(rx) = rx_response {
-            match await_timeout(rx, Duration::from_millis(self.timeout_msec)).await {
+            match await_timeout(rx, self.request_timeout).await {
                 Ok(response) => Ok(Some(response)),
                 Err(error) => Err(error),
             }

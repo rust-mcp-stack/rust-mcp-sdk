@@ -29,6 +29,10 @@ args = [
     "rust-mcp-transport",
 ]
 
+
+[tasks.check]
+dependencies = ["fmt", "clippy", "test", "doc-test"]
+
 [tasks.clippy-fix]
 command = "cargo"
 args = ["clippy", "--fix", "--allow-dirty"]
