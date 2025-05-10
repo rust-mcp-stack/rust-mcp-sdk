@@ -94,20 +94,9 @@ impl StdioTransport {
     /// # Returns
     /// A tuple of the command string and its arguments.
     fn launch_commands(&self) -> (String, Vec<std::string::String>) {
-        #[cfg(windows)]
-        {
-            let command = "cmd.exe".to_string();
-            let mut command_args = vec!["/c".to_string(), self.command.clone().unwrap_or_default()];
-            command_args.extend(self.args.clone().unwrap_or_default());
-            (command, command_args)
-        }
-
-        #[cfg(unix)]
-        {
-            let command = self.command.clone().unwrap_or_default();
-            let command_args = self.args.clone().unwrap_or_default();
-            (command, command_args)
-        }
+        let command = self.command.clone().unwrap_or_default();
+        let command_args = self.args.clone().unwrap_or_default();
+        (command, command_args)
     }
 }
 
