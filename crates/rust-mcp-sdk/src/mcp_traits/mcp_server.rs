@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{
@@ -62,14 +64,18 @@ pub trait McpServer: Sync + Send {
     /// This function sends a `RequestFromServer` message to the client, waits for the response,
     /// and handles the result. If the response is empty or of an invalid type, an error is returned.
     /// Otherwise, it returns the result from the client.
-    async fn request(&self, request: RequestFromServer) -> SdkResult<ResultFromClient> {
+    async fn request(
+        &self,
+        request: RequestFromServer,
+        timeout: Option<Duration>,
+    ) -> SdkResult<ResultFromClient> {
         let sender = self.sender().await;
         let sender = sender.read().await;
         let sender = sender.as_ref().unwrap();
 
         // Send the request and receive the response.
         let response = sender
-            .send(MessageFromServer::RequestFromServer(request), None)
+            .send(MessageFromServer::RequestFromServer(request), None, timeout)
             .await?;
         let client_message = response.ok_or_else(|| {
             RpcError::internal_error()
@@ -95,6 +101,7 @@ pub trait McpServer: Sync + Send {
             .send(
                 MessageFromServer::NotificationFromServer(notification),
                 None,
+                None,
             )
             .await?;
         Ok(())
@@ -110,7 +117,7 @@ pub trait McpServer: Sync + Send {
         params: Option<ListRootsRequestParams>,
     ) -> SdkResult<ListRootsResult> {
         let request: ListRootsRequest = ListRootsRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         ListRootsResult::try_from(response).map_err(|err| err.into())
     }
 
@@ -178,9 +185,10 @@ pub trait McpServer: Sync + Send {
     /// # Returns
     /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
     /// If the request or conversion fails, an error is returned.
-    async fn ping(&self) -> SdkResult<rust_mcp_schema::Result> {
+
+    async fn ping(&self, timeout: Option<Duration>) -> SdkResult<rust_mcp_schema::Result> {
         let ping_request = PingRequest::new(None);
-        let response = self.request(ping_request.into()).await?;
+        let response = self.request(ping_request.into(), timeout).await?;
         Ok(response.try_into()?)
     }
 
@@ -194,7 +202,7 @@ pub trait McpServer: Sync + Send {
         params: CreateMessageRequestParams,
     ) -> SdkResult<CreateMessageResult> {
         let ping_request = CreateMessageRequest::new(params);
-        let response = self.request(ping_request.into()).await?;
+        let response = self.request(ping_request.into(), None).await?;
         Ok(response.try_into()?)
     }
 

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use rust_mcp_schema::{
@@ -170,7 +170,11 @@ pub trait McpClient: Sync + Send {
     /// This function sends a `RequestFromClient` message to the server, waits for the response,
     /// and handles the result. If the response is empty or of an invalid type, an error is returned.
     /// Otherwise, it returns the result from the server.
-    async fn request(&self, request: RequestFromClient) -> SdkResult<ResultFromServer> {
+    async fn request(
+        &self,
+        request: RequestFromClient,
+        timeout: Option<Duration>,
+    ) -> SdkResult<ResultFromServer> {
         let sender = self.sender().await.read().await;
         let sender = sender
             .as_ref()
@@ -178,7 +182,7 @@ pub trait McpClient: Sync + Send {
 
         // Send the request and receive the response.
         let response = sender
-            .send(MessageFromClient::RequestFromClient(request), None)
+            .send(MessageFromClient::RequestFromClient(request), None, timeout)
             .await?;
 
         let server_message = response.ok_or_else(|| {
@@ -205,6 +209,7 @@ pub trait McpClient: Sync + Send {
             .send(
                 MessageFromClient::NotificationFromClient(notification),
                 None,
+                None,
             )
             .await?;
         Ok(())
@@ -222,7 +227,7 @@ pub trait McpClient: Sync + Send {
     /// If the request or conversion fails, an error is returned.
     async fn ping(&self) -> SdkResult<rust_mcp_schema::Result> {
         let ping_request = PingRequest::new(None);
-        let response = self.request(ping_request.into()).await?;
+        let response = self.request(ping_request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -231,13 +236,13 @@ pub trait McpClient: Sync + Send {
         params: CompleteRequestParams,
     ) -> SdkResult<rust_mcp_schema::CompleteResult> {
         let request = CompleteRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
     async fn set_logging_level(&self, level: LoggingLevel) -> SdkResult<rust_mcp_schema::Result> {
         let request = SetLevelRequest::new(SetLevelRequestParams { level });
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -246,7 +251,7 @@ pub trait McpClient: Sync + Send {
         params: GetPromptRequestParams,
     ) -> SdkResult<rust_mcp_schema::GetPromptResult> {
         let request = GetPromptRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -255,7 +260,7 @@ pub trait McpClient: Sync + Send {
         params: Option<ListPromptsRequestParams>,
     ) -> SdkResult<rust_mcp_schema::ListPromptsResult> {
         let request = ListPromptsRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -269,7 +274,7 @@ pub trait McpClient: Sync + Send {
         // that excepts an empty params to be passed (like server-everything)
         let request =
             ListResourcesRequest::new(params.or(Some(ListResourcesRequestParams::default())));
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -278,7 +283,7 @@ pub trait McpClient: Sync + Send {
         params: Option<ListResourceTemplatesRequestParams>,
     ) -> SdkResult<rust_mcp_schema::ListResourceTemplatesResult> {
         let request = ListResourceTemplatesRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -287,7 +292,7 @@ pub trait McpClient: Sync + Send {
         params: ReadResourceRequestParams,
     ) -> SdkResult<rust_mcp_schema::ReadResourceResult> {
         let request = ReadResourceRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -296,7 +301,7 @@ pub trait McpClient: Sync + Send {
         params: SubscribeRequestParams,
     ) -> SdkResult<rust_mcp_schema::Result> {
         let request = SubscribeRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -305,13 +310,13 @@ pub trait McpClient: Sync + Send {
         params: UnsubscribeRequestParams,
     ) -> SdkResult<rust_mcp_schema::Result> {
         let request = UnsubscribeRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
     async fn call_tool(&self, params: CallToolRequestParams) -> SdkResult<CallToolResult> {
         let request = CallToolRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 
@@ -320,7 +325,7 @@ pub trait McpClient: Sync + Send {
         params: Option<ListToolsRequestParams>,
     ) -> SdkResult<rust_mcp_schema::ListToolsResult> {
         let request = ListToolsRequest::new(params);
-        let response = self.request(request.into()).await?;
+        let response = self.request(request.into(), None).await?;
         Ok(response.try_into()?)
     }
 

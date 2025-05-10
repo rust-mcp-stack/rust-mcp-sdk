@@ -112,6 +112,7 @@ impl McpDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
         &self,
         message: MessageFromClient,
         request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
     ) -> TransportResult<Option<ServerMessage>> {
         let mut writable_std = self.writable_std.lock().await;
 
@@ -148,7 +149,7 @@ impl McpDispatch<ServerMessage, MessageFromClient> for MessageDispatcher<ServerM
 
         if let Some(rx) = rx_response {
             // Wait for the response with timeout
-            match await_timeout(rx, self.request_timeout).await {
+            match await_timeout(rx, request_timeout.unwrap_or(self.request_timeout)).await {
                 Ok(response) => Ok(Some(response)),
                 Err(error) => match error {
                     TransportError::OneshotRecvError(_) => {
@@ -185,6 +186,7 @@ impl McpDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientM
         &self,
         message: MessageFromServer,
         request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
     ) -> TransportResult<Option<ClientMessage>> {
         let mut writable_std = self.writable_std.lock().await;
 
@@ -220,7 +222,7 @@ impl McpDispatch<ClientMessage, MessageFromServer> for MessageDispatcher<ClientM
         writable_std.flush().await?;
 
         if let Some(rx) = rx_response {
-            match await_timeout(rx, self.request_timeout).await {
+            match await_timeout(rx, request_timeout.unwrap_or(self.request_timeout)).await {
                 Ok(response) => Ok(Some(response)),
                 Err(error) => Err(error),
             }

@@ -54,7 +54,7 @@ impl ClientRuntime {
 
     async fn initialize_request(&self) -> SdkResult<()> {
         let request = InitializeRequest::new(self.client_details.clone());
-        let result: ServerResult = self.request(request.into()).await?.try_into()?;
+        let result: ServerResult = self.request(request.into(), None).await?.try_into()?;
 
         if let ServerResult::InitializeResult(initialize_result) = result {
             // store server details
@@ -147,7 +147,9 @@ impl McpClient for ClientRuntime {
                             Err(error_value) => MessageFromClient::Error(error_value),
                         };
                         // send the response back with corresponding request id
-                        sender.send(response, Some(jsonrpc_request.id)).await?;
+                        sender
+                            .send(response, Some(jsonrpc_request.id), None)
+                            .await?;
                     }
                     ServerMessage::Notification(jsonrpc_notification) => {
                         self_ref

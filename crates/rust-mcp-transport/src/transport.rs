@@ -84,7 +84,12 @@ where
     /// Sends a raw message represented by type `S` and optionally includes a `request_id`.
     /// The `request_id` is used when sending a message in response to an MCP request.
     /// It should match the `request_id` of the original request.
-    async fn send(&self, message: S, request_id: Option<RequestId>) -> TransportResult<Option<R>>;
+    async fn send(
+        &self,
+        message: S,
+        request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<R>>;
 }
 
 /// A trait representing the transport layer for MCP.

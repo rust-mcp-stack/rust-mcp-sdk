@@ -107,7 +107,7 @@ impl McpServer for ServerRuntime {
 
                     // send the response back with corresponding request id
                     sender
-                        .send(response, Some(client_jsonrpc_request.id))
+                        .send(response, Some(client_jsonrpc_request.id), None)
                         .await?;
                 }
                 ClientMessage::Notification(client_jsonrpc_notification) => {
