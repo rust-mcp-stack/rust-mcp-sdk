@@ -26,6 +26,12 @@ async-trait = { version = "0.1" }
 strum = { version = "0.27", features = ["derive"] }
 thiserror = { version = "2.0" }
 tokio-stream = { version = "0.1" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "std",
+    "fmt",
+] }
 
 
 # [workspace.dependencies.windows]
