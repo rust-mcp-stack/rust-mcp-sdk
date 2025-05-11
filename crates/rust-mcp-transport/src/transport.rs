@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, time::Duration};
 
 use async_trait::async_trait;
 use rust_mcp_schema::{schema_utils::McpMessage, RequestId};
@@ -29,12 +29,12 @@ pub struct TransportOptions {
     ///
     /// This value defines the maximum amount of time to wait for a response before
     /// considering the request as timed out.
-    pub timeout: u64,
+    pub timeout: Duration,
 }
 impl Default for TransportOptions {
     fn default() -> Self {
         Self {
-            timeout: DEFAULT_TIMEOUT_MSEC,
+            timeout: Duration::from_millis(DEFAULT_TIMEOUT_MSEC),
         }
     }
 }
@@ -84,7 +84,12 @@ where
     /// Sends a raw message represented by type `S` and optionally includes a `request_id`.
     /// The `request_id` is used when sending a message in response to an MCP request.
     /// It should match the `request_id` of the original request.
-    async fn send(&self, message: S, request_id: Option<RequestId>) -> TransportResult<Option<R>>;
+    async fn send(
+        &self,
+        message: S,
+        request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<R>>;
 }
 
 /// A trait representing the transport layer for MCP.

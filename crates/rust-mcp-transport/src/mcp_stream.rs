@@ -9,6 +9,7 @@ use std::{
     collections::HashMap,
     pin::Pin,
     sync::{atomic::AtomicI64, Arc},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -34,7 +35,7 @@ impl MCPStream {
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
         error_io: IoStream,
         pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
-        timeout_msec: u64,
+        request_timeout: Duration,
         shutdown_rx: Receiver<bool>,
     ) -> (
         Pin<Box<dyn Stream<Item = R> + Send>>,
@@ -62,7 +63,7 @@ impl MCPStream {
             pending_requests,
             writable,
             Arc::new(AtomicI64::new(0)),
-            timeout_msec,
+            request_timeout,
         );
 
         (stream, sender, error_io)
