@@ -12,11 +12,11 @@ use std::{
     sync::{atomic::AtomicI64, Arc},
     time::Duration,
 };
+use tokio::task::JoinHandle;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     sync::{broadcast::Sender, oneshot, Mutex},
 };
-use tokio::task::JoinHandle;
 
 const CHANNEL_CAPACITY: usize = 36;
 
