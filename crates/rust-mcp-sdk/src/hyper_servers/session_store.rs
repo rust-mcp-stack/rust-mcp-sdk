@@ -24,7 +24,7 @@ pub trait SessionStore: Send + Sync {
     /// * `key` - The session identifier to look up
     ///
     /// # Returns
-    /// * `Option<Arc<Mutex<TxServer>>>` - The session stream wrapped in Arc<Mutex> if found, None otherwise
+    /// * `Option<Arc<Mutex<TxServer>>>` - The session stream wrapped in `Arc<Mutex>` if found, None otherwise
     async fn get(&self, key: &SessionId) -> Option<Arc<Mutex<TxServer>>>;
     /// Stores a new session with the given identifier
     ///
