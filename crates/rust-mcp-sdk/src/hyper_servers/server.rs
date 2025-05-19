@@ -87,7 +87,7 @@ impl HyperServerOptions {
     ///
     /// # Returns
     /// * `TransportServerResult<SocketAddr>` - The resolved server address or an error
-    pub async fn resolve_server_address(&self) -> TransportServerResult<SocketAddr> {
+    async fn resolve_server_address(&self) -> TransportServerResult<SocketAddr> {
         self.validate()?;
 
         let mut host = self.host.to_string();
@@ -161,7 +161,7 @@ impl HyperServer {
     ///
     /// # Returns
     /// * `Self` - A new HyperServer instance
-    pub fn new(
+    pub(crate) fn new(
         server_details: InitializeResult,
         handler: Arc<dyn McpServerHandler + 'static>,
         server_options: HyperServerOptions,
