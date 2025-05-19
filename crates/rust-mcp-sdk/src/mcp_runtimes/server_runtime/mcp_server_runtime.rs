@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{
@@ -8,13 +10,15 @@ use rust_mcp_schema::{
 };
 use rust_mcp_transport::Transport;
 
+use super::ServerRuntime;
+#[cfg(feature = "hyper-server")]
+use crate::hyper_servers::SessionId;
+
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{mcp_handler::McpServerHandler, mcp_server::McpServer},
 };
-
-use super::ServerRuntime;
 
 /// Creates a new MCP server runtime with the specified configuration.
 ///
@@ -42,11 +46,21 @@ pub fn create_server(
     ServerRuntime::new(
         server_details,
         transport,
-        Box::new(ServerRuntimeInternalHandler::new(Box::new(handler))),
+        Arc::new(ServerRuntimeInternalHandler::new(Box::new(handler))),
     )
 }
 
-struct ServerRuntimeInternalHandler<H> {
+#[cfg(feature = "hyper-server")]
+pub(crate) fn create_server_instance(
+    server_details: Arc<InitializeResult>,
+    transport: impl Transport<ClientMessage, MessageFromServer>,
+    handler: Arc<dyn McpServerHandler>,
+    session_id: SessionId,
+) -> ServerRuntime {
+    ServerRuntime::new_instance(server_details, transport, handler, session_id)
+}
+
+pub(crate) struct ServerRuntimeInternalHandler<H> {
     handler: H,
 }
 impl ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {

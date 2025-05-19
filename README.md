@@ -11,26 +11,41 @@
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
 ](examples/hello-world-mcp-server)
 
-A high-performance, asynchronous toolkit for building MCP servers and clients.  
+A high-performance, asynchronous toolkit for building MCP servers and clients.
 Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 
-**rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.  
+**rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.
 Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
 
-**⚠️WARNING**: This project only supports Standard Input/Output (stdio) transport at this time, with support for SSE (Server-Sent Events) transport still in progress and not yet available. Project is currently under development and should be used at your own risk.
+This project currently supports  **stdio** (Standard Input/Output) and  **sse** (Server-Sent Events) transports.
 
-## Projects using `rust-mcp-sdk`
 
-Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their name, description, and links to their repositories or project pages.
+🚀 SSE transport works over HTTP/HTTPS. The `rust-mcp-sdk` includes a lightweight Axum-based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL and custom middleware.
 
-| Icon | Name | Description | Link |
-|------|------|-------------|------|
-| <a href="https://rust-mcp-stack.github.io/rust-mcp-filesystem"><img src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-filesystem/refs/heads/main/docs/_media/rust-mcp-filesystem.png" width="64"/></a> | [Rust MCP Filesystem](https://rust-mcp-stack.github.io/rust-mcp-filesystem) | Fast, asynchronous MCP server for seamless filesystem operations offering enhanced capabilities, improved performance, and a robust feature set tailored for modern filesystem interactions. | [GitHub](https://github.com/rust-mcp-stack/rust-mcp-filesystem) |
-| <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
+**⚠️** **Streamable HTTP** transport and authentication still in progress and not yet available. Project is currently under development and should be used at your own risk.
+
+## Table of Contents
+- [Usage Examples](#usage-examples)
+  - [MCP Server (stdio)](#mcp-server-stdio)
+  - [MCP Server (sse)](#mcp-server-sse)
+  - [MCP Client (stdio)](#mcp-client-stdio)
+  - [MCP Client (sse)](#mcp-client-sse)
+- [Cargo features](#cargo-features)
+  -  [Available Features](#available-features)
+  -  [Default Features](#default-features)
+  -  [Using Only the server Features](#using-only-the-server-features)
+  -  [Using Only the client Features](#using-only-the-client-features)
+- [Choosing Between Standard and Core Handlers traits](#choosing-between-standard-and-core-handlers-traits)
+  - [Choosing Between **ServerHandler** and **ServerHandlerCore**](#choosing-between-serverhandler-and-serverhandlercore)
+  - [Choosing Between **ClientHandler** and **ClientHandlerCore**](#choosing-between-clienthandler-and-clienthandlercore)
+- [Projects using Rust MCP SDK](#projects-using-rust-mcp-sdk)
+- [Contributing](#contributing)
+- [Development](#development)
+- [License](#license)
 
 ## Usage Examples
 
-### MCP Server
+### MCP Server (stdio)
 
 Create a MCP server with a `tool` that will print a `Hello World!` message:
 
@@ -70,7 +85,51 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
-The implementation of `MyServerHandler` could be as simple as the following:
+### MCP Server (sse)
+
+Creating an MCP server in `rust-mcp-sdk` with the `sse` transport allows multiple clients to connect simultaneously with no additional setup.
+Simply create a Hyper Server using `hyper_server::create_server()` and pass in the same handler and transform options.
+
+```rust
+
+// STEP 1: Define server details and capabilities
+let server_details = InitializeResult {
+    // server name and version
+    server_info: Implementation {
+        name: "Hello World MCP Server".to_string(),
+        version: "0.1.0".to_string(),
+    },
+    capabilities: ServerCapabilities {
+        // indicates that server support mcp tools
+        tools: Some(ServerCapabilitiesTools { list_changed: None }),
+        ..Default::default() // Using default values for other fields
+    },
+    meta: None,
+    instructions: Some("server instructions...".to_string()),
+    protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+};
+
+// STEP 2: instantiate our custom handler for handling MCP messages
+let handler = MyServerHandler {};
+
+// STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
+let server = hyper_server::create_server(
+    server_details,
+    handler,
+    HyperServerOptions {
+        host: "127.0.0.1".to_string(),
+        ..Default::default()
+    },
+);
+
+// STEP 4: Start the server
+server.start().await?;
+
+Ok(())
+```
+
+
+The implementation of `MyServerHandler` is the same regardless of the transport used and could be as simple as the following:
 
 ```rust
 
@@ -122,7 +181,7 @@ See hello-world-mcp-server example running in [MCP Inspector](https://modelconte
 
 ---
 
-### MCP Client
+### MCP Client (stdio)
 
 Create an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools, then uses the add tool provided by the server to sum 120 and 28, printing the result.
 
@@ -203,23 +262,38 @@ Here is the output :
 
 > your results may vary slightly depending on the version of the MCP Server in use when you run it.
 
+### MCP Client (sse)
+Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost identical, with one exception at `step 3`. Instead of creating a `StdioTransport`, you simply create a `ClientSseTransport`. The rest of the code remains the same:
+
+```diff
+- let transport = StdioTransport::create_with_server_launch(
+-    "npx",
+-    vec![ "-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
+-    None, TransportOptions::default()
+-)?;
++ let transport = ClientSseTransport::new(MCP_SERVER_URL, ClientSseTransportOptions::default())?;
+```
+
+
 ## Getting Started
 
 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
 
-## Features
+## Cargo Features
 
-The `rust-mcp-sdk` crate provides three optional features: `server` , `client` and `macros`. By default, all features are enabled for maximum functionality. You can customize which features to include based on your project's needs.
+The `rust-mcp-sdk` crate provides several features that can be enabled or disabled. By default, all features are enabled to ensure maximum functionality, but you can customize which ones to include based on your project's requirements.
 
 ### Available Features
 
-- `server`: Activates MCP server capabilities in `rust-mcp-sdk`, providing modules and APIs for building and managing MCP services.
+- `server`: Activates MCP server capabilities in `rust-mcp-sdk`, providing modules and APIs for building and managing MCP servers.
 - `client`: Activates MCP client capabilities, offering modules and APIs for client development and communicating with MCP servers.
+- `hyper-server`:  This feature enables the **sse** transport for MCP servers, supporting multiple simultaneous client connections out of the box.
+- `ssl`: This feature enables TLS/SSL support for the **sse** transport when used with the `hyper-server`.
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 
-### Default Behavior
+### Default Features
 
-All features (server, client, and macros) are enabled by default. When you include rust-mcp-sdk as a dependency without specifying features, all will be included:
+All features are enabled by default. When you include rust-mcp-sdk as a dependency without specifying features, all will be included:
 
 <!-- x-release-please-start-version -->
 
@@ -230,7 +304,7 @@ rust-mcp-sdk = "0.2.0"
 
 <!-- x-release-please-end -->
 
-### Using Only the server Feature
+### Using Only the server Features
 
 If you only need the MCP Server functionality, you can disable the default features and explicitly enable the server feature. Add the following to your Cargo.toml:
 
@@ -240,10 +314,11 @@ If you only need the MCP Server functionality, you can disable the default featu
 [dependencies]
 rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros"] }
 ```
+Optionally add `hyper-server` for **sse** transport, and `ssl` feature for tls/ssl support of the `hyper-server`
 
 <!-- x-release-please-end -->
 
-### Using Only the client Feature
+### Using Only the client Features
 
 If you only need the MCP Client functionality, you can disable the default features and explicitly enable the client feature. Add the following to your Cargo.toml:
 
@@ -256,27 +331,58 @@ rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["clien
 
 <!-- x-release-please-end -->
 
-### Choosing Between `mcp_server_handler` and `mcp_server_handler_core`
+## Choosing Between Standard and Core Handlers traits
+Learn when to use the  `mcp_*_handler` traits versus the lower-level `mcp_*_handler_core` traits for both server and client implementations. This section helps you decide based on your project's need for simplicity versus fine-grained control.
+
+### Choosing Between `ServerHandler` and `ServerHandlerCore`
 
 [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) provides two type of handler traits that you can chose from:
 
-- **mcp_server_handler**: This is the recommended trait for your MCP project, offering a default implementation for all types of MCP messages. It includes predefined implementations within the trait, such as handling initialization or responding to ping requests, so you only need to override and customize the handler functions relevant to your specific needs.  
+- **ServerHandler**: This is the recommended trait for your MCP project, offering a default implementation for all types of MCP messages. It includes predefined implementations within the trait, such as handling initialization or responding to ping requests, so you only need to override and customize the handler functions relevant to your specific needs.
   Refer to [examples/hello-world-mcp-server/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server/src/handler.rs) for an example.
 
-- **mcp_server_handler_core**: If you need more control over MCP messages, consider using `mcp_server_handler_core`. It offers three primary methods to manage the three MCP message types: `request`, `notification`, and `error`. While still providing type-safe objects in these methods, it allows you to determine how to handle each message based on its type and parameters.  
+- **ServerHandlerCore**: If you need more control over MCP messages, consider using `ServerHandlerCore`. It offers three primary methods to manage the three MCP message types: `request`, `notification`, and `error`. While still providing type-safe objects in these methods, it allows you to determine how to handle each message based on its type and parameters.
   Refer to [examples/hello-world-mcp-server-core/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core/src/handler.rs) for an example.
 
 ---
 
-**👉 Note:** Depending on your choice between `mcp_server_handler` and `mcp_server_handler_core`, you must use either `server_runtime::create_server()` or `server_runtime_core::create_server()` , respectively.
+**👉 Note:** Depending on whether you choose `ServerHandler` or `ServerHandlerCore`, you must use the `create_server()` function from the appropriate module:
+
+- For `ServerHandler`:
+  - Use `server_runtime::create_server()` for servers with stdio transport
+  - Use `hyper_server::create_server()` for servers with sse transport
+
+- For `ServerHandlerCore`:
+  - Use `server_runtime_core::create_server()` for servers with stdio transport
+  - Use `hyper_server_core::create_server()` for servers with sse transport
 
 ---
 
-### Choosing Between `mcp_client_handler` and `mcp_client_handler_core`
 
-The same principles outlined above apply to the client-side handlers, `mcp_client_handler` and `mcp_client_handler_core`.  
-Use `client_runtime::create_client()` or `client_runtime_core::create_client()` , respectively.  
+### Choosing Between `ClientHandler` and `ClientHandlerCore`
+
+The same principles outlined above apply to the client-side handlers, `ClientHandler` and `ClientHandlerCore`.
+
+- Use `client_runtime::create_client()` when working with `ClientHandler`
+
+- Use `client_runtime_core::create_client()` when working with `ClientHandlerCore`
+
+Both functions create an MCP client instance.
+
+
+
 Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core).
+
+
+## Projects using Rust MCP SDK
+
+Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their name, description, and links to their repositories or project pages.
+
+| Icon | Name | Description | Link |
+|------|------|-------------|------|
+| <a href="https://rust-mcp-stack.github.io/rust-mcp-filesystem"><img src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-filesystem/refs/heads/main/docs/_media/rust-mcp-filesystem.png" width="64"/></a> | [Rust MCP Filesystem](https://rust-mcp-stack.github.io/rust-mcp-filesystem) | Fast, asynchronous MCP server for seamless filesystem operations offering enhanced capabilities, improved performance, and a robust feature set tailored for modern filesystem interactions. | [GitHub](https://github.com/rust-mcp-stack/rust-mcp-filesystem) |
+| <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
+
 
 ## Contributing
 

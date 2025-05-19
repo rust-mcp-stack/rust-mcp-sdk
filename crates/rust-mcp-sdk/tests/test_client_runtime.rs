@@ -25,8 +25,8 @@ async fn tets_client_launch_npx_server() {
     let server_capabilities = client.server_capabilities().unwrap();
     let server_info = client.server_info().unwrap();
 
-    assert!(server_info.server_info.name.len() > 0);
-    assert!(server_info.server_info.version.len() > 0);
+    assert!(!server_info.server_info.name.is_empty());
+    assert!(!server_info.server_info.version.is_empty());
     assert!(server_capabilities.tools.is_some());
 }
 
@@ -50,7 +50,7 @@ async fn tets_client_launch_uvx_server() {
     let server_capabilities = client.server_capabilities().unwrap();
     let server_info = client.server_info().unwrap();
 
-    assert!(server_info.server_info.name.len() > 0);
-    assert!(server_info.server_info.version.len() > 0);
+    assert!(!server_info.server_info.name.is_empty());
+    assert!(!server_info.server_info.version.is_empty());
     assert!(server_capabilities.tools.is_some());
 }

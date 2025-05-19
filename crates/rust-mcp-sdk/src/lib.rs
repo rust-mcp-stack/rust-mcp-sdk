@@ -1,4 +1,6 @@
 pub mod error;
+#[cfg(feature = "hyper-server")]
+mod hyper_servers;
 mod mcp_handlers;
 mod mcp_macros;
 mod mcp_runtimes;
@@ -17,8 +19,8 @@ pub mod mcp_client {
     //!   it works with `mcp_server_handler` trait
     //!   that offers default implementation for common messages like  handling initialization or
     //!   responding to ping requests, so you only need to override and customize the handler
-    //!   functions relevant to your specific needs.    
-    //!   
+    //!   functions relevant to your specific needs.
+    //!
     //! Refer to [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) for an example.
     //!
     //!
@@ -48,8 +50,8 @@ pub mod mcp_server {
     //!   it works with `mcp_server_handler` trait
     //!   that offers default implementation for common messages like  handling initialization or
     //!   responding to ping requests, so you only need to override and customize the handler
-    //!   functions relevant to your specific needs.   
-    //!  
+    //!   functions relevant to your specific needs.
+    //!
     //! Refer to [examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) for an example.
     //!
     //!
@@ -66,6 +68,13 @@ pub mod mcp_server {
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime as server_runtime;
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime_core as server_runtime_core;
     pub use super::mcp_runtimes::server_runtime::ServerRuntime;
+
+    #[cfg(feature = "hyper-server")]
+    pub use super::hyper_servers::hyper_server;
+    #[cfg(feature = "hyper-server")]
+    pub use super::hyper_servers::hyper_server_core;
+    #[cfg(feature = "hyper-server")]
+    pub use super::hyper_servers::*;
 }
 
 #[cfg(feature = "client")]

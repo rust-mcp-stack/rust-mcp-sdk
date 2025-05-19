@@ -24,6 +24,7 @@ pub enum IoStream {
 }
 
 /// Configuration for the transport layer
+#[derive(Debug, Clone)]
 pub struct TransportOptions {
     /// The timeout in milliseconds for requests.
     ///

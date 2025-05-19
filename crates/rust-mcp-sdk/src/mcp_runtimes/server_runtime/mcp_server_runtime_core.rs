@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{
     self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
@@ -39,11 +41,11 @@ pub fn create_server(
     ServerRuntime::new(
         server_details,
         transport,
-        Box::new(RuntimeCoreInternalHandler::new(Box::new(handler))),
+        Arc::new(RuntimeCoreInternalHandler::new(Box::new(handler))),
     )
 }
 
-struct RuntimeCoreInternalHandler<H> {
+pub(crate) struct RuntimeCoreInternalHandler<H> {
     handler: H,
 }
 

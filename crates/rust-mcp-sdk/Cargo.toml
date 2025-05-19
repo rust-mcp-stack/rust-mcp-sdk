@@ -22,12 +22,35 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 
-[features]
-default = ["client", "server", "macros"] # All features enabled by default
-server = []                              # Server feature
-client = []                              # Client feature
-macros = ["rust-mcp-macros"]
+axum = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4"], optional = true }
+tokio-stream = { workspace = true, optional = true }
+axum-server = { version = "0.7", features = [], optional = true }
+tracing.workspace = true
 
+# rustls = { workspace = true, optional = true }
+hyper = { version = "1.6.0" }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true, features = [
+    "env-filter",
+    "std",
+    "fmt",
+] }
+
+[features]
+default = [
+    "client",
+    "server",
+    "macros",
+    "hyper-server",
+    "ssl",
+] # All features enabled by default
+server = [] # Server feature
+client = [] # Client feature
+hyper-server = ["axum", "axum-server", "uuid", "tokio-stream"]
+ssl = ["axum-server/tls-rustls"]
+macros = ["rust-mcp-macros"]
 
 [lints]
 workspace = true
