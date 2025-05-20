@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.2...rust-mcp-transport-v0.2.3) (2025-05-20)
+
+
+### 🐛 Bug Fixes
+
+* Crate packaging issue caused by stray Cargo.toml ([5475b1b](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/5475b1bb31b5ec2c211bd49f940be38db17d0d65))
+
 ## [0.2.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.1...rust-mcp-transport-v0.2.2) (2025-05-20)
 
 
