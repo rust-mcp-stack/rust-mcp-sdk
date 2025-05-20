@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.1...rust-mcp-transport-v0.2.2) (2025-05-20)
+
+
+### 🚀 Features
+
+* Add sse transport support ([#32](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/32)) ([1cf1877](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1cf187757810e142e97216476ca73ecba020c320))
+
 ## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.0...rust-mcp-transport-v0.2.1) (2025-04-26)
 
 
