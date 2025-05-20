@@ -8,6 +8,10 @@ members = [
     "examples/simple-mcp-client-core",
     "examples/hello-world-mcp-server",
     "examples/hello-world-mcp-server-core",
+    "examples/hello-world-server-sse",
+    "examples/hello-world-server-core-sse",
+    "examples/simple-mcp-client-sse",
+    "examples/simple-mcp-client-core-sse",
 ]
 
 [workspace.dependencies]
@@ -26,6 +30,7 @@ async-trait = { version = "0.1" }
 strum = { version = "0.27", features = ["derive"] }
 thiserror = { version = "2.0" }
 tokio-stream = { version = "0.1" }
+uuid = { version = "1" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
@@ -33,6 +38,12 @@ tracing-subscriber = { version = "0.3", features = [
     "fmt",
 ] }
 
+axum = "0.8"
+rustls = "0.23"
+tokio-rustls = "0.26"
+axum-server = { version = "0.7" }
+reqwest = "0.12"
+bytes = "1.10.1"
 
 # [workspace.dependencies.windows]
 

@@ -8,7 +8,7 @@ args = ["fmt", "--all", "--", "--check"]
 
 [tasks.clippy]
 command = "cargo"
-args = ["clippy"]
+args = ["clippy", "--workspace", "--all-targets", "--all-features"]
 
 [tasks.test]
 install_crate = "nextest"

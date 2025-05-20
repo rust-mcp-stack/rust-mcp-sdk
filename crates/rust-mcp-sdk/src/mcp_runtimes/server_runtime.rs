@@ -12,6 +12,8 @@ use std::sync::{Arc, RwLock};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::SdkResult;
+#[cfg(feature = "hyper-server")]
+use crate::hyper_servers::SessionId;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
 
@@ -20,14 +22,16 @@ pub struct ServerRuntime {
     // The transport interface for handling messages between client and server
     transport: Box<dyn Transport<ClientMessage, MessageFromServer>>,
     // The handler for processing MCP messages
-    handler: Box<dyn McpServerHandler>,
+    handler: Arc<dyn McpServerHandler>,
     // Information about the server
-    server_details: InitializeResult,
+    server_details: Arc<InitializeResult>,
     // Details about the connected client
     client_details: Arc<RwLock<Option<InitializeRequestParams>>>,
 
     message_sender: tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>,
     error_stream: tokio::sync::RwLock<Option<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>>,
+    #[cfg(feature = "hyper-server")]
+    session_id: Option<SessionId>,
 }
 
 #[async_trait]
@@ -143,6 +147,11 @@ impl ServerRuntime {
         *lock = Some(sender);
     }
 
+    #[cfg(feature = "hyper-server")]
+    pub(crate) async fn session_id(&self) -> Option<SessionId> {
+        self.session_id.to_owned()
+    }
+
     pub(crate) async fn set_error_stream(
         &self,
         error_stream: Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>,
@@ -151,10 +160,12 @@ impl ServerRuntime {
         *lock = Some(error_stream);
     }
 
-    pub(crate) fn new(
-        server_details: InitializeResult,
+    #[cfg(feature = "hyper-server")]
+    pub(crate) fn new_instance(
+        server_details: Arc<InitializeResult>,
         transport: impl Transport<ClientMessage, MessageFromServer>,
-        handler: Box<dyn McpServerHandler>,
+        handler: Arc<dyn McpServerHandler>,
+        session_id: SessionId,
     ) -> Self {
         Self {
             server_details,
@@ -163,6 +174,24 @@ impl ServerRuntime {
             handler,
             message_sender: tokio::sync::RwLock::new(None),
             error_stream: tokio::sync::RwLock::new(None),
+            session_id: Some(session_id),
+        }
+    }
+
+    pub(crate) fn new(
+        server_details: InitializeResult,
+        transport: impl Transport<ClientMessage, MessageFromServer>,
+        handler: Arc<dyn McpServerHandler>,
+    ) -> Self {
+        Self {
+            server_details: Arc::new(server_details),
+            client_details: Arc::new(RwLock::new(None)),
+            transport: Box::new(transport),
+            handler,
+            message_sender: tokio::sync::RwLock::new(None),
+            error_stream: tokio::sync::RwLock::new(None),
+            #[cfg(feature = "hyper-server")]
+            session_id: None,
         }
     }
 }

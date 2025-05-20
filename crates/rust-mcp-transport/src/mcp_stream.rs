@@ -1,6 +1,7 @@
 use crate::{
     error::{GenericSendError, TransportError},
     message_dispatcher::MessageDispatcher,
+    utils::CancellationToken,
     IoStream,
 };
 use futures::Stream;
@@ -11,11 +12,11 @@ use std::{
     sync::{atomic::AtomicI64, Arc},
     time::Duration,
 };
+use tokio::task::JoinHandle;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     sync::{broadcast::Sender, oneshot, Mutex},
 };
-use tokio::{sync::watch::Receiver, task::JoinHandle};
 
 const CHANNEL_CAPACITY: usize = 36;
 
@@ -36,7 +37,7 @@ impl MCPStream {
         error_io: IoStream,
         pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
         request_timeout: Duration,
-        shutdown_rx: Receiver<bool>,
+        cancellation_token: CancellationToken,
     ) -> (
         Pin<Box<dyn Stream<Item = R> + Send>>,
         MessageDispatcher<R>,
@@ -47,8 +48,11 @@ impl MCPStream {
     {
         let (tx, rx) = tokio::sync::broadcast::channel::<R>(CHANNEL_CAPACITY);
 
+        // Clone cancellation_token for reader
+        let reader_token = cancellation_token.clone();
+
         #[allow(clippy::let_underscore_future)]
-        let _ = Self::spawn_reader(readable, tx, pending_requests.clone(), shutdown_rx);
+        let _ = Self::spawn_reader(readable, tx, pending_requests.clone(), reader_token);
 
         let stream = {
             Box::pin(futures::stream::unfold(rx, |mut rx| async move {
@@ -77,7 +81,7 @@ impl MCPStream {
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         tx: Sender<R>,
         pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
-        mut shutdown_rx: Receiver<bool>,
+        cancellation_token: CancellationToken,
     ) -> JoinHandle<Result<(), TransportError>>
     where
         R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
@@ -87,11 +91,10 @@ impl MCPStream {
 
             loop {
                 tokio::select! {
-                    _ = shutdown_rx.changed() =>{
-                        if *shutdown_rx.borrow() {
+                    _ = cancellation_token.cancelled() =>
+                    {
                             break;
-                        }
-                    }
+                    },
 
                     line = lines_stream.next_line() =>{
                         match line {
@@ -142,7 +145,6 @@ impl MCPStream {
                     }
                 }
             }
-
             Ok::<(), TransportError>(())
         })
     }

@@ -5,6 +5,8 @@ use core::fmt;
 use std::any::Any;
 use tokio::sync::broadcast;
 
+use crate::utils::CancellationError;
+
 /// A wrapper around a broadcast send error. This structure allows for generic error handling
 /// by boxing the underlying error into a type-erased form.
 #[derive(Debug)]
@@ -80,6 +82,8 @@ pub type TransportResult<T> = core::result::Result<T, TransportError>;
 #[derive(Debug, Error)]
 pub enum TransportError {
     #[error("{0}")]
+    InvalidOptions(String),
+    #[error("{0}")]
     SendError(#[from] GenericSendError),
     #[error("{0}")]
     WatchSendError(#[from] GenericWatchSendError),
@@ -95,4 +99,12 @@ pub enum TransportError {
     FromString(String),
     #[error("{0}")]
     OneshotRecvError(#[from] tokio::sync::oneshot::error::RecvError),
+    #[error("{0}")]
+    SendMessageError(#[from] reqwest::Error),
+    #[error("Http Error: {0}")]
+    HttpError(u16),
+    #[error("Shutdown timed out")]
+    ShutdownTimeout,
+    #[error("Cancellation error : {0}")]
+    CancellationError(#[from] CancellationError),
 }

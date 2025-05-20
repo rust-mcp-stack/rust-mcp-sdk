@@ -36,7 +36,6 @@ async fn main() -> SdkResult<()> {
     let transport = StdioTransport::new(TransportOptions::default())?;
 
     // STEP 3: instantiate our custom handler for handling MCP messages
-
     let handler = MyServerHandler {};
 
     // STEP 4: create a MCP server

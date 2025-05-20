@@ -6,13 +6,13 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::process::Command;
-use tokio::sync::watch::Sender;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::Mutex;
 
-use crate::error::{GenericWatchSendError, TransportError, TransportResult};
+use crate::error::{TransportError, TransportResult};
 use crate::mcp_stream::MCPStream;
 use crate::message_dispatcher::MessageDispatcher;
 use crate::transport::Transport;
+use crate::utils::CancellationTokenSource;
 use crate::{IoStream, McpDispatch, TransportOptions};
 
 /// Implements a standard I/O transport for MCP communication.
@@ -27,7 +27,7 @@ pub struct StdioTransport {
     args: Option<Vec<String>>,
     env: Option<HashMap<String, String>>,
     options: TransportOptions,
-    shutdown_tx: tokio::sync::RwLock<Option<Sender<bool>>>,
+    shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
     is_shut_down: Mutex<bool>,
 }
 
@@ -51,7 +51,7 @@ impl StdioTransport {
             command: None,
             env: None,
             options,
-            shutdown_tx: tokio::sync::RwLock::new(None),
+            shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
         })
     }
@@ -82,7 +82,7 @@ impl StdioTransport {
             command: Some(command.into()),
             env,
             options,
-            shutdown_tx: tokio::sync::RwLock::new(None),
+            shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
         })
     }
@@ -140,10 +140,10 @@ where
     where
         MessageDispatcher<R>: McpDispatch<R, S>,
     {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-
-        let mut lock = self.shutdown_tx.write().await;
-        *lock = Some(shutdown_tx);
+        // Create CancellationTokenSource and token
+        let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
+        let mut lock = self.shutdown_source.write().await;
+        *lock = Some(cancellation_source);
 
         if self.command.is_some() {
             let (command_name, command_args) = self.launch_commands();
@@ -197,7 +197,7 @@ where
                 IoStream::Readable(Box::pin(stderr)),
                 pending_requests_clone,
                 self.options.timeout,
-                shutdown_rx,
+                cancellation_token,
             );
 
             Ok((stream, sender, error_stream))
@@ -210,7 +210,7 @@ where
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
                 pending_requests,
                 self.options.timeout,
-                shutdown_rx,
+                cancellation_token,
             );
 
             Ok((stream, sender, error_stream))
@@ -233,12 +233,16 @@ where
     /// # Errors
     /// Returns a `TransportError` if the shutdown signal fails or the process cannot be killed.
     async fn shut_down(&self) -> TransportResult<()> {
-        let lock = self.shutdown_tx.write().await;
-        if let Some(tx) = lock.as_ref() {
-            tx.send(true).map_err(GenericWatchSendError::new)?;
-            let mut lock = self.is_shut_down.lock().await;
-            *lock = true
+        // Trigger cancellation
+        let mut cancellation_lock = self.shutdown_source.write().await;
+        if let Some(source) = cancellation_lock.as_ref() {
+            source.cancel()?;
         }
+        *cancellation_lock = None; // Clear cancellation_source
+
+        // Mark as shut down
+        let mut is_shut_down_lock = self.is_shut_down.lock().await;
+        *is_shut_down_lock = true;
         Ok(())
     }
 }
