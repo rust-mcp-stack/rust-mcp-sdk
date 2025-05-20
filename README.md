@@ -17,10 +17,13 @@ Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 **rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.
 Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
 
-This project currently supports  **stdio** (Standard Input/Output) and  **sse** (Server-Sent Events) transports.
+This project currently supports following transports:
+- **stdio** (Standard Input/Output)
+- **sse** (Server-Sent Events).
 
 
-🚀The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
+
+🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
 **⚠️** **Streamable HTTP** transport and authentication still in progress and not yet available. Project is currently under development and should be used at your own risk.
 
