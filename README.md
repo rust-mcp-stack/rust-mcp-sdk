@@ -20,7 +20,7 @@ Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-sche
 This project currently supports  **stdio** (Standard Input/Output) and  **sse** (Server-Sent Events) transports.
 
 
-🚀 SSE transport works over HTTP/HTTPS. The `rust-mcp-sdk` includes a lightweight Axum-based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL and custom middleware.
+🚀The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
 **⚠️** **Streamable HTTP** transport and authentication still in progress and not yet available. Project is currently under development and should be used at your own risk.
 
