@@ -85,6 +85,10 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
+See hello-world-mcp-server example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
+
+![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
+
 ### MCP Server (sse)
 
 Creating an MCP server in `rust-mcp-sdk` with the `sse` transport allows multiple clients to connect simultaneously with no additional setup.
@@ -175,9 +179,9 @@ impl ServerHandler for MyServerHandler {
 
 👉 For a more detailed example of a [Hello World MCP](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) Server that supports multiple tools and provides more type-safe handling of `CallToolRequest`, check out: **[examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)**
 
-See hello-world-mcp-server example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
+See hello-world-server-sse example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
-![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
+![mcp-server in rust](assets/examples/hello-world-server-sse.gif)
 
 ---
 
