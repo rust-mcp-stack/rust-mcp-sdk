@@ -1,6 +1,9 @@
-use crate::hyper_servers::{
-    app_state::AppState,
-    error::{TransportServerError, TransportServerResult},
+use crate::{
+    hyper_servers::{
+        app_state::AppState,
+        error::{TransportServerError, TransportServerResult},
+    },
+    utils::remove_query_and_hash,
 };
 use axum::{
     extract::{Query, State},
@@ -11,10 +14,11 @@ use axum::{
 use std::{collections::HashMap, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
-const SSE_MESSAGES_PATH: &str = "/messages";
-
-pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
-    Router::new().route(SSE_MESSAGES_PATH, post(handle_messages))
+pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new().route(
+        remove_query_and_hash(&state.sse_message_endpoint).as_str(),
+        post(handle_messages),
+    )
 }
 
 pub async fn handle_messages(

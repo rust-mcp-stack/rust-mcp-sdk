@@ -27,7 +27,6 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 
-const SSE_MESSAGES_PATH: &str = "/messages";
 const CLIENT_PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;

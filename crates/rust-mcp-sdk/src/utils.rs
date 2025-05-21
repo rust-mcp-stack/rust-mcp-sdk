@@ -22,3 +22,36 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
         entity, capability, method_name
     )
 }
+
+/// Removes query string and hash fragment from a URL, returning the base path.
+///
+/// # Arguments
+/// * `endpoint` - The URL or endpoint to process (e.g., "/messages?foo=bar#section1")
+///
+/// # Returns
+/// A String containing the base path without query parameters or fragment
+///
+/// # Examples
+/// ```
+/// assert_eq!(remove_query_and_hash("/messages"), "/messages");
+/// assert_eq!(remove_query_and_hash("/messages?foo=bar&baz=qux"), "/messages");
+/// assert_eq!(remove_query_and_hash("/messages#section1"), "/messages");
+/// assert_eq!(remove_query_and_hash("/messages?key=value#section2"), "/messages");
+/// assert_eq!(remove_query_and_hash("/"), "/");
+/// ```
+pub fn remove_query_and_hash(endpoint: &str) -> String {
+    // Split off fragment (if any) and take the first part
+    let without_fragment = endpoint.split_once('#').map_or(endpoint, |(path, _)| path);
+
+    // Split off query string (if any) and take the first part
+    let without_query = without_fragment
+        .split_once('?')
+        .map_or(without_fragment, |(path, _)| path);
+
+    // Return the base path
+    if without_query.is_empty() {
+        "/".to_string()
+    } else {
+        without_query.to_string()
+    }
+}
