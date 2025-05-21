@@ -23,6 +23,8 @@ const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 
 // Default Server-Sent Events (SSE) endpoint path
 const DEFAULT_SSE_ENDPOINT: &str = "/sse";
+// Default MCP Messages endpoint path
+const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
@@ -31,9 +33,10 @@ pub struct HyperServerOptions {
     pub host: String,
     /// Hostname or IP address the server will bind to (default: "localhost")
     pub port: u16,
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint.
-    /// If `None`, the default path `/sse` will be used.
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
     pub custom_sse_endpoint: Option<String>,
+    /// Optional custom path for the MCP messages endpoint (default: `/messages`)
+    pub custom_messages_endpoint: Option<String>,
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
     /// Enables SSL/TLS if set to `true`
@@ -121,6 +124,12 @@ impl HyperServerOptions {
             .as_deref()
             .unwrap_or(DEFAULT_SSE_ENDPOINT)
     }
+
+    pub fn sse_messages_endpoint(&self) -> &str {
+        self.custom_messages_endpoint
+            .as_deref()
+            .unwrap_or(DEFAULT_MESSAGES_ENDPOINT)
+    }
 }
 
 /// Default implementation for HyperServerOptions
@@ -133,6 +142,7 @@ impl Default for HyperServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
             custom_sse_endpoint: None,
+            custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             transport_options: Default::default(),
             enable_ssl: false,
@@ -172,6 +182,7 @@ impl HyperServer {
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,
+            sse_message_endpoint: server_options.sse_messages_endpoint().to_owned(),
             transport_options: Arc::clone(&server_options.transport_options),
         });
         let app = app_routes(Arc::clone(&state), &server_options);

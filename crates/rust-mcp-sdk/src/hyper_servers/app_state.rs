@@ -18,5 +18,6 @@ pub struct AppState {
     pub server_details: Arc<InitializeResult>,
     pub handler: Arc<dyn McpServerHandler>,
     pub ping_interval: Duration,
+    pub sse_message_endpoint: String,
     pub transport_options: Arc<TransportOptions>,
 }

@@ -3,14 +3,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 pub use in_memory::*;
+use rust_mcp_transport::SessionId;
 use tokio::{io::DuplexStream, sync::Mutex};
 use uuid::Uuid;
 
 // Type alias for the server-side duplex stream used in sessions
 pub type TxServer = DuplexStream;
-
-// Type alias for session identifier, represented as a String
-pub type SessionId = String;
 
 /// Trait defining the interface for session storage operations
 ///
