@@ -12,7 +12,7 @@ use super::{
     app_state::AppState,
     error::{TransportServerError, TransportServerResult},
     routes::app_routes,
-    InMemorySessionStore, UuidGenerator,
+    IdGenerator, InMemorySessionStore, UuidGenerator,
 };
 use axum::Router;
 use rust_mcp_schema::InitializeResult;
@@ -31,7 +31,7 @@ const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "localhost")
     pub host: String,
-    /// Hostname or IP address the server will bind to (default: "localhost")
+    /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
     /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
     pub custom_sse_endpoint: Option<String>,
@@ -49,6 +49,8 @@ pub struct HyperServerOptions {
     pub ssl_key_path: Option<String>,
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
 }
 
 impl HyperServerOptions {
@@ -148,6 +150,7 @@ impl Default for HyperServerOptions {
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,
+            session_id_generator: None,
         }
     }
 }
@@ -174,11 +177,14 @@ impl HyperServer {
     pub(crate) fn new(
         server_details: InitializeResult,
         handler: Arc<dyn McpServerHandler + 'static>,
-        server_options: HyperServerOptions,
+        mut server_options: HyperServerOptions,
     ) -> Self {
         let state: Arc<AppState> = Arc::new(AppState {
             session_store: Arc::new(InMemorySessionStore::new()),
-            id_generator: Arc::new(UuidGenerator {}),
+            id_generator: server_options
+                .session_id_generator
+                .take()
+                .map_or(Arc::new(UuidGenerator {}), |g| Arc::clone(&g)),
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,

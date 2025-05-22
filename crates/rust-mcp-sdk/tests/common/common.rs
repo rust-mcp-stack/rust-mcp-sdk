@@ -1,8 +1,10 @@
+mod test_server;
 use async_trait::async_trait;
 use rust_mcp_schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, JSONRPC_VERSION,
 };
 use rust_mcp_sdk::mcp_client::ClientHandler;
+pub use test_server::*;
 
 pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything";
 
@@ -24,3 +26,11 @@ pub struct TestClientHandler;
 
 #[async_trait]
 impl ClientHandler for TestClientHandler {}
+
+pub fn sse_event(sse_raw: &str) -> String {
+    sse_raw.replace("event: ", "")
+}
+
+pub fn sse_data(sse_raw: &str) -> String {
+    sse_raw.replace("data: ", "")
+}

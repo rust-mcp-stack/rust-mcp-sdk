@@ -1631,6 +1631,7 @@ dependencies = [
  "axum-server",
  "futures",
  "hyper 1.6.0",
+ "reqwest",
  "rust-mcp-macros",
  "rust-mcp-schema",
  "rust-mcp-transport",
