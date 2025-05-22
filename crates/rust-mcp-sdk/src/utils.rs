@@ -30,16 +30,8 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 ///
 /// # Returns
 /// A String containing the base path without query parameters or fragment
-///
-/// # Examples
 /// ```
-/// assert_eq!(remove_query_and_hash("/messages"), "/messages");
-/// assert_eq!(remove_query_and_hash("/messages?foo=bar&baz=qux"), "/messages");
-/// assert_eq!(remove_query_and_hash("/messages#section1"), "/messages");
-/// assert_eq!(remove_query_and_hash("/messages?key=value#section2"), "/messages");
-/// assert_eq!(remove_query_and_hash("/"), "/");
-/// ```
-pub fn remove_query_and_hash(endpoint: &str) -> String {
+pub(crate) fn remove_query_and_hash(endpoint: &str) -> String {
     // Split off fragment (if any) and take the first part
     let without_fragment = endpoint.split_once('#').map_or(endpoint, |(path, _)| path);
 
@@ -53,5 +45,24 @@ pub fn remove_query_and_hash(endpoint: &str) -> String {
         "/".to_string()
     } else {
         without_query.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn tets_remove_query_and_hash() {
+        assert_eq!(remove_query_and_hash("/messages"), "/messages");
+        assert_eq!(
+            remove_query_and_hash("/messages?foo=bar&baz=qux"),
+            "/messages"
+        );
+        assert_eq!(remove_query_and_hash("/messages#section1"), "/messages");
+        assert_eq!(
+            remove_query_and_hash("/messages?key=value#section2"),
+            "/messages"
+        );
+        assert_eq!(remove_query_and_hash("/"), "/");
     }
 }

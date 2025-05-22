@@ -53,16 +53,7 @@ pub fn extract_origin(url: &str) -> Option<String> {
 /// # Returns
 /// A String containing the endpoint with the session ID added as a query parameter
 ///
-/// # Examples
-/// ```
-/// assert_eq!(endpoint_with_session_id("/messages", "AAA"), "/messages?sessionId=AAA");
-/// assert_eq!(endpoint_with_session_id("/messages?foo=bar&baz=qux", "AAA"), "/messages?foo=bar&baz=qux&sessionId=AAA");
-/// assert_eq!(endpoint_with_session_id("/messages#section1", "AAA"), "/messages?sessionId=AAA#section1");
-/// assert_eq!(endpoint_with_session_id("/messages?key=value#section2", "AAA"), "/messages?key=value&sessionId=AAA#section2");
-/// assert_eq!(endpoint_with_session_id("/", "AAA"), "/?sessionId=AAA");
-/// assert_eq!(endpoint_with_session_id("", "AAA"), "/?sessionId=AAA");
-/// ```
-pub fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -> String {
+pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -> String {
     // Handle empty endpoint
     let base = if endpoint.is_empty() { "/" } else { endpoint };
 
@@ -130,5 +121,31 @@ mod tests {
     #[test]
     fn test_extract_origin_empty_string() {
         assert_eq!(extract_origin(""), None);
+    }
+
+    #[test]
+    fn test_endpoint_with_session_id() {
+        let session_id: SessionId = "AAA".to_string();
+        assert_eq!(
+            endpoint_with_session_id("/messages", &session_id),
+            "/messages?sessionId=AAA"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages?foo=bar&baz=qux", &session_id),
+            "/messages?foo=bar&baz=qux&sessionId=AAA"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages#section1", &session_id),
+            "/messages?sessionId=AAA#section1"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages?key=value#section2", &session_id),
+            "/messages?key=value&sessionId=AAA#section2"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/", &session_id),
+            "/?sessionId=AAA"
+        );
+        assert_eq!(endpoint_with_session_id("", &session_id), "/?sessionId=AAA");
     }
 }
