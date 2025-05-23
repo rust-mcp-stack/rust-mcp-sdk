@@ -26,7 +26,6 @@ impl AsyncRead for ReadableChannel {
     ///
     /// # Returns
     /// * `Poll<tokio::io::Result<()>>` - Ready with Ok if data is read, Ready with Err if the channel is closed, or Pending if no data is available
-
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
