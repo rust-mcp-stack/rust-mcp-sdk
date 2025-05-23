@@ -9,7 +9,11 @@ use rust_mcp_sdk::{
 //****************//
 #[mcp_tool(
     name = "say_hello",
-    description = "Accepts a person's name and says a personalized \"Hello\" to that person"
+    description = "Accepts a person's name and says a personalized \"Hello\" to that person",
+    idempotent_hint = false,
+    destructive_hint = false,
+    open_world_hint = false,
+    read_only_hint = false
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
 pub struct SayHelloTool {
@@ -29,7 +33,11 @@ impl SayHelloTool {
 //******************//
 #[mcp_tool(
     name = "say_goodbye",
-    description = "Accepts a person's name and says a personalized \"Goodbye\" to that person."
+    description = "Accepts a person's name and says a personalized \"Goodbye\" to that person.",
+    idempotent_hint = false,
+    destructive_hint = false,
+    open_world_hint = false,
+    read_only_hint = false
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
 pub struct SayGoodbyeTool {

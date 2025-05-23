@@ -17,6 +17,7 @@ pub mod common;
 #[tokio::test]
 async fn tets_sse_endpoint_event_default() {
     let server_options = HyperServerOptions {
+        port: 8081,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
@@ -27,9 +28,11 @@ async fn tets_sse_endpoint_event_default() {
 
     let server_endpoint = format!("{}{}", base_url, server_options.sse_endpoint());
 
-    tokio::spawn(async move {
-        let server = create_test_server(server_options);
+    let server = create_test_server(server_options);
+    let handle = server.server_handle();
+    let server_task = tokio::spawn(async move {
         server.start().await.unwrap();
+        eprintln!("Server 1 is down");
     });
 
     sleep(Duration::from_millis(750)).await;
@@ -66,11 +69,14 @@ async fn tets_sse_endpoint_event_default() {
         .await
         .unwrap();
     assert!(res.status().is_success());
+    handle.graceful_shutdown(Some(Duration::from_millis(1)));
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
 async fn tets_sse_message_endpoint_query_hash() {
     let server_options = HyperServerOptions {
+        port: 8082,
         custom_messages_endpoint: Some(
             "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
         ),
@@ -84,9 +90,12 @@ async fn tets_sse_message_endpoint_query_hash() {
 
     let server_endpoint = format!("{}{}", base_url, server_options.sse_endpoint());
 
-    tokio::spawn(async move {
-        let server = create_test_server(server_options);
+    let server = create_test_server(server_options);
+    let handle = server.server_handle();
+
+    let server_task = tokio::spawn(async move {
         server.start().await.unwrap();
+        eprintln!("Server 2 is down");
     });
 
     sleep(Duration::from_millis(750)).await;
@@ -126,11 +135,14 @@ async fn tets_sse_message_endpoint_query_hash() {
         .await
         .unwrap();
     assert!(res.status().is_success());
+    handle.graceful_shutdown(Some(Duration::from_millis(1)));
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
 async fn tets_sse_custom_message_endpoint() {
     let server_options = HyperServerOptions {
+        port: 8083,
         custom_messages_endpoint: Some(
             "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
         ),
@@ -144,9 +156,12 @@ async fn tets_sse_custom_message_endpoint() {
 
     let server_endpoint = format!("{}{}", base_url, server_options.sse_endpoint());
 
-    tokio::spawn(async move {
-        let server = create_test_server(server_options);
+    let server = create_test_server(server_options);
+    let handle = server.server_handle();
+
+    let server_task = tokio::spawn(async move {
         server.start().await.unwrap();
+        eprintln!("Server 3 is down");
     });
 
     sleep(Duration::from_millis(750)).await;
@@ -190,5 +205,7 @@ async fn tets_sse_custom_message_endpoint() {
 
     assert!(matches!(result, ServerMessage::Response(response)
         if matches!(&response.result, ResultFromServer::ServerResult(server_result)
-        if matches!(server_result, ServerResult::InitializeResult(init_result) if init_result.server_info.name == "Test MCP Server".to_string()))));
+        if matches!(server_result, ServerResult::InitializeResult(init_result) if init_result.server_info.name == "Test MCP Server"))));
+    handle.graceful_shutdown(Some(Duration::from_millis(1)));
+    server_task.await.unwrap();
 }

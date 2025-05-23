@@ -19,9 +19,35 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 /// * `name` - An optional string representing the tool's name.
 /// * `description` - An optional string describing the tool.
 ///
+#[cfg(feature = "2024_11_05")]
 struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
+}
+
+/// Represents the attributes for the `mcp_tool` procedural macro.
+///
+/// This struct parses and validates the `name` and `description` attributes provided
+/// to the `mcp_tool` macro. Both attributes are required and must not be empty strings.
+///
+/// # Fields
+/// * `name` - An optional string representing the tool's name.
+/// * `description` - An optional string describing the tool.
+/// * `destructive_hint` - Optional boolean for `ToolAnnotations::destructive_hint`.
+/// * `idempotent_hint` - Optional boolean for `ToolAnnotations::idempotent_hint`.
+/// * `open_world_hint` - Optional boolean for `ToolAnnotations::open_world_hint`.
+/// * `read_only_hint` - Optional boolean for `ToolAnnotations::read_only_hint`.
+/// * `title` - Optional string for `ToolAnnotations::title`.
+///
+#[cfg(feature = "2025_03_26")]
+struct McpToolMacroAttributes {
+    name: Option<String>,
+    description: Option<String>,
+    destructive_hint: Option<bool>,
+    idempotent_hint: Option<bool>,
+    open_world_hint: Option<bool>,
+    read_only_hint: Option<bool>,
+    title: Option<String>,
 }
 
 use syn::parse::ParseStream;
@@ -51,59 +77,102 @@ impl Parse for McpToolMacroAttributes {
     fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut name = None;
         let mut description = None;
+        let mut destructive_hint = None;
+        let mut idempotent_hint = None;
+        let mut open_world_hint = None;
+        let mut read_only_hint = None;
+        let mut title = None;
+
         let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
         for meta in meta_list {
             if let Meta::NameValue(meta_name_value) = meta {
                 let ident = meta_name_value.path.get_ident().unwrap();
                 let ident_str = ident.to_string();
 
-                let value = match &meta_name_value.value {
-                    Expr::Lit(ExprLit {
-                        lit: Lit::Str(lit_str),
-                        ..
-                    }) => lit_str.value(),
-
-                    Expr::Macro(expr_macro) => {
-                        let mac = &expr_macro.mac;
-                        if mac.path.is_ident("concat") {
-                            let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                            let mut result = String::new();
-
-                            for expr in args.exprs {
-                                if let Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) = expr
-                                {
-                                    result.push_str(&lit_str.value());
+                match ident_str.as_str() {
+                    "name" | "description" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => lit_str.value(),
+                            Expr::Macro(expr_macro) => {
+                                let mac = &expr_macro.mac;
+                                if mac.path.is_ident("concat") {
+                                    let args: ExprList = syn::parse2(mac.tokens.clone())?;
+                                    let mut result = String::new();
+                                    for expr in args.exprs {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(lit_str),
+                                            ..
+                                        }) = expr
+                                        {
+                                            result.push_str(&lit_str.value());
+                                        } else {
+                                            return Err(Error::new_spanned(
+                                                expr,
+                                                "Only string literals are allowed inside concat!()",
+                                            ));
+                                        }
+                                    }
+                                    result
                                 } else {
                                     return Err(Error::new_spanned(
-                                        expr,
-                                        "Only string literals are allowed inside concat!()",
+                                        expr_macro,
+                                        "Only concat!(...) is supported here",
                                     ));
                                 }
                             }
-
-                            result
-                        } else {
-                            return Err(Error::new_spanned(
-                                expr_macro,
-                                "Only concat!(...) is supported here",
-                            ));
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a string literal or concat!(...)",
+                                ));
+                            }
+                        };
+                        match ident_str.as_str() {
+                            "name" => name = Some(value),
+                            "description" => description = Some(value),
+                            _ => {}
                         }
                     }
-
-                    _ => {
-                        return Err(Error::new_spanned(
-                            &meta_name_value.value,
-                            "Expected a string literal or concat!(...)",
-                        ));
+                    "destructive_hint" | "idempotent_hint" | "open_world_hint"
+                    | "read_only_hint" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Bool(lit_bool),
+                                ..
+                            }) => lit_bool.value,
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a boolean literal",
+                                ));
+                            }
+                        };
+                        match ident_str.as_str() {
+                            "destructive_hint" => destructive_hint = Some(value),
+                            "idempotent_hint" => idempotent_hint = Some(value),
+                            "open_world_hint" => open_world_hint = Some(value),
+                            "read_only_hint" => read_only_hint = Some(value),
+                            _ => {}
+                        }
                     }
-                };
-
-                match ident_str.as_str() {
-                    "name" => name = Some(value),
-                    "description" => description = Some(value),
+                    "title" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => lit_str.value(),
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a string literal",
+                                ));
+                            }
+                        };
+                        title = Some(value);
+                    }
                     _ => {}
                 }
             }
@@ -116,7 +185,6 @@ impl Parse for McpToolMacroAttributes {
                 "The 'name' attribute is required and must not be empty.",
             ));
         }
-
         if description
             .as_ref()
             .map(|s| s.trim().is_empty())
@@ -128,7 +196,21 @@ impl Parse for McpToolMacroAttributes {
             ));
         }
 
-        Ok(Self { name, description })
+        #[cfg(feature = "2024_11_05")]
+        let instance = Self { name, description };
+
+        #[cfg(feature = "2025_03_26")]
+        let instance = Self {
+            name,
+            description,
+            destructive_hint,
+            idempotent_hint,
+            open_world_hint,
+            read_only_hint,
+            title,
+        };
+
+        Ok(instance)
     }
 }
 
@@ -148,7 +230,7 @@ impl Parse for McpToolMacroAttributes {
 ///
 /// # Example
 /// ```rust
-/// #[rust_mcp_macros::mcp_tool(name = "example_tool", description = "An example tool")]
+/// #[rust_mcp_macros::mcp_tool(name = "example_tool", description = "An example tool", idempotent_hint=true )]
 /// #[derive(rust_mcp_macros::JsonSchema)]
 /// struct ExampleTool {
 ///     field1: String,
@@ -159,6 +241,7 @@ impl Parse for McpToolMacroAttributes {
 /// let tool : rust_mcp_schema::Tool = ExampleTool::tool();
 /// assert_eq!(tool.name , "example_tool");
 /// assert_eq!(tool.description.unwrap() , "An example tool");
+/// assert_eq!(tool.annotations.unwrap().idempotent_hint.unwrap() , true);
 ///
 /// let schema_properties = tool.input_schema.properties.unwrap();
 /// assert_eq!(schema_properties.len() , 2);
@@ -175,6 +258,62 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
     let tool_name = macro_attributes.name.unwrap_or_default();
     let tool_description = macro_attributes.description.unwrap_or_default();
+
+    #[cfg(feature = "2025_03_26")]
+    let some_annotations = macro_attributes.destructive_hint.is_some()
+        || macro_attributes.idempotent_hint.is_some()
+        || macro_attributes.open_world_hint.is_some()
+        || macro_attributes.read_only_hint.is_some()
+        || macro_attributes.title.is_some();
+
+    #[cfg(feature = "2025_03_26")]
+    let annotations = if some_annotations {
+        let destructive_hint = macro_attributes
+            .destructive_hint
+            .map_or(quote! {None}, |v| quote! {Some(#v)});
+
+        let idempotent_hint = macro_attributes
+            .idempotent_hint
+            .map_or(quote! {None}, |v| quote! {Some(#v)});
+        let open_world_hint = macro_attributes
+            .open_world_hint
+            .map_or(quote! {None}, |v| quote! {Some(#v)});
+        let read_only_hint = macro_attributes
+            .read_only_hint
+            .map_or(quote! {None}, |v| quote! {Some(#v)});
+        let title = macro_attributes
+            .title
+            .map_or(quote! {None}, |v| quote! {Some(#v)});
+        quote! {
+            Some(rust_mcp_schema::ToolAnnotations {
+                                    destructive_hint: #destructive_hint,
+                                    idempotent_hint: #idempotent_hint,
+                                    open_world_hint: #open_world_hint,
+                                    read_only_hint: #read_only_hint,
+                                    title: #title,
+                                }),
+        }
+    } else {
+        quote! {None}
+    };
+
+    #[cfg(feature = "2025_03_26")]
+    let tool_token = quote! {
+        rust_mcp_schema::Tool {
+            name: #tool_name.to_string(),
+            description: Some(#tool_description.to_string()),
+            input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
+            annotations: #annotations
+        }
+    };
+    #[cfg(feature = "2024_11_05")]
+    let tool_token = quote! {
+        rust_mcp_schema::Tool {
+            name: #tool_name.to_string(),
+            description: Some(#tool_description.to_string()),
+            input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
+        }
+    };
 
     let output = quote! {
         impl #input_ident {
@@ -222,54 +361,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
                             .collect()
                     });
 
-                rust_mcp_schema::Tool {
-                    name: #tool_name.to_string(),
-                    description: Some(#tool_description.to_string()),
-                    input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
-                }
-            }
-
-            #[deprecated(since = "0.2.0", note = "Use `tool()` instead.")]
-            pub fn get_tool()-> rust_mcp_schema::Tool
-            {
-                let json_schema = &#input_ident::json_schema();
-
-                let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
-                    Some(arr) => arr
-                        .iter()
-                        .filter_map(|item| item.as_str().map(String::from))
-                        .collect(),
-                    None => Vec::new(), // Default to an empty vector if "required" is missing or not an array
-                };
-
-                let properties: Option<
-                    std::collections::HashMap<String, serde_json::Map<String, serde_json::Value>>,
-                > = json_schema
-                    .get("properties")
-                    .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
-                    .map(|properties| {
-                        properties
-                            .iter()
-                            .filter_map(|(key, value)| {
-                                serde_json::to_value(value)
-                                    .ok() // If serialization fails, return None.
-                                    .and_then(|v| {
-                                        if let serde_json::Value::Object(obj) = v {
-                                            Some(obj)
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .map(|obj| (key.to_string(), obj)) // Return the (key, value) tuple
-                            })
-                            .collect()
-                    });
-
-                rust_mcp_schema::Tool {
-                    name: #tool_name.to_string(),
-                    description: Some(#tool_description.to_string()),
-                    input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
-                }
+                #tool_token
             }
         }
         // Retain the original item (struct definition)

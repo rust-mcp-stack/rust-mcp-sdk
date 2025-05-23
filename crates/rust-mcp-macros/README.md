@@ -19,6 +19,10 @@ The `mcp_tool` macro generates an implementation for the annotated struct that i
 #[mcp_tool(
    name = "write_file",
    description = "Create a new file or completely overwrite an existing file with new content."
+   destructive_hint = false
+   idempotent_hint = false
+   open_world_hint = false
+   read_only_hint = false
 )]
 #[derive(rust_mcp_macros::JsonSchema)]
 pub struct WriteFileTool {
@@ -60,3 +64,11 @@ fn main() {
 <img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Check out [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) , a high-performance, asynchronous toolkit for building MCP servers and clients. Focus on your app's logic while [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) takes care of the rest!
 
 ---
+
+
+**Note**: The following attributes are available only in version `2025_03_26` and later of the MCP Schema, and their values will be used in the [annotations](https://github.com/rust-mcp-stack/rust-mcp-schema/blob/main/src/generated_schema/2025_03_26/mcp_schema.rs#L5557) attribute of the *[Tool struct](https://github.com/rust-mcp-stack/rust-mcp-schema/blob/main/src/generated_schema/2025_03_26/mcp_schema.rs#L5554-L5566).
+
+- `destructive_hint`
+- `idempotent_hint`
+- `open_world_hint`
+- `read_only_hint`

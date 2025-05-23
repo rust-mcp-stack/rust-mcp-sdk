@@ -31,6 +31,7 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 /// # Returns
 /// A String containing the base path without query parameters or fragment
 /// ```
+#[allow(unused)]
 pub(crate) fn remove_query_and_hash(endpoint: &str) -> String {
     // Split off fragment (if any) and take the first part
     let without_fragment = endpoint.split_once('#').map_or(endpoint, |(path, _)| path);

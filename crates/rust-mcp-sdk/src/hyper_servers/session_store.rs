@@ -37,6 +37,10 @@ pub trait SessionStore: Send + Sync {
     async fn delete(&self, key: &SessionId);
     /// Clears all sessions from the store
     async fn clear(&self);
+
+    async fn keys(&self) -> Vec<SessionId>;
+
+    async fn values(&self) -> Vec<Arc<Mutex<DuplexStream>>>;
 }
 
 /// Trait for generating session identifiers
