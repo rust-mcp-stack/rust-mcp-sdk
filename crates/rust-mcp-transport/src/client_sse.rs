@@ -225,12 +225,8 @@ where
         *sse_task_lock = Some(sse_task_handle);
 
         // Await the first SSE message, expected to receive messages endpoint from he server
-        let err = || {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to receive 'messages' endpoint from the server.",
-            )
-        };
+        let err =
+            || std::io::Error::other("Failed to receive 'messages' endpoint from the server.");
         let post_url = endpoint_event_rx
             .await
             .map_err(|_| err())?
