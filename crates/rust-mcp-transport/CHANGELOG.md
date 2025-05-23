@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.3...rust-mcp-transport-v0.3.0) (2025-05-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* update crates to default to the latest MCP schema version. ([#35](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/35))
+
+### 🚀 Features
+
+* Update crates to default to the latest MCP schema version. ([#35](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/35)) ([6cbc3da](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6cbc3da9d99d62723643000de74c4bd9e48fa4b4))
+
 ## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.2...rust-mcp-transport-v0.2.3) (2025-05-20)
 
 
