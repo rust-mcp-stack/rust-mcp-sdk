@@ -31,3 +31,58 @@ fn test_rename() {
     let properties = schema.get("properties").unwrap().as_object().unwrap();
     assert_eq!(properties.len(), 2);
 }
+
+#[test]
+#[cfg(feature = "2025_03_26")]
+fn test_mcp_tool() {
+    #[rust_mcp_macros::mcp_tool(
+        name = "example_tool",
+        description = "An example tool",
+        idempotent_hint = true,
+        destructive_hint = true,
+        open_world_hint = true,
+        read_only_hint = true
+    )]
+    #[derive(rust_mcp_macros::JsonSchema)]
+    #[allow(unused)]
+    struct ExampleTool {
+        field1: String,
+        field2: i32,
+    }
+
+    assert_eq!(ExampleTool::tool_name(), "example_tool");
+    let tool: rust_mcp_schema::Tool = ExampleTool::tool();
+    assert_eq!(tool.name, "example_tool");
+    assert_eq!(tool.description.unwrap(), "An example tool");
+    assert!(tool.annotations.as_ref().unwrap().idempotent_hint.unwrap(),);
+    assert!(tool.annotations.as_ref().unwrap().destructive_hint.unwrap(),);
+    assert!(tool.annotations.as_ref().unwrap().open_world_hint.unwrap(),);
+    assert!(tool.annotations.as_ref().unwrap().read_only_hint.unwrap(),);
+
+    let schema_properties = tool.input_schema.properties.unwrap();
+    assert_eq!(schema_properties.len(), 2);
+    assert!(schema_properties.contains_key("field1"));
+    assert!(schema_properties.contains_key("field2"));
+}
+
+#[test]
+#[cfg(feature = "2024_11_05")]
+fn test_mcp_tool() {
+    #[rust_mcp_macros::mcp_tool(name = "example_tool", description = "An example tool")]
+    #[derive(rust_mcp_macros::JsonSchema)]
+    #[allow(unused)]
+    struct ExampleTool {
+        field1: String,
+        field2: i32,
+    }
+
+    assert_eq!(ExampleTool::tool_name(), "example_tool");
+    let tool: rust_mcp_schema::Tool = ExampleTool::tool();
+    assert_eq!(tool.name, "example_tool");
+    assert_eq!(tool.description.unwrap(), "An example tool");
+
+    let schema_properties = tool.input_schema.properties.unwrap();
+    assert_eq!(schema_properties.len(), 2);
+    assert!(schema_properties.contains_key("field1"));
+    assert!(schema_properties.contains_key("field2"));
+}

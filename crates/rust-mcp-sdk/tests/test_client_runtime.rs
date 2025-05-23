@@ -1,8 +1,7 @@
-use common::{test_client_info, TestClientHandler, NPX_SERVER_EVERYTHING};
-use rust_mcp_sdk::{mcp_client::client_runtime, McpClient, StdioTransport, TransportOptions};
-
 #[cfg(unix)]
 use common::UVX_SERVER_GIT;
+use common::{test_client_info, TestClientHandler, NPX_SERVER_EVERYTHING};
+use rust_mcp_sdk::{mcp_client::client_runtime, McpClient, StdioTransport, TransportOptions};
 
 #[path = "common/common.rs"]
 pub mod common;

@@ -28,3 +28,16 @@ workspace = true
 
 [lib]
 proc-macro = true
+
+
+[features]
+# defalt features
+default = ["2025_03_26"] # Default features
+
+# activates the latest MCP schema version, this will be updated once a new version of schema is published
+latest = ["2025_03_26"]
+
+# enabled mcp schema version 2025_03_26
+2025_03_26 = ["rust-mcp-schema/2025_03_26"]
+# enabled mcp schema version 2024_11_05
+2024_11_05 = ["rust-mcp-schema/2024_11_05"]

@@ -12,7 +12,7 @@ use rust_mcp_transport::Transport;
 
 use super::ServerRuntime;
 #[cfg(feature = "hyper-server")]
-use crate::hyper_servers::SessionId;
+use rust_mcp_transport::SessionId;
 
 use crate::{
     error::SdkResult,

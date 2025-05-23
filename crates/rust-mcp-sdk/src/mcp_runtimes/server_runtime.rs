@@ -12,10 +12,10 @@ use std::sync::{Arc, RwLock};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::SdkResult;
-#[cfg(feature = "hyper-server")]
-use crate::hyper_servers::SessionId;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
+#[cfg(feature = "hyper-server")]
+use rust_mcp_transport::SessionId;
 
 /// Struct representing the runtime core of the MCP server, handling transport and client details
 pub struct ServerRuntime {

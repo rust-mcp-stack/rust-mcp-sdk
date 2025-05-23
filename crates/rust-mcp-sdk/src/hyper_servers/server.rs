@@ -1,18 +1,20 @@
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
+use axum_server::Handle;
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
     sync::Arc,
     time::Duration,
 };
+use tokio::signal;
 
 use super::{
     app_state::AppState,
     error::{TransportServerError, TransportServerResult},
     routes::app_routes,
-    InMemorySessionStore, UuidGenerator,
+    IdGenerator, InMemorySessionStore, UuidGenerator,
 };
 use axum::Router;
 use rust_mcp_schema::InitializeResult;
@@ -20,20 +22,23 @@ use rust_mcp_transport::TransportOptions;
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
-
+const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 30;
 // Default Server-Sent Events (SSE) endpoint path
 const DEFAULT_SSE_ENDPOINT: &str = "/sse";
+// Default MCP Messages endpoint path
+const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
 pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "localhost")
     pub host: String,
-    /// Hostname or IP address the server will bind to (default: "localhost")
+    /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint.
-    /// If `None`, the default path `/sse` will be used.
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
     pub custom_sse_endpoint: Option<String>,
+    /// Optional custom path for the MCP messages endpoint (default: `/messages`)
+    pub custom_messages_endpoint: Option<String>,
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
     /// Enables SSL/TLS if set to `true`
@@ -46,6 +51,8 @@ pub struct HyperServerOptions {
     pub ssl_key_path: Option<String>,
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
 }
 
 impl HyperServerOptions {
@@ -121,6 +128,12 @@ impl HyperServerOptions {
             .as_deref()
             .unwrap_or(DEFAULT_SSE_ENDPOINT)
     }
+
+    pub fn sse_messages_endpoint(&self) -> &str {
+        self.custom_messages_endpoint
+            .as_deref()
+            .unwrap_or(DEFAULT_MESSAGES_ENDPOINT)
+    }
 }
 
 /// Default implementation for HyperServerOptions
@@ -133,11 +146,13 @@ impl Default for HyperServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
             custom_sse_endpoint: None,
+            custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,
+            session_id_generator: None,
         }
     }
 }
@@ -147,6 +162,7 @@ pub struct HyperServer {
     app: Router,
     state: Arc<AppState>,
     options: HyperServerOptions,
+    handle: Handle,
 }
 
 impl HyperServer {
@@ -164,14 +180,18 @@ impl HyperServer {
     pub(crate) fn new(
         server_details: InitializeResult,
         handler: Arc<dyn McpServerHandler + 'static>,
-        server_options: HyperServerOptions,
+        mut server_options: HyperServerOptions,
     ) -> Self {
         let state: Arc<AppState> = Arc::new(AppState {
             session_store: Arc::new(InMemorySessionStore::new()),
-            id_generator: Arc::new(UuidGenerator {}),
+            id_generator: server_options
+                .session_id_generator
+                .take()
+                .map_or(Arc::new(UuidGenerator {}), |g| Arc::clone(&g)),
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,
+            sse_message_endpoint: server_options.sse_messages_endpoint().to_owned(),
             transport_options: Arc::clone(&server_options.transport_options),
         });
         let app = app_routes(Arc::clone(&state), &server_options);
@@ -179,6 +199,7 @@ impl HyperServer {
             app,
             state,
             options: server_options,
+            handle: Handle::new(),
         }
     }
 
@@ -263,10 +284,23 @@ impl HyperServer {
 
         tracing::info!("{}", self.server_info(Some(addr)).await?);
 
+        // Spawn a task to trigger shutdown on signal
+        let handle_clone = self.handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal(handle_clone).await;
+        });
+
+        let handle_clone = self.handle.clone();
         axum_server::bind_rustls(addr, config)
+            .handle(handle_clone)
             .serve(self.app.into_make_service())
             .await
             .map_err(|err| TransportServerError::ServerStartError(err.to_string()))
+    }
+
+    /// Returns server handle that could be used for graceful shutdown
+    pub fn server_handle(&self) -> Handle {
+        self.handle.clone()
     }
 
     /// Starts the server without SSL
@@ -279,7 +313,15 @@ impl HyperServer {
     async fn start_http(self, addr: SocketAddr) -> TransportServerResult<()> {
         tracing::info!("{}", self.server_info(Some(addr)).await?);
 
+        // Spawn a task to trigger shutdown on signal
+        let handle_clone = self.handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal(handle_clone).await;
+        });
+
+        let handle_clone = self.handle.clone();
         axum_server::bind(addr)
+            .handle(handle_clone)
             .serve(self.app.into_make_service())
             .await
             .map_err(|err| TransportServerError::ServerStartError(err.to_string()))
@@ -309,4 +351,34 @@ impl HyperServer {
             self.start_http(addr).await
         }
     }
+}
+
+// Shutdown signal handler
+async fn shutdown_signal(handle: Handle) {
+    // Wait for a Ctrl+C or SIGTERM signal
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Signal received, starting graceful shutdown");
+    // Trigger graceful shutdown with a timeout
+    handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
 }

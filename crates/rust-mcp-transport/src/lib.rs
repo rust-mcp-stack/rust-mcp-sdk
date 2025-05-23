@@ -16,3 +16,6 @@ pub use message_dispatcher::*;
 pub use sse::*;
 pub use stdio::*;
 pub use transport::*;
+
+// Type alias for session identifier, represented as a String
+pub type SessionId = String;

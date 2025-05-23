@@ -13,7 +13,10 @@ pub(crate) use writable_channel::*;
 use rust_mcp_schema::schema_utils::SdkError;
 use tokio::time::{timeout, Duration};
 
-use crate::error::{TransportError, TransportResult};
+use crate::{
+    error::{TransportError, TransportResult},
+    SessionId,
+};
 
 pub async fn await_timeout<F, T, E>(operation: F, timeout_duration: Duration) -> TransportResult<T>
 where
@@ -39,6 +42,46 @@ pub fn extract_origin(url: &str) -> Option<String> {
 
     // Reconstruct origin
     Some(format!("{}://{}", scheme, host_port))
+}
+
+/// Adds a session ID as a query parameter to a given endpoint URL.
+///
+/// # Arguments
+/// * `endpoint` - The base URL or endpoint (e.g., "/messages")
+/// * `session_id` - The session ID to append as a query parameter
+///
+/// # Returns
+/// A String containing the endpoint with the session ID added as a query parameter
+///
+pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -> String {
+    // Handle empty endpoint
+    let base = if endpoint.is_empty() { "/" } else { endpoint };
+
+    // Split fragment if it exists
+    let (path_and_query, fragment) = if let Some((p, f)) = base.split_once('#') {
+        (p, Some(f))
+    } else {
+        (base, None)
+    };
+
+    // Split path and query
+    let (path, query) = if let Some((p, q)) = path_and_query.split_once('?') {
+        (p, Some(q))
+    } else {
+        (path_and_query, None)
+    };
+
+    // Build the query string
+    let new_query = match query {
+        Some(q) if !q.is_empty() => format!("{}&sessionId={}", q, session_id),
+        _ => format!("sessionId={}", session_id),
+    };
+
+    // Construct final URL
+    match fragment {
+        Some(f) => format!("{}?{}#{}", path, new_query, f),
+        None => format!("{}?{}", path, new_query),
+    }
 }
 
 #[cfg(test)]
@@ -78,5 +121,31 @@ mod tests {
     #[test]
     fn test_extract_origin_empty_string() {
         assert_eq!(extract_origin(""), None);
+    }
+
+    #[test]
+    fn test_endpoint_with_session_id() {
+        let session_id: SessionId = "AAA".to_string();
+        assert_eq!(
+            endpoint_with_session_id("/messages", &session_id),
+            "/messages?sessionId=AAA"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages?foo=bar&baz=qux", &session_id),
+            "/messages?foo=bar&baz=qux&sessionId=AAA"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages#section1", &session_id),
+            "/messages?sessionId=AAA#section1"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/messages?key=value#section2", &session_id),
+            "/messages?key=value&sessionId=AAA#section2"
+        );
+        assert_eq!(
+            endpoint_with_session_id("/", &session_id),
+            "/?sessionId=AAA"
+        );
+        assert_eq!(endpoint_with_session_id("", &session_id), "/?sessionId=AAA");
     }
 }

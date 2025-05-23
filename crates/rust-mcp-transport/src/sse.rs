@@ -12,8 +12,8 @@ use crate::error::{TransportError, TransportResult};
 use crate::mcp_stream::MCPStream;
 use crate::message_dispatcher::MessageDispatcher;
 use crate::transport::Transport;
-use crate::utils::CancellationTokenSource;
-use crate::{IoStream, McpDispatch, TransportOptions};
+use crate::utils::{endpoint_with_session_id, CancellationTokenSource};
+use crate::{IoStream, McpDispatch, SessionId, TransportOptions};
 
 pub struct SseTransport {
     shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
@@ -46,6 +46,10 @@ impl SseTransport {
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
         })
+    }
+
+    pub fn message_endpoint(endpoint: &str, session_id: &SessionId) -> String {
+        endpoint_with_session_id(endpoint, session_id)
     }
 }
 

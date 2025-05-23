@@ -1,21 +1,25 @@
 use crate::{
     error::McpSdkError,
-    hyper_servers::{app_state::AppState, error::TransportServerResult},
+    hyper_servers::{
+        app_state::AppState, error::TransportServerResult,
+        middlewares::session_id_gen::generate_session_id,
+    },
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::mcp_handler::McpServerHandler,
     McpServer,
 };
 use axum::{
     extract::State,
+    middleware,
     response::{
         sse::{Event, KeepAlive},
         IntoResponse, Sse,
     },
     routing::get,
-    Router,
+    Extension, Router,
 };
 use futures::stream::{self};
-use rust_mcp_transport::{error::TransportError, SseTransport};
+use rust_mcp_transport::{error::TransportError, SessionId, SseTransport};
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::{
     io::{duplex, AsyncBufReadExt, BufReader},
@@ -23,7 +27,6 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 
-const SSE_MESSAGES_PATH: &str = "/messages";
 const CLIENT_PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
@@ -37,10 +40,8 @@ const DUPLEX_BUFFER_SIZE: usize = 8192;
 ///
 /// # Returns
 /// * `Result<Event, Infallible>` - The constructed SSE event, infallible
-fn initial_event(session_id: &str) -> Result<Event, Infallible> {
-    Ok(Event::default()
-        .event("endpoint")
-        .data(format!("{SSE_MESSAGES_PATH}?sessionId={session_id}")))
+fn initial_event(endpoint: &str) -> Result<Event, Infallible> {
+    Ok(Event::default().event("endpoint").data(endpoint))
 }
 
 /// Configures the SSE routes for the application
@@ -53,8 +54,13 @@ fn initial_event(session_id: &str) -> Result<Event, Infallible> {
 ///
 /// # Returns
 /// * `Router<Arc<AppState>>` - An Axum router configured with the SSE route
-pub fn routes(_state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>> {
-    Router::new().route(sse_endpoint, get(handle_sse))
+pub fn routes(state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>> {
+    Router::new()
+        .route(sse_endpoint, get(handle_sse))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            generate_session_id,
+        ))
 }
 
 /// Handles Server-Sent Events (SSE) connections
@@ -68,15 +74,17 @@ pub fn routes(_state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>
 /// # Returns
 /// * `TransportServerResult<impl IntoResponse>` - The SSE response stream or an error
 pub async fn handle_sse(
+    Extension(session_id): Extension<SessionId>,
     State(state): State<Arc<AppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
+    let messages_endpoint =
+        SseTransport::message_endpoint(&state.sse_message_endpoint, &session_id);
+
     // readable stream of string to be used in transport
     let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    // generate a session id, and keep it in the server state
-    let session_id = state.id_generator.generate();
     state
         .session_store
         .set(session_id.to_owned(), read_tx)
@@ -140,7 +148,7 @@ pub async fn handle_sse(
     });
 
     // Initial SSE message to inform the client about the server's endpoint
-    let initial_event = stream::once(async move { initial_event(&session_id) });
+    let initial_event = stream::once(async move { initial_event(&messages_endpoint) });
 
     // Construct SSE stream for sending MCP messages to the server
     let reader = BufReader::new(write_rx);
