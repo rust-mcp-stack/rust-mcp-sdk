@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.0...rust-mcp-transport-v0.3.1) (2025-05-24)
+
+
+### 🐛 Bug Fixes
+
+* Ensure server resilience against malformed client requests ([95aed88](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/95aed8873e234b4d7d2e0027d2c43be0b0dcc1ab))
+
 ## [0.3.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.2.3...rust-mcp-transport-v0.3.0) (2025-05-23)
 
 
