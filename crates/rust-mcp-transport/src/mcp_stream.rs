@@ -100,11 +100,13 @@ impl MCPStream {
                         match line {
                             Ok(Some(line)) => {
                                             // deserialize and send it to the stream
-                                            let message: R = serde_json::from_str(&line).map_err(|_| {
-                                                crate::error::TransportError::JsonrpcError(
-                                                    RpcError::parse_error(),
-                                                )
-                                            })?;
+                                            let message: R = match serde_json::from_str(&line){
+                                                Ok(mcp_message) => mcp_message,
+                                                Err(_) => {
+                                                    // continue if malformed message is received
+                                                    continue;
+                                                },
+                                            };
 
                                             if message.is_response() || message.is_error() {
                                                 if let Some(request_id) = &message.request_id() {
