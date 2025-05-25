@@ -1,22 +1,30 @@
 mod cancellation_token;
+#[cfg(feature = "sse")]
 mod http_utils;
+#[cfg(feature = "sse")]
 mod readable_channel;
+#[cfg(feature = "sse")]
 mod sse_stream;
+#[cfg(feature = "sse")]
 mod writable_channel;
 
 pub(crate) use cancellation_token::*;
+#[cfg(feature = "sse")]
 pub(crate) use http_utils::*;
+#[cfg(feature = "sse")]
 pub(crate) use readable_channel::*;
+#[cfg(feature = "sse")]
 pub(crate) use sse_stream::*;
+#[cfg(feature = "sse")]
 pub(crate) use writable_channel::*;
 
 use rust_mcp_schema::schema_utils::SdkError;
 use tokio::time::{timeout, Duration};
 
-use crate::{
-    error::{TransportError, TransportResult},
-    SessionId,
-};
+use crate::error::{TransportError, TransportResult};
+
+#[cfg(feature = "sse")]
+use crate::SessionId;
 
 pub async fn await_timeout<F, T, E>(operation: F, timeout_duration: Duration) -> TransportResult<T>
 where
@@ -29,21 +37,6 @@ where
     }
 }
 
-pub fn extract_origin(url: &str) -> Option<String> {
-    // Remove the fragment first (everything after '#')
-    let url = url.split('#').next()?; // Keep only part before `#`
-
-    // Split scheme and the rest
-    let (scheme, rest) = url.split_once("://")?;
-
-    // Get host and optionally the port (before first '/')
-    let end = rest.find('/').unwrap_or(rest.len());
-    let host_port = &rest[..end];
-
-    // Reconstruct origin
-    Some(format!("{}://{}", scheme, host_port))
-}
-
 /// Adds a session ID as a query parameter to a given endpoint URL.
 ///
 /// # Arguments
@@ -53,6 +46,7 @@ pub fn extract_origin(url: &str) -> Option<String> {
 /// # Returns
 /// A String containing the endpoint with the session ID added as a query parameter
 ///
+#[cfg(feature = "sse")]
 pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -> String {
     // Handle empty endpoint
     let base = if endpoint.is_empty() { "/" } else { endpoint };
@@ -84,45 +78,10 @@ pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -
     }
 }
 
+#[cfg(feature = "sse")]
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_extract_origin_with_path() {
-        let url = "https://example.com:8080/some/path";
-        assert_eq!(
-            extract_origin(url),
-            Some("https://example.com:8080".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_origin_without_path() {
-        let url = "https://example.com";
-        assert_eq!(extract_origin(url), Some("https://example.com".to_string()));
-    }
-
-    #[test]
-    fn test_extract_origin_with_fragment() {
-        let url = "https://example.com:8080/path#section";
-        assert_eq!(
-            extract_origin(url),
-            Some("https://example.com:8080".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_origin_invalid_url() {
-        let url = "example.com/path";
-        assert_eq!(extract_origin(url), None);
-    }
-
-    #[test]
-    fn test_extract_origin_empty_string() {
-        assert_eq!(extract_origin(""), None);
-    }
-
     #[test]
     fn test_endpoint_with_session_id() {
         let session_id: SessionId = "AAA".to_string();

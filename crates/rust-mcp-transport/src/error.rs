@@ -1,11 +1,10 @@
 use rust_mcp_schema::{schema_utils::SdkError, RpcError};
 use thiserror::Error;
 
+use crate::utils::CancellationError;
 use core::fmt;
 use std::any::Any;
 use tokio::sync::broadcast;
-
-use crate::utils::CancellationError;
 
 /// A wrapper around a broadcast send error. This structure allows for generic error handling
 /// by boxing the underlying error into a type-erased form.
@@ -99,6 +98,7 @@ pub enum TransportError {
     FromString(String),
     #[error("{0}")]
     OneshotRecvError(#[from] tokio::sync::oneshot::error::RecvError),
+    #[cfg(feature = "sse")]
     #[error("{0}")]
     SendMessageError(#[from] reqwest::Error),
     #[error("Http Error: {0}")]
