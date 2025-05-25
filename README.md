@@ -212,7 +212,7 @@ async fn main() -> SdkResult<()> {
             name: "simple-rust-mcp-client".into(),
             version: "0.1.0".into(),
         },
-        protocol_version: JSONRPC_VERSION.into(),
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
     // Step3 : Create a transport, with options to launch @modelcontextprotocol/server-everything MCP Server

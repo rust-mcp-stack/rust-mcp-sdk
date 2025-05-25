@@ -71,6 +71,7 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 ///     if client == "2025_03_26" && server == "2024_11_05"
 /// ));
 /// ```
+#[allow(unused)]
 pub fn ensure_server_protocole_compatibility(
     client_protocol_version: &str,
     server_protocol_version: &str,
@@ -127,6 +128,7 @@ pub fn ensure_server_protocole_compatibility(
 ///     if client == "2025_03_26" && server == "2024_11_05"
 /// ));
 /// ```
+#[allow(unused)]
 pub fn enforce_compatible_protocol_version(
     client_protocol_version: &str,
     server_protocol_version: &str,
