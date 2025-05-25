@@ -6,7 +6,10 @@ use rust_mcp_schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
     ClientRequest, ListToolsResult, RpcError,
 };
-use rust_mcp_sdk::{mcp_server::ServerHandlerCore, McpServer};
+use rust_mcp_sdk::{
+    mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
+    McpServer,
+};
 
 use crate::tools::GreetingTools;
 
@@ -30,26 +33,16 @@ impl ServerHandlerCore for MyServerHandler {
                 // Handle the initialization request
                 ClientRequest::InitializeRequest(initialize_request) => {
                     let mut server_info = runtime.server_info().to_owned();
-                    // Provide compatibility for clients using older MCP protocol versions.
-                    match server_info
-                        .protocol_version
-                        .cmp(&initialize_request.params.protocol_version)
+
+                    if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
+                        &initialize_request.params.protocol_version,
+                        &server_info.protocol_version,
+                    )
+                    .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
                     {
-                        Ordering::Less => {
-                            let error_message = format!(
-                                "Incompatible mcp protocl version!\n client:{}\nserver:{}",
-                                &initialize_request.params.protocol_version,
-                                server_info.protocol_version,
-                            );
-                            let _ = runtime.stderr_message(error_message).await;
-                            return Err(RpcError::internal_error());
-                        }
-                        Ordering::Equal | Ordering::Greater => {
-                            // return the same version that was received from the client
-                            server_info.protocol_version =
-                                initialize_request.params.protocol_version;
-                        }
+                        server_info.protocol_version = initialize_request.params.protocol_version;
                     }
+
                     return Ok(server_info.into());
                 }
                 // Handle ListToolsRequest, return list of available tools
