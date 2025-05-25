@@ -76,12 +76,10 @@ pub fn ensure_server_protocole_compability(
     server_protocol_version: &str,
 ) -> SdkResult<()> {
     match client_protocol_version.cmp(server_protocol_version) {
-        Ordering::Less | Ordering::Greater => {
-            return Err(McpSdkError::IncompatibleProtocolVersion(
-                client_protocol_version.to_string(),
-                server_protocol_version.to_string(),
-            ));
-        }
+        Ordering::Less | Ordering::Greater => Err(McpSdkError::IncompatibleProtocolVersion(
+            client_protocol_version.to_string(),
+            server_protocol_version.to_string(),
+        )),
         Ordering::Equal => Ok(()),
     }
 }
@@ -135,12 +133,10 @@ pub fn enforce_compatible_protocol_version(
 ) -> SdkResult<Option<String>> {
     match client_protocol_version.cmp(server_protocol_version) {
         // if client protocol version is higher
-        Ordering::Greater => {
-            return Err(McpSdkError::IncompatibleProtocolVersion(
-                client_protocol_version.to_string(),
-                server_protocol_version.to_string(),
-            ));
-        }
+        Ordering::Greater => Err(McpSdkError::IncompatibleProtocolVersion(
+            client_protocol_version.to_string(),
+            server_protocol_version.to_string(),
+        )),
         Ordering::Equal => Ok(None),
         Ordering::Less => {
             // return the same version that was received from the client

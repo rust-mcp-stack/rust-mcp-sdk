@@ -5,13 +5,9 @@ pub mod test_server_common {
 
     use rust_mcp_schema::{
         Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-        LATEST_PROTOCOL_VERSION,
     };
     use rust_mcp_sdk::{
-        mcp_server::{
-            hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler,
-            ServerHandlerCore,
-        },
+        mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
         McpServer, SessionId,
     };
     use std::sync::RwLock;

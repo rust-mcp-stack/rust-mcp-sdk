@@ -2,10 +2,9 @@
 pub mod common;
 
 mod protocol_compability_on_server {
-    use std::result;
 
     use rust_mcp_schema::{InitializeRequest, InitializeResult, RpcError, INTERNAL_ERROR};
-    use rust_mcp_sdk::{error::McpSdkError, mcp_server::ServerHandler};
+    use rust_mcp_sdk::mcp_server::ServerHandler;
 
     use crate::common::{
         test_client_info,
