@@ -48,15 +48,15 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 /// # Examples
 ///
 /// ```
-/// use rust_mcp_sdk::mcp_client::ensure_server_protocole_compability;
+/// use rust_mcp_sdk::mcp_client::ensure_server_protocole_compatibility;
 /// use rust_mcp_sdk::error::McpSdkError;
 ///
 /// // Compatible versions
-/// let result = ensure_server_protocole_compability("2024_11_05", "2024_11_05");
+/// let result = ensure_server_protocole_compatibility("2024_11_05", "2024_11_05");
 /// assert!(result.is_ok());
 ///
 /// // Incompatible versions (client < server)
-/// let result = ensure_server_protocole_compability("2024_11_05", "2025_03_26");
+/// let result = ensure_server_protocole_compatibility("2024_11_05", "2025_03_26");
 /// assert!(matches!(
 ///     result,
 ///     Err(McpSdkError::IncompatibleProtocolVersion(client, server))
@@ -64,14 +64,14 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 /// ));
 ///
 /// // Incompatible versions (client > server)
-/// let result = ensure_server_protocole_compability("2025_03_26", "2024_11_05");
+/// let result = ensure_server_protocole_compatibility("2025_03_26", "2024_11_05");
 /// assert!(matches!(
 ///     result,
 ///     Err(McpSdkError::IncompatibleProtocolVersion(client, server))
 ///     if client == "2025_03_26" && server == "2024_11_05"
 /// ));
 /// ```
-pub fn ensure_server_protocole_compability(
+pub fn ensure_server_protocole_compatibility(
     client_protocol_version: &str,
     server_protocol_version: &str,
 ) -> SdkResult<()> {

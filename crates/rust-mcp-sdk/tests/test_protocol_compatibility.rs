@@ -1,7 +1,7 @@
 #[path = "common/common.rs"]
 pub mod common;
 
-mod protocol_compability_on_server {
+mod protocol_compatibility_on_server {
 
     use rust_mcp_schema::{InitializeRequest, InitializeResult, RpcError, INTERNAL_ERROR};
     use rust_mcp_sdk::mcp_server::ServerHandler;
@@ -35,7 +35,7 @@ mod protocol_compability_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compability_equal() {
+    async fn tets_protocol_compatibility_equal() {
         let result = handle_initialize_request("2025-03-26").await;
         assert!(result.is_ok());
         let protocol_version = result.unwrap().protocol_version;
@@ -43,7 +43,7 @@ mod protocol_compability_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compability_downgrade() {
+    async fn tets_protocol_compatibility_downgrade() {
         let result = handle_initialize_request("2024_11_05").await;
         assert!(result.is_ok());
         let protocol_version = result.unwrap().protocol_version;
@@ -51,7 +51,7 @@ mod protocol_compability_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compability_unsupported() {
+    async fn tets_protocol_compatibility_unsupported() {
         let result = handle_initialize_request("2034_11_05").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(err) if err.code == INTERNAL_ERROR));

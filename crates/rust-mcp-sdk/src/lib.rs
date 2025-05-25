@@ -36,7 +36,7 @@ pub mod mcp_client {
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
     pub use super::mcp_runtimes::client_runtime::ClientRuntime;
-    pub use super::utils::ensure_server_protocole_compability;
+    pub use super::utils::ensure_server_protocole_compatibility;
 }
 
 #[cfg(feature = "server")]
