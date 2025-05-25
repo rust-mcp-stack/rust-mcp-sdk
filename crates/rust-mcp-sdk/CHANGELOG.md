@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.2...rust-mcp-sdk-v0.3.3) (2025-05-25)
+
+
+### 🐛 Bug Fixes
+
+* Prevent termination caused by client using older mcp schema versions ([#40](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/40)) ([084d9d3](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/084d9d36c37c135256873bffd46d2ca03a1fb330))
+
 ## [0.3.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.1...rust-mcp-sdk-v0.3.2) (2025-05-25)
 
 

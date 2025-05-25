@@ -1,6 +1,6 @@
 [package]
 name = "simple-mcp-client-core-sse"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 publish = false
 license = "MIT"
