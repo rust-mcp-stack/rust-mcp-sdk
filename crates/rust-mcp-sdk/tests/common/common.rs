@@ -1,7 +1,7 @@
 mod test_server;
 use async_trait::async_trait;
 use rust_mcp_schema::{
-    ClientCapabilities, Implementation, InitializeRequestParams, JSONRPC_VERSION,
+    ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
 };
 use rust_mcp_sdk::mcp_client::ClientHandler;
 pub use test_server::*;
@@ -18,7 +18,7 @@ pub fn test_client_info() -> InitializeRequestParams {
             name: "test-rust-mcp-client".into(),
             version: "0.1.0".into(),
         },
-        protocol_version: JSONRPC_VERSION.into(),
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     }
 }
 

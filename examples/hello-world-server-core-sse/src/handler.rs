@@ -4,7 +4,10 @@ use rust_mcp_schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
     ClientRequest, ListToolsResult, RpcError,
 };
-use rust_mcp_sdk::{mcp_server::ServerHandlerCore, McpServer};
+use rust_mcp_sdk::{
+    mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
+    McpServer,
+};
 
 use crate::tools::GreetingTools;
 
@@ -26,8 +29,20 @@ impl ServerHandlerCore for MyServerHandler {
             //Handle client requests according to their specific type.
             RequestFromClient::ClientRequest(client_request) => match client_request {
                 // Handle the initialization request
-                ClientRequest::InitializeRequest(_) => Ok(runtime.server_info().to_owned().into()),
+                ClientRequest::InitializeRequest(initialize_request) => {
+                    let mut server_info = runtime.server_info().to_owned();
 
+                    if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
+                        &initialize_request.params.protocol_version,
+                        &server_info.protocol_version,
+                    )
+                    .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
+                    {
+                        server_info.protocol_version = initialize_request.params.protocol_version;
+                    }
+
+                    return Ok(server_info.into());
+                }
                 // Handle ListToolsRequest, return list of available tools
                 ClientRequest::ListToolsRequest(_) => Ok(ListToolsResult {
                     meta: None,

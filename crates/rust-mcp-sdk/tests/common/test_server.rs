@@ -5,7 +5,6 @@ pub mod test_server_common {
 
     use rust_mcp_schema::{
         Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-        LATEST_PROTOCOL_VERSION,
     };
     use rust_mcp_sdk::{
         mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
@@ -32,7 +31,7 @@ pub mod test_server_common {
             },
             meta: None,
             instructions: Some("server instructions...".to_string()),
-            protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+            protocol_version: "2025-03-26".to_string(),
         }
     }
 

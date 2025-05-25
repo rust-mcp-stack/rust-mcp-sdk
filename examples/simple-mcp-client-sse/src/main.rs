@@ -5,7 +5,7 @@ use handler::MyClientHandler;
 
 use inquiry_utils::InquiryUtils;
 use rust_mcp_schema::{
-    ClientCapabilities, Implementation, InitializeRequestParams, JSONRPC_VERSION,
+    ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
 };
 use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::mcp_client::client_runtime;
@@ -33,7 +33,7 @@ async fn main() -> SdkResult<()> {
             name: "simple-rust-mcp-client-sse".into(),
             version: "0.1.0".into(),
         },
-        protocol_version: JSONRPC_VERSION.into(),
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
     // Step2 : Create a transport, with options to launch/connect to a MCP Server

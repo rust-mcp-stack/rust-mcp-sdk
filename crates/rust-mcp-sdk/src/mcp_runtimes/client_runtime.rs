@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 use crate::error::{McpSdkError, SdkResult};
 use crate::mcp_traits::mcp_client::McpClient;
 use crate::mcp_traits::mcp_handler::McpClientHandler;
+use crate::utils::ensure_server_protocole_compatibility;
 
 pub struct ClientRuntime {
     // The transport interface for handling messages between client and server
@@ -57,6 +58,11 @@ impl ClientRuntime {
         let result: ServerResult = self.request(request.into(), None).await?.try_into()?;
 
         if let ServerResult::InitializeResult(initialize_result) = result {
+            ensure_server_protocole_compatibility(
+                &self.client_details.protocol_version,
+                &initialize_result.protocol_version,
+            )?;
+
             // store server details
             self.set_server_details(initialize_result)?;
             // send a InitializedNotification to the server
