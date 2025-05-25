@@ -12,7 +12,7 @@ edition = "2021"
 
 [dependencies]
 rust-mcp-schema = { workspace = true }
-rust-mcp-transport = { workspace = true }
+rust-mcp-transport = { workspace = true, default-features = false, optional = true }
 rust-mcp-macros = { workspace = true, optional = true }
 
 tokio.workspace = true
@@ -47,9 +47,15 @@ default = [
     "hyper-server",
     "ssl",
 ] # All features enabled by default
-server = [] # Server feature
-client = [] # Client feature
-hyper-server = ["axum", "axum-server", "uuid", "tokio-stream"]
+server = ["rust-mcp-transport/stdio"] # Server feature
+client = ["rust-mcp-transport/stdio", "rust-mcp-transport/sse"] # Client feature
+hyper-server = [
+    "axum",
+    "axum-server",
+    "uuid",
+    "tokio-stream",
+    "rust-mcp-transport/sse",
+]
 ssl = ["axum-server/tls-rustls"]
 macros = ["rust-mcp-macros"]
 
