@@ -1,3 +1,4 @@
+#[cfg(feature = "hyper-server")]
 pub mod test_server_common {
     use async_trait::async_trait;
     use tokio_stream::StreamExt;

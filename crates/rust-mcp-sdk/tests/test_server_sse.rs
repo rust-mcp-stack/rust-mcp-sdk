@@ -1,6 +1,7 @@
 #[path = "common/common.rs"]
 pub mod common;
-mod tets_mest {
+#[cfg(feature = "hyper-server")]
+mod tets_server_sse {
     use std::{sync::Arc, time::Duration};
 
     use crate::common::{
