@@ -8,7 +8,10 @@ pub mod test_server_common {
         LATEST_PROTOCOL_VERSION,
     };
     use rust_mcp_sdk::{
-        mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
+        mcp_server::{
+            hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler,
+            ServerHandlerCore,
+        },
         McpServer, SessionId,
     };
     use std::sync::RwLock;
@@ -32,7 +35,7 @@ pub mod test_server_common {
             },
             meta: None,
             instructions: Some("server instructions...".to_string()),
-            protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+            protocol_version: "2025-03-26".to_string(),
         }
     }
 
