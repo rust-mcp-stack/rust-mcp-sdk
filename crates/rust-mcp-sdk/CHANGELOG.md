@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.1...rust-mcp-sdk-v0.3.2) (2025-05-25)
+
+
+### 🚀 Features
+
+* Improve build process and dependencies ([#38](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/38)) ([e88c4f1](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e88c4f1c4c4743b13aedbf2a3d65fedb12942555))
+
 ## [0.3.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.0...rust-mcp-sdk-v0.3.1) (2025-05-24)
 
 ## [0.3.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.2.6...rust-mcp-sdk-v0.3.0) (2025-05-23)
