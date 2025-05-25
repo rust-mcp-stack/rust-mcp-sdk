@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use async_trait::async_trait;
 
 use rust_mcp_schema::{
@@ -26,8 +28,30 @@ impl ServerHandlerCore for MyServerHandler {
             //Handle client requests according to their specific type.
             RequestFromClient::ClientRequest(client_request) => match client_request {
                 // Handle the initialization request
-                ClientRequest::InitializeRequest(_) => Ok(runtime.server_info().to_owned().into()),
-
+                ClientRequest::InitializeRequest(initialize_request) => {
+                    let mut server_info = runtime.server_info().to_owned();
+                    // Provide compatibility for clients using older MCP protocol versions.
+                    match server_info
+                        .protocol_version
+                        .cmp(&initialize_request.params.protocol_version)
+                    {
+                        Ordering::Less => {
+                            let error_message = format!(
+                                "Incompatible mcp protocl version!\n client:{}\nserver:{}",
+                                &initialize_request.params.protocol_version,
+                                server_info.protocol_version,
+                            );
+                            let _ = runtime.stderr_message(error_message).await;
+                            return Err(RpcError::internal_error());
+                        }
+                        Ordering::Equal | Ordering::Greater => {
+                            // return the same version that was received from the client
+                            server_info.protocol_version =
+                                initialize_request.params.protocol_version;
+                        }
+                    }
+                    return Ok(server_info.into());
+                }
                 // Handle ListToolsRequest, return list of available tools
                 ClientRequest::ListToolsRequest(_) => Ok(ListToolsResult {
                     meta: None,

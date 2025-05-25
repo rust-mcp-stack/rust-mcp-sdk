@@ -36,6 +36,7 @@ pub mod mcp_client {
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
     pub use super::mcp_runtimes::client_runtime::ClientRuntime;
+    pub use super::utils::ensure_server_protocole_compability;
 }
 
 #[cfg(feature = "server")]
@@ -75,6 +76,7 @@ pub mod mcp_server {
     pub use super::hyper_servers::hyper_server_core;
     #[cfg(feature = "hyper-server")]
     pub use super::hyper_servers::*;
+    pub use super::utils::enforce_compatible_protocol_version;
 }
 
 #[cfg(feature = "client")]

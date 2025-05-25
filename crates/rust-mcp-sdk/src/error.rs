@@ -16,14 +16,14 @@ pub enum McpSdkError {
     #[error("{0}")]
     TransportError(#[from] TransportError),
     #[error("{0}")]
-    AnyErrorStatic(Box<(dyn std::error::Error + Send + Sync + 'static)>),
-    #[error("{0}")]
     AnyError(Box<(dyn std::error::Error + Send + Sync)>),
     #[error("{0}")]
     SdkError(#[from] rust_mcp_schema::schema_utils::SdkError),
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
     TransportServerError(#[from] TransportServerError),
+    #[error("Incompatible mcp protocl version!\n client:{0}\nserver:{1}")]
+    IncompatibleProtocolVersion(String, String),
 }
 
 #[deprecated(since = "0.2.0", note = "Use `McpSdkError` instead.")]

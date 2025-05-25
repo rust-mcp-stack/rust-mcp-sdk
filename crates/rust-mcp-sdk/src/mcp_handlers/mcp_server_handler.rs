@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rust_mcp_schema::{schema_utils::CallToolError, *};
 use serde_json::Value;
 
-use crate::mcp_traits::mcp_server::McpServer;
+use crate::{mcp_traits::mcp_server::McpServer, utils::enforce_compatible_protocol_version};
 
 /// Defines the `ServerHandler` trait for handling Model Context Protocol (MCP) operations on a server.
 /// This trait provides default implementations for request and notification handlers in an MCP server,
@@ -35,7 +35,19 @@ pub trait ServerHandler: Send + Sync + 'static {
             .set_client_details(initialize_request.params.clone())
             .map_err(|err| RpcError::internal_error().with_message(format!("{}", err)))?;
 
-        Ok(runtime.server_info().to_owned())
+        let mut server_info = runtime.server_info().to_owned();
+        // Provide compatibility for clients using older MCP protocol versions.
+
+        if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
+            &initialize_request.params.protocol_version,
+            &server_info.protocol_version,
+        )
+        .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
+        {
+            server_info.protocol_version = initialize_request.params.protocol_version;
+        }
+
+        Ok(server_info)
     }
 
     /// Handles ping requests from clients.
