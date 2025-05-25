@@ -22,7 +22,7 @@ pub enum McpSdkError {
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
     TransportServerError(#[from] TransportServerError),
-    #[error("Incompatible mcp protocl version!\n client:{0}\nserver:{1}")]
+    #[error("Incompatible mcp protocol version!\n client:{0}\nserver:{1}")]
     IncompatibleProtocolVersion(String, String),
 }
 
