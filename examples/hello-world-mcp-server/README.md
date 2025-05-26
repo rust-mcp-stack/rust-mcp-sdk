@@ -28,6 +28,19 @@ cargo build -p hello-world-mcp-server --release
 3.  After building the project, the binary will be located at `target/release/hello-world-mcp-server`
     You can test it with [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector), or alternatively, use it with any MCP client you prefer.
 
+```bash
+npx @modelcontextprotocol/inspector ./target/release/hello-world-mcp-server
+```
+
+```
+Need to install the following packages:
+@modelcontextprotocol/inspector@0.13.0
+Ok to proceed? (y)
+Starting MCP inspector...
+⚙ Proxy server listening on port 6277
+🔍 MCP Inspector is up and running at http://127.0.0.1:6274 🚀
+```
+
 Here you can see it in action :
 
 ![hello-world-mcp-server](../../assets/examples/hello-world-mcp-server.gif)
