@@ -28,6 +28,12 @@ cargo run -p hello-world-server-sse --release
 By default, the SSE endpoint is accessible at `http://127.0.0.1:8080/sse`.
 You can test it with [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector), or alternatively, use it with any MCP client you prefer.
 
+```bash
+npx -y @modelcontextprotocol/inspector
+```
+
+Then visit: http://localhost:6274/?transport=sse&serverUrl=http://localhost:8080/sse
+
 Here you can see it in action :
 
 ![hello-world-mcp-server](../../assets/examples/hello-world-server-sse.gif)
