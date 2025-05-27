@@ -1,7 +1,7 @@
 //! This module contains utility functions for querying and displaying server capabilities.
 
 use colored::Colorize;
-use rust_mcp_schema::CallToolRequestParams;
+use rust_mcp_sdk::schema::CallToolRequestParams;
 use rust_mcp_sdk::McpClient;
 use rust_mcp_sdk::{error::SdkResult, mcp_client::ClientRuntime};
 use serde_json::json;

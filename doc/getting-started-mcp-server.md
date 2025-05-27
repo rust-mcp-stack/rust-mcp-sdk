@@ -20,11 +20,11 @@ cd hello-world-mcp-server
 
 ## Step 2: Add Dependencies
 
-Next, we’ll add the Rust MCP dependencies for the toolkit, schema, and runtime support. We’ll also include `tokio` and `async-trait` for async functionality, plus `serde` and `serde_json` to enable [rust-mcp-macros](https://crates.io/crates/rust-mcp-macros) for MCP tool development.
+Next, we’ll add the `rust-mcp-sdk` dependency , also include `tokio` and `async-trait` for async functionality, plus `serde` and `serde_json` to enable [rust-mcp-macros](https://crates.io/crates/rust-mcp-macros) for MCP tool development.
 
 ```sh
 # rust-mcp dependencies
-cargo add rust-mcp-sdk rust-mcp-schema
+cargo add rust-mcp-sdk
 
 # other required dependencies
 cargo add tokio async-trait serde serde_json
@@ -39,12 +39,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.88"
-rust-mcp-schema = "0.2.1"
-rust-mcp-sdk = "0.1.1"
-serde = "1.0.219"
-serde_json = "1.0.140"
-tokio = "1.44.1"
+async-trait = "0.1"
+rust-mcp-sdk = "0.4"
+serde = "1.0"
+serde_json = "1.0"
+tokio = "1.4"
 ```
 
 ## Step3: update the `main()` function
@@ -71,7 +70,7 @@ Create a new module in the project called `tools.rs` and include the definitions
 
 ```rust
 //src/tools.rs
-use rust_mcp_schema::{schema_utils::CallToolError, CallToolResult};
+use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult};
 use rust_mcp_sdk::{
     macros::{mcp_tool, JsonSchema},
     tool_box,
@@ -144,7 +143,7 @@ Here is the code for `handler.rs` :
 // src/handler.rs
 
 use async_trait::async_trait;
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
     schema_utils::CallToolError, CallToolRequest, CallToolResult, RpcError,
     ListToolsRequest, ListToolsResult,
 };
@@ -207,7 +206,7 @@ Here is how final `main.rs` file looks like.
 mod handler;
 mod tools;
 use handler::MyServerHandler;
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };

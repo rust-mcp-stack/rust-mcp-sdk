@@ -50,7 +50,7 @@ macro_rules! tool_box {
             }
 
             /// Returns a vector containing instances of all supported tools
-            pub fn tools() -> Vec<rust_mcp_schema::Tool> {
+            pub fn tools() -> Vec<rust_mcp_sdk::schema::Tool> {
                 vec![
                     $(
                         $tool::tool(),
@@ -59,7 +59,7 @@ macro_rules! tool_box {
             }
 
             #[deprecated(since = "0.2.0", note = "Use `tools()` instead.")]
-            pub fn get_tools() -> Vec<rust_mcp_schema::Tool> {
+            pub fn get_tools() -> Vec<rust_mcp_sdk::schema::Tool> {
                 vec![
                     $(
                         $tool::tool(),
@@ -71,22 +71,22 @@ macro_rules! tool_box {
 
 
 
-        impl TryFrom<rust_mcp_schema::CallToolRequestParams> for $enum_name {
-            type Error = rust_mcp_schema::schema_utils::CallToolError;
+        impl TryFrom<rust_mcp_sdk::schema::CallToolRequestParams> for $enum_name {
+            type Error = rust_mcp_sdk::schema::schema_utils::CallToolError;
 
             /// Attempts to convert a tool request into the appropriate tool variant
-            fn try_from(value: rust_mcp_schema::CallToolRequestParams) -> Result<Self, Self::Error> {
+            fn try_from(value: rust_mcp_sdk::schema::CallToolRequestParams) -> Result<Self, Self::Error> {
                 let v = serde_json::to_value(value.arguments.unwrap())
-                .map_err(rust_mcp_schema::schema_utils::CallToolError::new)?;
+                .map_err(rust_mcp_sdk::schema::schema_utils::CallToolError::new)?;
                     match value.name {
                         $(
                             name if name == $tool::tool_name().as_str() => {
-                                Ok(Self::$tool(serde_json::from_value(v).map_err(rust_mcp_schema::schema_utils::CallToolError::new)?))
+                                Ok(Self::$tool(serde_json::from_value(v).map_err(rust_mcp_sdk::schema::schema_utils::CallToolError::new)?))
                             }
                         )*
                         _ => {
                                Err(
-                                rust_mcp_schema::schema_utils::CallToolError::unknown_tool(value.name.to_string())
+                                rust_mcp_sdk::schema::schema_utils::CallToolError::unknown_tool(value.name.to_string())
                               )
                         }
                     }

@@ -2,10 +2,10 @@ mod handler;
 mod inquiry_utils;
 
 use handler::MyClientHandler;
-
 use inquiry_utils::InquiryUtils;
-use rust_mcp_schema::{
-    ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
+use rust_mcp_sdk::schema::{
+    ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
+    LATEST_PROTOCOL_VERSION,
 };
 use rust_mcp_sdk::{error::SdkResult, mcp_client::client_runtime_core};
 use rust_mcp_sdk::{McpClient, StdioTransport, TransportOptions};
@@ -73,10 +73,7 @@ async fn main() -> SdkResult<()> {
     utils.call_add_tool(100, 25).await?;
 
     // Set the log level
-    utils
-        .client
-        .set_logging_level(rust_mcp_schema::LoggingLevel::Debug)
-        .await?;
+    utils.client.set_logging_level(LoggingLevel::Debug).await?;
 
     // Send 3 ping requests to the server, with a 2-second interval between each ping request.
     utils.ping_n_times(3).await;

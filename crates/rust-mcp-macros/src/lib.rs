@@ -254,6 +254,13 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput); // Parse the input as a function
     let input_ident = &input.ident;
 
+    // Conditionally select the path for Tool
+    let base_crate = if cfg!(feature = "sdk") {
+        quote! { rust_mcp_sdk::schema }
+    } else {
+        quote! { rust_mcp_schema }
+    };
+
     let macro_attributes = parse_macro_input!(attributes as McpToolMacroAttributes);
 
     let tool_name = macro_attributes.name.unwrap_or_default();
@@ -285,7 +292,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             .title
             .map_or(quote! {None}, |v| quote! {Some(#v)});
         quote! {
-            Some(rust_mcp_schema::ToolAnnotations {
+            Some(#base_crate::ToolAnnotations {
                                     destructive_hint: #destructive_hint,
                                     idempotent_hint: #idempotent_hint,
                                     open_world_hint: #open_world_hint,
@@ -299,19 +306,19 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
     #[cfg(feature = "2025_03_26")]
     let tool_token = quote! {
-        rust_mcp_schema::Tool {
+        #base_crate::Tool {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
-            input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
+            input_schema: #base_crate::ToolInputSchema::new(required, properties),
             annotations: #annotations
         }
     };
     #[cfg(feature = "2024_11_05")]
     let tool_token = quote! {
-        rust_mcp_schema::Tool {
+        #base_crate::Tool {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
-            input_schema: rust_mcp_schema::ToolInputSchema::new(required, properties),
+            input_schema: #base_crate::ToolInputSchema::new(required, properties),
         }
     };
 
@@ -326,7 +333,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// The tool includes the name, description, and input schema derived from
             /// the struct's attributes.
-            pub fn tool()-> rust_mcp_schema::Tool
+            pub fn tool()-> #base_crate::Tool
             {
                 let json_schema = &#input_ident::json_schema();
 

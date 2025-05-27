@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
+    self,
     schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-    RpcError,
+    RpcError, ServerRequest,
 };
 use rust_mcp_sdk::{mcp_client::ClientHandlerCore, McpClient};
 pub struct MyClientHandler;
@@ -18,15 +19,15 @@ impl ClientHandlerCore for MyClientHandler {
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
             RequestFromServer::ServerRequest(server_request) => match server_request {
-                rust_mcp_schema::ServerRequest::PingRequest(_) => {
-                    return Ok(rust_mcp_schema::Result::default().into());
+                ServerRequest::PingRequest(_) => {
+                    return Ok(schema::Result::default().into());
                 }
-                rust_mcp_schema::ServerRequest::CreateMessageRequest(_create_message_request) => {
+                ServerRequest::CreateMessageRequest(_create_message_request) => {
                     Err(RpcError::internal_error().with_message(
                         "CreateMessageRequest handler is not implemented".to_string(),
                     ))
                 }
-                rust_mcp_schema::ServerRequest::ListRootsRequest(_list_roots_request) => {
+                ServerRequest::ListRootsRequest(_list_roots_request) => {
                     Err(RpcError::internal_error()
                         .with_message("ListRootsRequest handler is not implemented".to_string()))
                 }

@@ -1,11 +1,11 @@
 # Hello World MCP Server (Core) - SSE Transport
 
-A basic MCP server implementation featuring two custom tools: `Say Hello` and `Say Goodbye` , utilizing [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) and [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) , using SSE transport
+A basic MCP server implementation featuring two custom tools: `Say Hello` and `Say Goodbye` , utilizing [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) , using SSE transport
 
 ## Overview
 
 This project showcases a fundamental MCP server implementation, highlighting the capabilities of
-[rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) and [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) and with these features:
+[rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) with these features:
 
 - SSE transport
 - Custom server handler

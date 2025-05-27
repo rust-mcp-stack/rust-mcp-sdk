@@ -681,7 +681,6 @@ version = "0.1.15"
 dependencies = [
  "async-trait",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -696,7 +695,6 @@ version = "0.1.6"
 dependencies = [
  "async-trait",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -709,7 +707,6 @@ version = "0.1.6"
 dependencies = [
  "async-trait",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -724,7 +721,6 @@ version = "0.1.15"
 dependencies = [
  "async-trait",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -1890,7 +1886,6 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -1905,7 +1900,6 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -1920,7 +1914,6 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",
@@ -1937,7 +1930,6 @@ dependencies = [
  "async-trait",
  "colored",
  "futures",
- "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde",
  "serde_json",

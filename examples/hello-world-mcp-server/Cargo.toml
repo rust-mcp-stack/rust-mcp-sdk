@@ -13,7 +13,6 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "hyper-server",
     "ssl",
 ] }
-rust-mcp-schema = { workspace = true }
 
 tokio = { workspace = true }
 serde = { workspace = true }

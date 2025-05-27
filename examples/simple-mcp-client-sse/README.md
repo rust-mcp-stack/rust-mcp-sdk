@@ -4,7 +4,7 @@ This is a simple MCP (Model Context Protocol) client implemented with the rust-m
 
 ## Overview
 
-This project demonstrates a basic MCP client implementation, showcasing the features of rust-mcp-schema and rust-mcp-sdk.
+This project demonstrates a basic MCP client implementation, showcasing the features of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk).
 
 This example connects to a running instance of the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, which has already been started with the sse flag.
 
@@ -26,6 +26,7 @@ cd rust-mcp-sdk
 ```bash
 npx @modelcontextprotocol/server-everything sse
 ```
+
 > It launches the server, making everything accessible via the SSE transport at http://localhost:3001/sse.
 
 2. Open a new terminal and run the project with:

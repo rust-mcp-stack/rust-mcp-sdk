@@ -2,7 +2,7 @@ mod handler;
 mod tools;
 
 use handler::MyServerHandler;
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };

@@ -12,7 +12,6 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "macros",
     "hyper-server",
 ] }
-rust-mcp-schema = { workspace = true }
 
 tokio = { workspace = true }
 serde = { workspace = true }
