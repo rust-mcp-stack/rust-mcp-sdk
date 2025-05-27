@@ -36,7 +36,7 @@ This is what your Cargo.toml looks like after the dependencies are added:
 [package]
 name = "hello-world-mcp-server"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
@@ -267,12 +267,16 @@ Now we can use the binary like any other MCP Server in your desired environment.
 1- launch the mcp-inspector:
 
 ```sh
-npx @modelcontextprotocol/inspector
+npx -y @modelcontextprotocol/inspector ./target/release/hello-world-mcp-server
 ```
 
-> you will get a message like: `MCP Inspector is up and running at http://localhost:5173` 🚀
+```
+Starting MCP inspector...
+⚙ Proxy server listening on port 6277
+🔍 MCP Inspector is up and running at http://127.0.0.1:6274 🚀
+```
 
-Open that address in a web browser:
+Open the address in a web browser:
 
 2- Select STDIO as the transport, enter your binary path in the Command section, and click the Connect button. You should see a message confirming that your server started successfully.
 
