@@ -13,7 +13,7 @@ edition = "2021"
 [dependencies]
 rust-mcp-schema = { workspace = true }
 rust-mcp-transport = { workspace = true, default-features = false, optional = true }
-rust-mcp-macros = { workspace = true, optional = true }
+rust-mcp-macros = { workspace = true, optional = true, features = ["sdk"] }
 
 tokio.workspace = true
 serde = { workspace = true }
@@ -57,7 +57,7 @@ hyper-server = [
     "rust-mcp-transport/sse",
 ]
 ssl = ["axum-server/tls-rustls"]
-macros = ["rust-mcp-macros"]
+macros = ["rust-mcp-macros/sdk"]
 
 [lints]
 workspace = true

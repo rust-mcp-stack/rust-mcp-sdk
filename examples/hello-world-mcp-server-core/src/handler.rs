@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
     ClientRequest, ListToolsResult, RpcError,
 };

@@ -6,7 +6,7 @@ use std::time::Duration;
 use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
 
 use handler::MyServerHandler;
-use rust_mcp_schema::{
+use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };

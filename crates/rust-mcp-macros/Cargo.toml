@@ -41,3 +41,4 @@ latest = ["2025_03_26"]
 2025_03_26 = ["rust-mcp-schema/2025_03_26"]
 # enabled mcp schema version 2024_11_05
 2024_11_05 = ["rust-mcp-schema/2024_11_05"]
+sdk = []
