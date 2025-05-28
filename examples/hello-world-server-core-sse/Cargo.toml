@@ -1,6 +1,6 @@
 [package]
 name = "hello-world-server-core-sse"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 publish = false
 license = "MIT"

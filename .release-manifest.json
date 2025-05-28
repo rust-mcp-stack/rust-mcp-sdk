@@ -1,13 +1,13 @@
 {
-    "crates/rust-mcp-sdk": "0.4.0",
+    "crates/rust-mcp-sdk": "0.4.1",
     "crates/rust-mcp-macros": "0.4.0",
-    "crates/rust-mcp-transport": "0.3.2",
-    "examples/hello-world-mcp-server": "0.1.16",
-    "examples/hello-world-mcp-server-core": "0.1.7",
-    "examples/simple-mcp-client": "0.1.16",
-    "examples/simple-mcp-client-core": "0.1.16",
-    "examples/hello-world-server-core-sse": "0.1.7",
-    "examples/hello-world-server-sse": "0.1.16",
-    "examples/simple-mcp-client-core-sse": "0.1.7",
-    "examples/simple-mcp-client-sse": "0.1.7"
+    "crates/rust-mcp-transport": "0.3.3",
+    "examples/hello-world-mcp-server": "0.1.17",
+    "examples/hello-world-mcp-server-core": "0.1.8",
+    "examples/simple-mcp-client": "0.1.17",
+    "examples/simple-mcp-client-core": "0.1.17",
+    "examples/hello-world-server-core-sse": "0.1.8",
+    "examples/hello-world-server-sse": "0.1.17",
+    "examples/simple-mcp-client-core-sse": "0.1.8",
+    "examples/simple-mcp-client-sse": "0.1.8"
 }
