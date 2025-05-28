@@ -49,8 +49,6 @@ impl SseStream {
         let mut request_headers: HeaderMap = custom_headers.to_owned().unwrap_or_default();
         request_headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
 
-        let request_headers_clone = request_headers.clone();
-
         // Main loop for reconnection attempts
         loop {
             // Check for cancellation before attempting connection
@@ -63,7 +61,7 @@ impl SseStream {
             let response = match self
                 .sse_client
                 .get(&self.sse_url)
-                .headers(request_headers_clone.clone())
+                .headers(request_headers.clone())
                 .send()
                 .await
             {
