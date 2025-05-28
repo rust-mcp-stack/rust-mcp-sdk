@@ -99,6 +99,8 @@ impl SseStream {
                                     }
                                     return;
                                 }
+                                retry_count += 1;
+                                time::sleep(self.retry_delay).await;
                                 break; // Stream ended, break from inner loop to reconnect
                             }
                         }
