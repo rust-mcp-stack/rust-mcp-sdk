@@ -206,6 +206,8 @@ where
         let max_retries = self.max_retries;
         let retry_delay = self.retry_delay;
 
+        let custom_headers = self.custom_headers.clone();
+
         let read_stream = SseStream {
             sse_client,
             sse_url,
@@ -218,7 +220,7 @@ where
         let cancellation_token_sse = cancellation_token.clone();
         let sse_task_handle = tokio::spawn(async move {
             read_stream
-                .run(endpoint_event_tx, cancellation_token_sse)
+                .run(endpoint_event_tx, cancellation_token_sse, &custom_headers)
                 .await;
         });
         let mut sse_task_lock = self.sse_task.write().await;
