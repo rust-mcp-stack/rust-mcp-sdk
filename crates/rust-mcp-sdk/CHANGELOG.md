@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.3...rust-mcp-sdk-v0.4.0) (2025-05-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* make rust-mcp-sdk the sole dependency ([#43](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/43))
+
+### 🚀 Features
+
+* Make rust-mcp-sdk the sole dependency ([#43](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/43)) ([d1973ca](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/d1973ca037c1c6367261bb48a9a4ec89c3a448ac))
+
 ## [0.3.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.3.2...rust-mcp-sdk-v0.3.3) (2025-05-25)
 
 
