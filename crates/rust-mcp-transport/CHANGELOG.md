@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.2...rust-mcp-transport-v0.3.3) (2025-05-28)
+
+
+### 🐛 Bug Fixes
+
+* Ensure custom headers are included in initial SSE connection to remote MCP Server ([#46](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/46)) ([166939e](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/166939ee47218675e3883cb86209cd95aa19957e))
+
 ## [0.3.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.1...rust-mcp-transport-v0.3.2) (2025-05-25)
 
 
