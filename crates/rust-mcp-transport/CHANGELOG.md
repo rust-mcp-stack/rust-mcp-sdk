@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.3...rust-mcp-transport-v0.3.4) (2025-05-30)
+
+
+### 🚀 Features
+
+* Multi protocol version - phase 1 ([#49](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/49)) ([4c4daf0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4c4daf0b1dce2554ecb7ed4fb723a1c3dd07e541))
+
 ## [0.3.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.2...rust-mcp-transport-v0.3.3) (2025-05-28)
 
 
