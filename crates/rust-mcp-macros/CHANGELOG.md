@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.4.0...rust-mcp-macros-v0.4.1) (2025-05-30)
+
+
+### 🚀 Features
+
+* Multi protocol version - phase 1 ([#49](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/49)) ([4c4daf0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4c4daf0b1dce2554ecb7ed4fb723a1c3dd07e541))
+
 ## [0.4.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.3.0...rust-mcp-macros-v0.4.0) (2025-05-28)
 
 
