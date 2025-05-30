@@ -12,6 +12,7 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "macros",
     "hyper-server",
     "ssl",
+    "2025_03_26"
 ] }
 
 tokio = { workspace = true }

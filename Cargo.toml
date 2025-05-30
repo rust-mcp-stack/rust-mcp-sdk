@@ -18,10 +18,10 @@ members = [
 # Workspace member crates
 rust-mcp-transport = { version = "0.3.3", path = "crates/rust-mcp-transport", default-features = false }
 rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
-rust-mcp-macros = { version = "0.4.0", path = "crates/rust-mcp-macros" }
+rust-mcp-macros = { version = "0.4.0", path = "crates/rust-mcp-macros", default-features = false }
 
 # External crates
-rust-mcp-schema = { version = "0.5" }
+rust-mcp-schema = { version = "0.5", default-features = false  }
 futures = { version = "0.3" }
 tokio = { version = "1.4", features = ["full"] }
 serde = { version = "1.0", features = ["derive", "serde_derive"] }
