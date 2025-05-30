@@ -21,7 +21,7 @@ quote = "1.0"
 proc-macro2 = "1.0"
 
 [dev-dependencies]
-rust-mcp-schema = { workspace = true }
+rust-mcp-schema = { workspace = true, default-features = false }
 
 [lints]
 workspace = true
@@ -38,7 +38,7 @@ default = ["2025_03_26"] # Default features
 latest = ["2025_03_26"]
 
 # enabled mcp schema version 2025_03_26
-2025_03_26 = ["rust-mcp-schema/2025_03_26"]
+2025_03_26 = ["rust-mcp-schema/2025_03_26","rust-mcp-schema/schema_utils"]
 # enabled mcp schema version 2024_11_05
-2024_11_05 = ["rust-mcp-schema/2024_11_05"]
+2024_11_05 = ["rust-mcp-schema/2024_11_05","rust-mcp-schema/schema_utils"]
 sdk = []

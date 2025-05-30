@@ -10,6 +10,7 @@ license = "MIT"
 rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "server",
     "macros",
+    "2025_03_26"
 ] }
 
 tokio = { workspace = true }

@@ -11,7 +11,8 @@ license = "MIT"
 edition = "2021"
 
 [dependencies]
-rust-mcp-schema = { workspace = true }
+
+rust-mcp-schema = { workspace = true, default-features=false}
 
 async-trait = { workspace = true }
 futures = { workspace = true }
@@ -34,7 +35,12 @@ workspace = true
 
 ### FEATURES #################################################################
 [features]
-default = ["stdio", "sse"] # Default features
+default = ["stdio", "sse","2025_03_26"] # Default features
 
 stdio = []
 sse = ["reqwest"]
+# enabled mcp protocol version 2025_03_26
+2025_03_26 = ["rust-mcp-schema/2025_03_26","rust-mcp-schema/schema_utils"]
+
+# enabled mcp protocol version 2024_11_05
+2024_11_05 = ["rust-mcp-schema/2024_11_05","rust-mcp-schema/schema_utils"]
