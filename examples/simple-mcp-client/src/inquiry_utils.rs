@@ -52,8 +52,6 @@ impl InquiryUtils {
             ("experimental", self.client.server_has_experimental()),
         ];
 
-        println!(">>> pp {:?} ", self.client.client_info().protocol_version);
-
         capability_vec.iter().for_each(|(tool_name, opt)| {
             println!(
                 "{}: {}",
