@@ -1,6 +1,6 @@
 use super::{HyperServer, HyperServerOptions};
 use crate::mcp_server::{server_runtime_core::RuntimeCoreInternalHandler, ServerHandlerCore};
-use rust_mcp_schema::InitializeResult;
+use crate::schema::InitializeResult;
 use std::sync::Arc;
 
 /// Creates a new HyperServer instance with the provided handler and options

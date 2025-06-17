@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_mcp_schema::{
+use crate::schema::{
     schema_utils::{
         MessageFromClient, NotificationFromServer, RequestFromServer, ResultFromClient,
         ServerMessage,
     },
     InitializeRequestParams, RpcError,
 };
+use async_trait::async_trait;
 use rust_mcp_transport::Transport;
 
 use crate::{

@@ -6,6 +6,7 @@ mod client_sse;
 pub mod error;
 mod mcp_stream;
 mod message_dispatcher;
+mod schema;
 #[cfg(feature = "sse")]
 mod sse;
 mod stdio;

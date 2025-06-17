@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 
 #[cfg(feature = "server")]
-use rust_mcp_schema::schema_utils::{NotificationFromClient, RequestFromClient, ResultFromServer};
+use crate::schema::schema_utils::{NotificationFromClient, RequestFromClient, ResultFromServer};
 
 #[cfg(feature = "client")]
-use rust_mcp_schema::schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient};
+use crate::schema::schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient};
 
-use rust_mcp_schema::RpcError;
+use crate::schema::RpcError;
 
 use crate::error::SdkResult;
 

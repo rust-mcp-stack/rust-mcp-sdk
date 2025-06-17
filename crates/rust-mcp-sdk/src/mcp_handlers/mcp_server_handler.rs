@@ -1,5 +1,5 @@
+use crate::schema::{schema_utils::CallToolError, *};
 use async_trait::async_trait;
-use rust_mcp_schema::{schema_utils::CallToolError, *};
 use serde_json::Value;
 
 use crate::{mcp_traits::mcp_server::McpServer, utils::enforce_compatible_protocol_version};

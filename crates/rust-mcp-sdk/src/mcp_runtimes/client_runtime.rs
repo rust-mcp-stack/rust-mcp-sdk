@@ -1,14 +1,14 @@
 pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 
-use async_trait::async_trait;
-use futures::future::join_all;
-use futures::StreamExt;
-use rust_mcp_schema::schema_utils::{self, MessageFromClient, ServerMessage};
-use rust_mcp_schema::{
+use crate::schema::schema_utils::{self, MessageFromClient, ServerMessage};
+use crate::schema::{
     InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
     RpcError, ServerResult,
 };
+use async_trait::async_trait;
+use futures::future::join_all;
+use futures::StreamExt;
 use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncBufReadExt, BufReader};

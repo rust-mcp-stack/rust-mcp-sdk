@@ -13,7 +13,7 @@ edition = "2021"
 [dependencies]
 rust-mcp-schema = { workspace = true, default-features=false }
 rust-mcp-transport = { workspace = true, default-features = false, optional = true }
-rust-mcp-macros = { workspace = true, optional = true, default-features=false, feature=["sdk"] }
+rust-mcp-macros = { workspace = true, optional = true, default-features=false }
 
 tokio.workspace = true
 serde = { workspace = true }
@@ -46,7 +46,7 @@ default = [
     "macros",
     "hyper-server",
     "ssl",
-    "2025_03_26"
+    "2024_11_05"
 ] # All features enabled by default
 server = ["rust-mcp-transport/stdio"] # Server feature
 client = ["rust-mcp-transport/stdio", "rust-mcp-transport/sse"] # Client feature

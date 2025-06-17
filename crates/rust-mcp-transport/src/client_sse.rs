@@ -11,8 +11,9 @@ use bytes::Bytes;
 use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::Client;
-use rust_mcp_schema::schema_utils::{McpMessage, RpcMessage};
-use rust_mcp_schema::RequestId;
+
+use crate::schema::schema_utils::{McpMessage, RpcMessage};
+use crate::schema::RequestId;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::pin::Pin;

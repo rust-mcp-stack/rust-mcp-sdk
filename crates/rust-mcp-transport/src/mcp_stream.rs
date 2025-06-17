@@ -1,3 +1,5 @@
+use crate::schema::schema_utils::RpcMessage;
+use crate::schema::{RequestId, RpcError};
 use crate::{
     error::{GenericSendError, TransportError},
     message_dispatcher::MessageDispatcher,
@@ -5,7 +7,6 @@ use crate::{
     IoStream,
 };
 use futures::Stream;
-use rust_mcp_schema::{schema_utils::RpcMessage, RequestId, RpcError};
 use std::{
     collections::HashMap,
     pin::Pin,

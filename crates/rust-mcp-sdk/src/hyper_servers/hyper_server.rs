@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_mcp_schema::InitializeResult;
+use crate::schema::InitializeResult;
 
 use crate::mcp_server::{server_runtime::ServerRuntimeInternalHandler, ServerHandler};
 

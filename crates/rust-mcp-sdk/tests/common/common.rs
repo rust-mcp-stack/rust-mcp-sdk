@@ -1,9 +1,9 @@
 mod test_server;
 use async_trait::async_trait;
-use rust_mcp_schema::{
+use rust_mcp_sdk::mcp_client::ClientHandler;
+use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
 };
-use rust_mcp_sdk::mcp_client::ClientHandler;
 pub use test_server::*;
 
 pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything";

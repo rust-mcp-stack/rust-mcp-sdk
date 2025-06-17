@@ -1,6 +1,6 @@
+use crate::schema::schema_utils::*;
+use crate::schema::*;
 use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::*;
-use rust_mcp_schema::*;
 
 use crate::mcp_traits::mcp_client::McpClient;
 

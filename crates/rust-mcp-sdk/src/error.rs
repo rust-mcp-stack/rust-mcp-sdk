@@ -1,4 +1,4 @@
-use rust_mcp_schema::RpcError;
+use crate::schema::RpcError;
 use rust_mcp_transport::error::TransportError;
 use thiserror::Error;
 
@@ -18,7 +18,7 @@ pub enum McpSdkError {
     #[error("{0}")]
     AnyError(Box<(dyn std::error::Error + Send + Sync)>),
     #[error("{0}")]
-    SdkError(#[from] rust_mcp_schema::schema_utils::SdkError),
+    SdkError(#[from] crate::schema::schema_utils::SdkError),
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
     TransportServerError(#[from] TransportServerError),

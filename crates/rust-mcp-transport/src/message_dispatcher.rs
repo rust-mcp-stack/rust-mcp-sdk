@@ -1,9 +1,10 @@
-use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::{
+use crate::schema::schema_utils::{
     self, ClientMessage, FromMessage, McpMessage, MessageFromClient, MessageFromServer,
     ServerMessage,
 };
-use rust_mcp_schema::{RequestId, RpcError};
+use crate::schema::{RequestId, RpcError};
+use async_trait::async_trait;
+
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::AtomicI64;

@@ -93,6 +93,4 @@ pub mod macros {
     pub use rust_mcp_macros::*;
 }
 
-pub mod schema {
-    pub use rust_mcp_schema::*;
-}
+pub mod schema;

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::{
+use crate::schema::schema_utils::{
     self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
     ResultFromServer,
 };
-use rust_mcp_schema::{InitializeResult, RpcError};
+use crate::schema::{ClientRequest, InitializeResult, RpcError};
+use async_trait::async_trait;
 use rust_mcp_transport::Transport;
 
 use crate::error::SdkResult;
@@ -63,9 +63,9 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
         runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         // store the client details if the request is a client initialization request
-        if let schema_utils::RequestFromClient::ClientRequest(
-            rust_mcp_schema::ClientRequest::InitializeRequest(initialize_request),
-        ) = &client_jsonrpc_request
+        if let schema_utils::RequestFromClient::ClientRequest(ClientRequest::InitializeRequest(
+            initialize_request,
+        )) = &client_jsonrpc_request
         {
             // keep a copy of the InitializeRequestParams which includes client_info and capabilities
             runtime
