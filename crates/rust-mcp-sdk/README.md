@@ -400,6 +400,7 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 | <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
 | <a href="https://github.com/EricLBuehler/mistral.rs"><img src="https://avatars.githubusercontent.com/u/65165915?s=64" width="64"/></a> | [mistral.rs](https://github.com/EricLBuehler/mistral.rs) | Blazingly fast LLM inference. | [GitHub](https://github.com/EricLBuehler/mistral.rs) |
 | <a href="https://github.com/moonrepo/moon"><img src="https://avatars.githubusercontent.com/u/102833400?s=64" width="64"/></a> | [moon](https://github.com/moonrepo/moon) | moon is a repository management, organization, orchestration, and notification tool for the web ecosystem, written in Rust. | [GitHub](https://github.com/moonrepo/moon) |
+|  | [Ruskel](https://github.com/cortesi/ruskel) | Ruskel produces a syntactically correct, single-page skeleton of a crate's public API. | [GitHub](https://github.com/cortesi/ruskel) |
 
 
 
