@@ -14,7 +14,7 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "ssl",
     "2025_03_26",
 ] }
-# 2025_03_26 , 2024_11_05
+
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
