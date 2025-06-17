@@ -27,8 +27,13 @@ args = ["nextest", "run", "--no-tests=pass"]
 [tasks.doc-test]
 workspace = false
 command = "cargo"
-args = ["test", "--doc", "-p", "rust-mcp-sdk", "-p", "rust-mcp-transport"]
-dependencies = ["doc-test-macros"]
+args = ["test", "--doc", "-p", "rust-mcp-sdk"]
+dependencies = ["doc-test-macros", "doc-test-transport"]
+
+[tasks.doc-test-transport]
+workspace = false
+command = "cargo"
+args = ["test", "--doc", "-p", "rust-mcp-sdk"]
 
 [tasks.doc-test-macros]
 workspace = false

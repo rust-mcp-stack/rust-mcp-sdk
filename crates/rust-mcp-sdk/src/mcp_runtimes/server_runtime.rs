@@ -1,10 +1,10 @@
 pub mod mcp_server_runtime;
 pub mod mcp_server_runtime_core;
 
+use crate::schema::schema_utils::{self, MessageFromServer};
+use crate::schema::{InitializeRequestParams, InitializeResult, RpcError};
 use async_trait::async_trait;
 use futures::StreamExt;
-use rust_mcp_schema::schema_utils::MessageFromServer;
-use rust_mcp_schema::{self, schema_utils, InitializeRequestParams, InitializeResult, RpcError};
 use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use schema_utils::ClientMessage;
 use std::pin::Pin;

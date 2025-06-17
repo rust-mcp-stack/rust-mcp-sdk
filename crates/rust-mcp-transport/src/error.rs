@@ -1,4 +1,4 @@
-use rust_mcp_schema::{schema_utils::SdkError, RpcError};
+use crate::schema::{schema_utils::SdkError, RpcError};
 use thiserror::Error;
 
 use crate::utils::CancellationError;

@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use rust_mcp_schema::InitializeResult;
+use crate::schema::InitializeResult;
 use rust_mcp_transport::TransportOptions;
 
 use crate::mcp_traits::mcp_handler::McpServerHandler;

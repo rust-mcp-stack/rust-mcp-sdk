@@ -3,7 +3,7 @@ pub mod test_server_common {
     use async_trait::async_trait;
     use tokio_stream::StreamExt;
 
-    use rust_mcp_schema::{
+    use rust_mcp_sdk::schema::{
         Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
     use rust_mcp_sdk::{

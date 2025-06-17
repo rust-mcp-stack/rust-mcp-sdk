@@ -1,7 +1,7 @@
+use crate::schema::schema_utils::{McpMessage, RpcMessage};
+use crate::schema::RequestId;
 use async_trait::async_trait;
 use futures::Stream;
-use rust_mcp_schema::schema_utils::{McpMessage, RpcMessage};
-use rust_mcp_schema::RequestId;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;

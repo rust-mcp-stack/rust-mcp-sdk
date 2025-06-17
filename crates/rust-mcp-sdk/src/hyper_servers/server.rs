@@ -16,8 +16,8 @@ use super::{
     routes::app_routes,
     IdGenerator, InMemorySessionStore, UuidGenerator,
 };
+use crate::schema::InitializeResult;
 use axum::Router;
-use rust_mcp_schema::InitializeResult;
 use rust_mcp_transport::TransportOptions;
 
 // Default client ping interval (12 seconds)

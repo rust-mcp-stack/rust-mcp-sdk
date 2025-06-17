@@ -1,10 +1,10 @@
-use async_trait::async_trait;
-use rust_mcp_schema::{
+use crate::schema::{
     CancelledNotification, CreateMessageRequest, CreateMessageResult, ListRootsRequest,
     ListRootsResult, LoggingMessageNotification, PingRequest, ProgressNotification,
     PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     Result, RpcError, ToolListChangedNotification,
 };
+use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::mcp_traits::mcp_client::McpClient;

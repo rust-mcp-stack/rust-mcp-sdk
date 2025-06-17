@@ -1,7 +1,6 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
-use rust_mcp_schema::{
+use crate::schema::{
     schema_utils::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
         ResultFromClient,
@@ -16,6 +15,7 @@ use rust_mcp_schema::{
     ResourceUpdatedNotificationParams, RpcError, ServerCapabilities, SetLevelRequest,
     ToolListChangedNotification, ToolListChangedNotificationParams,
 };
+use async_trait::async_trait;
 use rust_mcp_transport::{McpDispatch, MessageDispatcher};
 
 use crate::{error::SdkResult, utils::format_assertion_message};
@@ -185,7 +185,7 @@ pub trait McpServer: Sync + Send {
     /// # Returns
     /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
     /// If the request or conversion fails, an error is returned.
-    async fn ping(&self, timeout: Option<Duration>) -> SdkResult<rust_mcp_schema::Result> {
+    async fn ping(&self, timeout: Option<Duration>) -> SdkResult<crate::schema::Result> {
         let ping_request = PingRequest::new(None);
         let response = self.request(ping_request.into(), timeout).await?;
         Ok(response.try_into()?)

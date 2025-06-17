@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_mcp_schema::{
+use crate::schema::{
     schema_utils::{
-        CallToolError, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
-        ResultFromServer,
+        self, CallToolError, ClientMessage, MessageFromServer, NotificationFromClient,
+        RequestFromClient, ResultFromServer,
     },
-    CallToolResult, InitializeResult, RpcError,
+    CallToolResult, ClientNotification, ClientRequest, InitializeResult, RpcError,
 };
+use async_trait::async_trait;
 use rust_mcp_transport::Transport;
 
 use super::ServerRuntime;
@@ -77,26 +77,24 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         match client_jsonrpc_request {
-            rust_mcp_schema::schema_utils::RequestFromClient::ClientRequest(client_request) => {
+            schema_utils::RequestFromClient::ClientRequest(client_request) => {
                 match client_request {
-                    rust_mcp_schema::ClientRequest::InitializeRequest(initialize_request) => self
+                    ClientRequest::InitializeRequest(initialize_request) => self
                         .handler
                         .handle_initialize_request(initialize_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::PingRequest(ping_request) => self
+                    ClientRequest::PingRequest(ping_request) => self
                         .handler
                         .handle_ping_request(ping_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::ListResourcesRequest(
-                        list_resources_request,
-                    ) => self
+                    ClientRequest::ListResourcesRequest(list_resources_request) => self
                         .handler
                         .handle_list_resources_request(list_resources_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::ListResourceTemplatesRequest(
+                    ClientRequest::ListResourceTemplatesRequest(
                         list_resource_templates_request,
                     ) => self
                         .handler
@@ -106,40 +104,38 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                         )
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::ReadResourceRequest(read_resource_request) => {
-                        self.handler
-                            .handle_read_resource_request(read_resource_request, runtime)
-                            .await
-                            .map(|value| value.into())
-                    }
-                    rust_mcp_schema::ClientRequest::SubscribeRequest(subscribe_request) => self
+                    ClientRequest::ReadResourceRequest(read_resource_request) => self
+                        .handler
+                        .handle_read_resource_request(read_resource_request, runtime)
+                        .await
+                        .map(|value| value.into()),
+                    ClientRequest::SubscribeRequest(subscribe_request) => self
                         .handler
                         .handle_subscribe_request(subscribe_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::UnsubscribeRequest(unsubscribe_request) => self
+                    ClientRequest::UnsubscribeRequest(unsubscribe_request) => self
                         .handler
                         .handle_unsubscribe_request(unsubscribe_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::ListPromptsRequest(list_prompts_request) => {
-                        self.handler
-                            .handle_list_prompts_request(list_prompts_request, runtime)
-                            .await
-                            .map(|value| value.into())
-                    }
+                    ClientRequest::ListPromptsRequest(list_prompts_request) => self
+                        .handler
+                        .handle_list_prompts_request(list_prompts_request, runtime)
+                        .await
+                        .map(|value| value.into()),
 
-                    rust_mcp_schema::ClientRequest::GetPromptRequest(prompt_request) => self
+                    ClientRequest::GetPromptRequest(prompt_request) => self
                         .handler
                         .handle_get_prompt_request(prompt_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::ListToolsRequest(list_tools_request) => self
+                    ClientRequest::ListToolsRequest(list_tools_request) => self
                         .handler
                         .handle_list_tools_request(list_tools_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::CallToolRequest(call_tool_request) => {
+                    ClientRequest::CallToolRequest(call_tool_request) => {
                         let result = self
                             .handler
                             .handle_call_tool_request(call_tool_request, runtime)
@@ -150,19 +146,19 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                             |value| value.into(),
                         ))
                     }
-                    rust_mcp_schema::ClientRequest::SetLevelRequest(set_level_request) => self
+                    ClientRequest::SetLevelRequest(set_level_request) => self
                         .handler
                         .handle_set_level_request(set_level_request, runtime)
                         .await
                         .map(|value| value.into()),
-                    rust_mcp_schema::ClientRequest::CompleteRequest(complete_request) => self
+                    ClientRequest::CompleteRequest(complete_request) => self
                         .handler
                         .handle_complete_request(complete_request, runtime)
                         .await
                         .map(|value| value.into()),
                 }
             }
-            rust_mcp_schema::schema_utils::RequestFromClient::CustomRequest(value) => self
+            schema_utils::RequestFromClient::CustomRequest(value) => self
                 .handler
                 .handle_custom_request(value, runtime)
                 .await
@@ -185,43 +181,37 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         match client_jsonrpc_notification {
-            rust_mcp_schema::schema_utils::NotificationFromClient::ClientNotification(
-                client_notification,
-            ) => match client_notification {
-                rust_mcp_schema::ClientNotification::CancelledNotification(
-                    cancelled_notification,
-                ) => {
-                    self.handler
-                        .handle_cancelled_notification(cancelled_notification, runtime)
-                        .await?;
+            schema_utils::NotificationFromClient::ClientNotification(client_notification) => {
+                match client_notification {
+                    ClientNotification::CancelledNotification(cancelled_notification) => {
+                        self.handler
+                            .handle_cancelled_notification(cancelled_notification, runtime)
+                            .await?;
+                    }
+                    ClientNotification::InitializedNotification(initialized_notification) => {
+                        self.handler
+                            .handle_initialized_notification(initialized_notification, runtime)
+                            .await?;
+                        self.handler.on_initialized(runtime).await;
+                    }
+                    ClientNotification::ProgressNotification(progress_notification) => {
+                        self.handler
+                            .handle_progress_notification(progress_notification, runtime)
+                            .await?;
+                    }
+                    ClientNotification::RootsListChangedNotification(
+                        roots_list_changed_notification,
+                    ) => {
+                        self.handler
+                            .handle_roots_list_changed_notification(
+                                roots_list_changed_notification,
+                                runtime,
+                            )
+                            .await?;
+                    }
                 }
-                rust_mcp_schema::ClientNotification::InitializedNotification(
-                    initialized_notification,
-                ) => {
-                    self.handler
-                        .handle_initialized_notification(initialized_notification, runtime)
-                        .await?;
-                    self.handler.on_initialized(runtime).await;
-                }
-                rust_mcp_schema::ClientNotification::ProgressNotification(
-                    progress_notification,
-                ) => {
-                    self.handler
-                        .handle_progress_notification(progress_notification, runtime)
-                        .await?;
-                }
-                rust_mcp_schema::ClientNotification::RootsListChangedNotification(
-                    roots_list_changed_notification,
-                ) => {
-                    self.handler
-                        .handle_roots_list_changed_notification(
-                            roots_list_changed_notification,
-                            runtime,
-                        )
-                        .await?;
-                }
-            },
-            rust_mcp_schema::schema_utils::NotificationFromClient::CustomNotification(value) => {
+            }
+            schema_utils::NotificationFromClient::CustomNotification(value) => {
                 self.handler.handle_custom_notification(value).await?;
             }
         }

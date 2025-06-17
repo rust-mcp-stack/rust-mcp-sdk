@@ -18,7 +18,7 @@ pub(crate) use sse_stream::*;
 #[cfg(feature = "sse")]
 pub(crate) use writable_channel::*;
 
-use rust_mcp_schema::schema_utils::SdkError;
+use crate::schema::schema_utils::SdkError;
 use tokio::time::{timeout, Duration};
 
 use crate::error::{TransportError, TransportResult};

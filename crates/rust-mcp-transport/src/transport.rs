@@ -1,7 +1,7 @@
 use std::{pin::Pin, time::Duration};
 
+use crate::schema::{schema_utils::McpMessage, RequestId};
 use async_trait::async_trait;
-use rust_mcp_schema::{schema_utils::McpMessage, RequestId};
 
 use futures::Stream;
 

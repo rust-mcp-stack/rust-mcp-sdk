@@ -19,34 +19,25 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 /// * `name` - An optional string representing the tool's name.
 /// * `description` - An optional string describing the tool.
 ///
-#[cfg(feature = "2024_11_05")]
-struct McpToolMacroAttributes {
-    name: Option<String>,
-    description: Option<String>,
-}
-
-/// Represents the attributes for the `mcp_tool` procedural macro.
-///
-/// This struct parses and validates the `name` and `description` attributes provided
-/// to the `mcp_tool` macro. Both attributes are required and must not be empty strings.
-///
-/// # Fields
-/// * `name` - An optional string representing the tool's name.
-/// * `description` - An optional string describing the tool.
+/// The following fields are available only with the `2025_03_26` feature:
 /// * `destructive_hint` - Optional boolean for `ToolAnnotations::destructive_hint`.
 /// * `idempotent_hint` - Optional boolean for `ToolAnnotations::idempotent_hint`.
 /// * `open_world_hint` - Optional boolean for `ToolAnnotations::open_world_hint`.
 /// * `read_only_hint` - Optional boolean for `ToolAnnotations::read_only_hint`.
 /// * `title` - Optional string for `ToolAnnotations::title`.
 ///
-#[cfg(feature = "2025_03_26")]
 struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
+    #[cfg(feature = "2025_03_26")]
     destructive_hint: Option<bool>,
+    #[cfg(feature = "2025_03_26")]
     idempotent_hint: Option<bool>,
+    #[cfg(feature = "2025_03_26")]
     open_world_hint: Option<bool>,
+    #[cfg(feature = "2025_03_26")]
     read_only_hint: Option<bool>,
+    #[cfg(feature = "2025_03_26")]
     title: Option<String>,
 }
 
@@ -75,13 +66,20 @@ impl Parse for McpToolMacroAttributes {
     /// - The `name` attribute is missing or empty.
     /// - The `description` attribute is missing or empty.
     fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut name = None;
-        let mut description = None;
-        let mut destructive_hint = None;
-        let mut idempotent_hint = None;
-        let mut open_world_hint = None;
-        let mut read_only_hint = None;
-        let mut title = None;
+        let mut instance = Self {
+            name: None,
+            description: None,
+            #[cfg(feature = "2025_03_26")]
+            destructive_hint: None,
+            #[cfg(feature = "2025_03_26")]
+            idempotent_hint: None,
+            #[cfg(feature = "2025_03_26")]
+            open_world_hint: None,
+            #[cfg(feature = "2025_03_26")]
+            read_only_hint: None,
+            #[cfg(feature = "2025_03_26")]
+            title: None,
+        };
 
         let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
         for meta in meta_list {
@@ -131,33 +129,38 @@ impl Parse for McpToolMacroAttributes {
                             }
                         };
                         match ident_str.as_str() {
-                            "name" => name = Some(value),
-                            "description" => description = Some(value),
+                            "name" => instance.name = Some(value),
+                            "description" => instance.description = Some(value),
                             _ => {}
                         }
                     }
                     "destructive_hint" | "idempotent_hint" | "open_world_hint"
                     | "read_only_hint" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Bool(lit_bool),
-                                ..
-                            }) => lit_bool.value,
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a boolean literal",
-                                ));
+                        #[cfg(feature = "2025_03_26")]
+                        {
+                            let value = match &meta_name_value.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Bool(lit_bool),
+                                    ..
+                                }) => lit_bool.value,
+                                _ => {
+                                    return Err(Error::new_spanned(
+                                        &meta_name_value.value,
+                                        "Expected a boolean literal",
+                                    ));
+                                }
+                            };
+
+                            match ident_str.as_str() {
+                                "destructive_hint" => instance.destructive_hint = Some(value),
+                                "idempotent_hint" => instance.idempotent_hint = Some(value),
+                                "open_world_hint" => instance.open_world_hint = Some(value),
+                                "read_only_hint" => instance.read_only_hint = Some(value),
+                                _ => {}
                             }
-                        };
-                        match ident_str.as_str() {
-                            "destructive_hint" => destructive_hint = Some(value),
-                            "idempotent_hint" => idempotent_hint = Some(value),
-                            "open_world_hint" => open_world_hint = Some(value),
-                            "read_only_hint" => read_only_hint = Some(value),
-                            _ => {}
                         }
                     }
+                    #[cfg(feature = "2025_03_26")]
                     "title" => {
                         let value = match &meta_name_value.value {
                             Expr::Lit(ExprLit {
@@ -171,7 +174,7 @@ impl Parse for McpToolMacroAttributes {
                                 ));
                             }
                         };
-                        title = Some(value);
+                        instance.title = Some(value);
                     }
                     _ => {}
                 }
@@ -179,13 +182,19 @@ impl Parse for McpToolMacroAttributes {
         }
 
         // Validate presence and non-emptiness
-        if name.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+        if instance
+            .name
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
             return Err(Error::new(
                 attributes.span(),
                 "The 'name' attribute is required and must not be empty.",
             ));
         }
-        if description
+        if instance
+            .description
             .as_ref()
             .map(|s| s.trim().is_empty())
             .unwrap_or(true)
@@ -195,20 +204,6 @@ impl Parse for McpToolMacroAttributes {
                 "The 'description' attribute is required and must not be empty.",
             ));
         }
-
-        #[cfg(feature = "2024_11_05")]
-        let instance = Self { name, description };
-
-        #[cfg(feature = "2025_03_26")]
-        let instance = Self {
-            name,
-            description,
-            destructive_hint,
-            idempotent_hint,
-            open_world_hint,
-            read_only_hint,
-            title,
-        };
 
         Ok(instance)
     }
@@ -304,21 +299,23 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         quote! {None}
     };
 
-    #[cfg(feature = "2025_03_26")]
-    let tool_token = quote! {
-        #base_crate::Tool {
-            name: #tool_name.to_string(),
-            description: Some(#tool_description.to_string()),
-            input_schema: #base_crate::ToolInputSchema::new(required, properties),
-            annotations: #annotations
+    let annotations_token = {
+        #[cfg(feature = "2025_03_26")]
+        {
+            quote! { annotations: #annotations }
+        }
+        #[cfg(not(feature = "2025_03_26"))]
+        {
+            quote! {}
         }
     };
-    #[cfg(feature = "2024_11_05")]
+
     let tool_token = quote! {
         #base_crate::Tool {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
             input_schema: #base_crate::ToolInputSchema::new(required, properties),
+            #annotations_token
         }
     };
 

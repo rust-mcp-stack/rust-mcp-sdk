@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_mcp_schema::{
+use crate::schema::{
     schema_utils::{
         MessageFromClient, NotificationFromServer, RequestFromServer, ResultFromClient,
         ServerMessage,
     },
-    InitializeRequestParams, RpcError,
+    InitializeRequestParams, RpcError, ServerNotification, ServerRequest,
 };
+use async_trait::async_trait;
 use rust_mcp_transport::Transport;
 
 use crate::{
@@ -73,18 +73,17 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match server_jsonrpc_request {
             RequestFromServer::ServerRequest(request) => match request {
-                rust_mcp_schema::ServerRequest::PingRequest(ping_request) => self
+                ServerRequest::PingRequest(ping_request) => self
                     .handler
                     .handle_ping_request(ping_request, runtime)
                     .await
                     .map(|value| value.into()),
-                rust_mcp_schema::ServerRequest::CreateMessageRequest(create_message_request) => {
-                    self.handler
-                        .handle_create_message_request(create_message_request, runtime)
-                        .await
-                        .map(|value| value.into())
-                }
-                rust_mcp_schema::ServerRequest::ListRootsRequest(list_roots_request) => self
+                ServerRequest::CreateMessageRequest(create_message_request) => self
+                    .handler
+                    .handle_create_message_request(create_message_request, runtime)
+                    .await
+                    .map(|value| value.into()),
+                ServerRequest::ListRootsRequest(list_roots_request) => self
                     .handler
                     .handle_list_roots_request(list_roots_request, runtime)
                     .await
@@ -118,21 +117,17 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
         match server_jsonrpc_notification {
             NotificationFromServer::ServerNotification(server_notification) => {
                 match server_notification {
-                    rust_mcp_schema::ServerNotification::CancelledNotification(
-                        cancelled_notification,
-                    ) => {
+                    ServerNotification::CancelledNotification(cancelled_notification) => {
                         self.handler
                             .handle_cancelled_notification(cancelled_notification, runtime)
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::ProgressNotification(
-                        progress_notification,
-                    ) => {
+                    ServerNotification::ProgressNotification(progress_notification) => {
                         self.handler
                             .handle_progress_notification(progress_notification, runtime)
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::ResourceListChangedNotification(
+                    ServerNotification::ResourceListChangedNotification(
                         resource_list_changed_notification,
                     ) => {
                         self.handler
@@ -142,7 +137,7 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                             )
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::ResourceUpdatedNotification(
+                    ServerNotification::ResourceUpdatedNotification(
                         resource_updated_notification,
                     ) => {
                         self.handler
@@ -152,7 +147,7 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                             )
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::PromptListChangedNotification(
+                    ServerNotification::PromptListChangedNotification(
                         prompt_list_changed_notification,
                     ) => {
                         self.handler
@@ -162,7 +157,7 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                             )
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::ToolListChangedNotification(
+                    ServerNotification::ToolListChangedNotification(
                         tool_list_changed_notification,
                     ) => {
                         self.handler
@@ -172,7 +167,7 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                             )
                             .await?;
                     }
-                    rust_mcp_schema::ServerNotification::LoggingMessageNotification(
+                    ServerNotification::LoggingMessageNotification(
                         logging_message_notification,
                     ) => {
                         self.handler

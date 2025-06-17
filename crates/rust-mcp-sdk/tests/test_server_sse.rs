@@ -11,11 +11,11 @@ mod tets_server_sse {
         },
     };
     use reqwest::Client;
-    use rust_mcp_schema::{
+    use rust_mcp_sdk::mcp_server::HyperServerOptions;
+    use rust_mcp_sdk::schema::{
         schema_utils::{ResultFromServer, ServerMessage},
         ServerResult,
     };
-    use rust_mcp_sdk::mcp_server::HyperServerOptions;
     use tokio::time::sleep;
 
     #[tokio::test]
