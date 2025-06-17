@@ -35,6 +35,7 @@ This project currently supports following transports:
   - [MCP Client (sse)](#mcp-client-sse)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
+    - [MCP protocol versions with corresponding features](#mcp-protocol-versions-with-corresponding-features)
   -  [Default Features](#default-features)
   -  [Using Only the server Features](#using-only-the-server-features)
   -  [Using Only the client Features](#using-only-the-client-features)
@@ -298,9 +299,16 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `ssl`: This feature enables TLS/SSL support for the **sse** transport when used with the `hyper-server`.
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 
+#### MCP Protocol Versions with Corresponding Features
+
+- `2025_03_26` : Activates MCP Protocol version 2025-03-26 (enabled by default)
+- `2024_11_05` : Activates MCP Protocol version 2024-11-05
+
+> Note: MCP protocol versions are mutually exclusive—only one can be active at any given time.
+
 ### Default Features
 
-All features are enabled by default. When you include rust-mcp-sdk as a dependency without specifying features, all will be included:
+When you add rust-mcp-sdk as a dependency without specifying any features, all features are included, with the latest MCP Protocol version enabled by default:
 
 <!-- x-release-please-start-version -->
 
@@ -327,13 +335,14 @@ Optionally add `hyper-server` for **sse** transport, and `ssl` feature for tls/s
 
 ### Using Only the client Features
 
-If you only need the MCP Client functionality, you can disable the default features and explicitly enable the client feature. Add the following to your Cargo.toml:
+If you only need the MCP Client functionality, you can disable the default features and explicitly enable the client feature.
+Add the following to your Cargo.toml:
 
 <!-- x-release-please-start-version -->
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client"] }
+rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client","2024_11_05"] }
 ```
 
 <!-- x-release-please-end -->
