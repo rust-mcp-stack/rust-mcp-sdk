@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.4...rust-mcp-transport-v0.3.5) (2025-06-17)
+
+
+### 🚀 Features
+
+* Improve schema version configuration using Cargo features ([#51](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/51)) ([836e765](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/836e765613bcaf61b71bb8e0ffe7c9e2877feb22))
+
 ## [0.3.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.3...rust-mcp-transport-v0.3.4) (2025-05-30)
 
 
