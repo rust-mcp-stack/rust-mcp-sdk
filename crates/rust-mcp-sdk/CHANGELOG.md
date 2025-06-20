@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.3...rust-mcp-sdk-v0.4.4) (2025-06-20)
+
+
+### 🚀 Features
+
+* Enable rustls support in reqwest ([d6c6293](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/d6c6293c4ac66fadafee7385b80e0f4cd002e7e4))
+
 ## [0.4.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.2...rust-mcp-sdk-v0.4.3) (2025-06-17)
 
 
