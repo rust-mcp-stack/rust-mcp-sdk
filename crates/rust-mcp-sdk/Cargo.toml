@@ -32,7 +32,13 @@ tracing.workspace = true
 hyper = { version = "1.6.0" }
 
 [dev-dependencies]
-reqwest = { workspace = true, features = ["stream"] }
+reqwest = { workspace = true, default-features = false, features = [
+    "stream",
+    "rustls-tls",
+    "json",
+    "cookies",
+    "multipart",
+] }
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",
