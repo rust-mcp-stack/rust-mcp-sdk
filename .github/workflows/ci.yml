@@ -8,6 +8,10 @@ on:
   #     - "**"
   workflow_call:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust_check:
     name: Rust Checks (${{ matrix.os }})
