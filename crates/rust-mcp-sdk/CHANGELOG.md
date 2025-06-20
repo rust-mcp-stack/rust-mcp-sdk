@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.4.5](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.4...rust-mcp-sdk-v0.4.5) (2025-06-20)
+
 ## [0.4.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.3...rust-mcp-sdk-v0.4.4) (2025-06-20)
 
 

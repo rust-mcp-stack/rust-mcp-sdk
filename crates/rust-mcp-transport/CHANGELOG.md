@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.5...rust-mcp-transport-v0.3.6) (2025-06-20)
+
+
+### 🐛 Bug Fixes
+
+* Sync reqwest dependencies in rust-mcp-transport ([f76468e](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/f76468eec7efb37f530a7c32f1de561b7bf2e21f))
+
 ## [0.3.5](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.4...rust-mcp-transport-v0.3.5) (2025-06-17)
 
 
