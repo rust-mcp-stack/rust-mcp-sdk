@@ -30,7 +30,7 @@
 /// //  //.......
 /// // }
 macro_rules! tool_box {
-    ($enum_name:ident, [$($tool:ident),*]) => {
+    ($enum_name:ident, [$($tool:ident),* $(,)?]) => {
         #[derive(Debug)]
         pub enum $enum_name {
             $(
