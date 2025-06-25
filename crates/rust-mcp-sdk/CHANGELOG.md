@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.5...rust-mcp-sdk-v0.4.6) (2025-06-23)
+
+
+### 🐛 Bug Fixes
+
+* Allow optional trailing commas in tool_box macro ([#58](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/58)) ([ce0cc4f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ce0cc4f564a95d964f28e4f52e8d4fa5d4ae9e60))
+
 ## [0.4.5](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.4...rust-mcp-sdk-v0.4.5) (2025-06-20)
 
 ## [0.4.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.3...rust-mcp-sdk-v0.4.4) (2025-06-20)
