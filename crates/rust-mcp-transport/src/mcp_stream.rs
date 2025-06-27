@@ -127,10 +127,6 @@ impl MCPStream {
                                                             "Received response or error without a matching request: {:?}",
                                                             &message.is_response()
                                                         );
-                                                        //eprintln!(
-                                                        //    "Error: Received response does not correspond to any request. {:?}",
-                                                        //    &message.is_response()
-                                                        //);
                                                     }
                                                 }
                                             } else {

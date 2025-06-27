@@ -259,7 +259,6 @@ where
                         let body = String::from_utf8_lossy(&data).trim().to_string();
                           if let Err(e) = http_post(&client_clone, &post_url, body, &custom_headers).await {
                             tracing::error!("Failed to POST message: {:?}", e);
-                            //eprintln!("Failed to POST message: {:?}", e);
                       }
                     },
                     None => break, // Exit if channel is closed

@@ -49,7 +49,6 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     ) -> std::result::Result<(), RpcError> {
         if !runtime.is_shut_down().await {
             tracing::error!("Process error: {}", error_message);
-            //eprintln!("Process error: {}", error_message);
         }
         Ok(())
     }
