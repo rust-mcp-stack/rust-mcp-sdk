@@ -118,7 +118,8 @@ impl McpClient for ClientRuntime {
                                     break;
                                 }
                                 Err(e) => {
-                                    eprintln!("Error reading from std_err: {}", e);
+                                    tracing::error!("Error reading from std_err: {}", e);
+                                    //eprintln!("Error reading from std_err: {}", e);
                                     break;
                                 }
                             }
