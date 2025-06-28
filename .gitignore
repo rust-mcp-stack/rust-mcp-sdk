@@ -1,6 +1,7 @@
 /target
 .DS_store
 settings.json
+/.vscode
 
 
 # test artifacts
