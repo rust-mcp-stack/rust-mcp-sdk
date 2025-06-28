@@ -60,6 +60,7 @@ hyper-server = [
     "axum",
     "axum-server",
     "hyper",
+    "server",
     "uuid",
     "tokio-stream",
     "rust-mcp-transport/sse",
