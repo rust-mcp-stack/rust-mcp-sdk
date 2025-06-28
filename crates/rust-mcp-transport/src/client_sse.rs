@@ -125,11 +125,11 @@ impl ClientSseTransport {
         let mut header_map = HeaderMap::new();
 
         for (key, value) in headers {
-            let header_name = key.parse::<HeaderName>().map_err(|e| {
-                TransportError::InvalidOptions(format!("Invalid header name: {}", e))
-            })?;
+            let header_name = key
+                .parse::<HeaderName>()
+                .map_err(|e| TransportError::InvalidOptions(format!("Invalid header name: {e}")))?;
             let header_value = HeaderValue::from_str(value).map_err(|e| {
-                TransportError::InvalidOptions(format!("Invalid header value: {}", e))
+                TransportError::InvalidOptions(format!("Invalid header value: {e}"))
             })?;
             header_map.insert(header_name, header_value);
         }
@@ -258,7 +258,7 @@ where
                         // trim the trailing \n before making a request
                         let body = String::from_utf8_lossy(&data).trim().to_string();
                           if let Err(e) = http_post(&client_clone, &post_url, body, &custom_headers).await {
-                            tracing::error!("Failed to POST message: {:?}", e);
+                            tracing::error!("Failed to POST message: {e:?}");
                       }
                     },
                     None => break, // Exit if channel is closed

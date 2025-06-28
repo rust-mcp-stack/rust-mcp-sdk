@@ -67,14 +67,14 @@ pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -
 
     // Build the query string
     let new_query = match query {
-        Some(q) if !q.is_empty() => format!("{}&sessionId={}", q, session_id),
-        _ => format!("sessionId={}", session_id),
+        Some(q) if !q.is_empty() => format!("{q}&sessionId={session_id}"),
+        _ => format!("sessionId={session_id}"),
     };
 
     // Construct final URL
     match fragment {
-        Some(f) => format!("{}?{}#{}", path, new_query, f),
-        None => format!("{}?{}", path, new_query),
+        Some(f) => format!("{path}?{new_query}#{f}"),
+        None => format!("{path}?{new_query}"),
     }
 }
 

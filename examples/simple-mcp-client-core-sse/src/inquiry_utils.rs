@@ -202,7 +202,7 @@ impl InquiryUtils {
         let max_pings = n;
         println!();
         for ping_index in 1..=max_pings {
-            print!("Ping the server ({} out of {})...", ping_index, max_pings);
+            print!("Ping the server ({ping_index} out of {max_pings})...");
             std::io::stdout().flush().unwrap();
             let ping_result = self.client.ping(None).await;
             print!(

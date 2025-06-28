@@ -42,7 +42,7 @@ mod tets_server_sse {
         sleep(Duration::from_millis(750)).await;
 
         let client = Client::new();
-        println!("connecting to : {}", server_endpoint);
+        println!("connecting to : {server_endpoint}");
         // Act: Connect to the SSE endpoint and read the event stream
         let response = client
             .get(server_endpoint)
@@ -105,7 +105,7 @@ mod tets_server_sse {
         sleep(Duration::from_millis(750)).await;
 
         let client = Client::new();
-        println!("connecting to : {}", server_endpoint);
+        println!("connecting to : {server_endpoint}");
         // Act: Connect to the SSE endpoint and read the event stream
         let response = client
             .get(server_endpoint)
@@ -171,7 +171,7 @@ mod tets_server_sse {
         sleep(Duration::from_millis(750)).await;
 
         let client = Client::new();
-        println!("connecting to : {}", server_endpoint);
+        println!("connecting to : {server_endpoint}");
         // Act: Connect to the SSE endpoint and read the event stream
         let response = client
             .get(server_endpoint)

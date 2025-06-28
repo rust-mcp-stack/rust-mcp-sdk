@@ -46,7 +46,7 @@ pub fn extract_origin(url: &str) -> Option<String> {
     let host_port = &rest[..end];
 
     // Reconstruct origin
-    Some(format!("{}://{}", scheme, host_port))
+    Some(format!("{scheme}://{host_port}"))
 }
 
 #[cfg(test)]

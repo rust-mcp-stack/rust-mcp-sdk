@@ -460,8 +460,7 @@ mod tests {
             let ty: syn::Type = syn::parse_str(ty_str).unwrap();
             assert!(
                 !might_be_struct(&ty),
-                "Expected '{}' to be not a struct",
-                ty_str
+                "Expected '{ty_str}' to be not a struct"
             );
         }
     }
