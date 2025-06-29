@@ -67,7 +67,7 @@ impl SseStream {
             {
                 Ok(resp) => resp,
                 Err(e) => {
-                    eprintln!("Failed to connect to SSE: {}", e);
+                    tracing::error!("Failed to connect to SSE: {}", e);
                     if retry_count >= self.max_retries {
                         tracing::error!("Max retries reached, giving up");
                         if let Some(tx) = endpoint_event_tx.take() {
@@ -159,7 +159,9 @@ impl SseStream {
                             if !content.is_empty() {
                                 let bytes = Bytes::copy_from_slice(content.as_bytes());
                                 if self.read_tx.send(bytes).await.is_err() {
-                                    eprintln!("Readable stream closed, shutting down SSE task");
+                                    tracing::error!(
+                                        "Readable stream closed, shutting down SSE task"
+                                    );
                                     if !endpoint_event_received {
                                         if let Some(tx) = endpoint_event_tx.take() {
                                             let _ = tx.send(None);

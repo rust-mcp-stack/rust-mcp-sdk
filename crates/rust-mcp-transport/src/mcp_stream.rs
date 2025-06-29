@@ -123,8 +123,8 @@ impl MCPStream {
                                                         //An error that is unrelated to a request.
                                                         tx.send(message).map_err(GenericSendError::new)?;
                                                     } else {
-                                                        eprintln!(
-                                                            "Error: Received response does not correspond to any request. {:?}",
+                                                        tracing::warn!(
+                                                            "Received response or error without a matching request: {:?}",
                                                             &message.is_response()
                                                         );
                                                     }
