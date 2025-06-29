@@ -21,10 +21,7 @@ use crate::error::{McpSdkError, SdkResult};
 /// assert_eq!(msg, "Server does not support resources (required for resources/list)");
 /// ```
 pub fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {
-    format!(
-        "{} does not support {} (required for {})",
-        entity, capability, method_name
-    )
+    format!("{entity} does not support {capability} (required for {method_name})")
 }
 
 /// Checks if the client and server protocol versions are compatible by ensuring they are equal.

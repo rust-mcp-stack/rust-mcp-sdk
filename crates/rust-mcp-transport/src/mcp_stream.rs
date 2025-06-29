@@ -140,8 +140,7 @@ impl MCPStream {
                                         Err(e) => {
                                             // Handle error in reading from readable_std
                                             return Err(TransportError::ProcessError(format!(
-                                                "Error reading from readable_std: {}",
-                                                e
+                                                "Error reading from readable_std: {e}"
                                             )));
                                         }
                         }

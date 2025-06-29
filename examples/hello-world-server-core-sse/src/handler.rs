@@ -77,7 +77,7 @@ impl ServerHandlerCore for MyServerHandler {
 
                 // Return Method not found for any other requests
                 _ => Err(RpcError::method_not_found()
-                    .with_message(format!("No handler is implemented for '{}'.", method_name,))),
+                    .with_message(format!("No handler is implemented for '{method_name}'.",))),
             },
             // Handle custom requests
             RequestFromClient::CustomRequest(_) => Err(RpcError::method_not_found()
