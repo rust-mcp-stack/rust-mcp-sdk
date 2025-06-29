@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.6...rust-mcp-sdk-v0.4.7) (2025-06-29)
+
+
+### 🚀 Features
+
+* Make hyper optional ([#63](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/63)) ([8dd95a2](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/8dd95a2a112d6c661ddc3deede2dd606b4ff743b))
+
 ## [0.4.6](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.5...rust-mcp-sdk-v0.4.6) (2025-06-23)
 
 
