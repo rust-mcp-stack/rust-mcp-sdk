@@ -22,8 +22,18 @@ pub enum McpSdkError {
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
     TransportServerError(#[from] TransportServerError),
-    #[error("Incompatible mcp protocol version!\n client:{0}\nserver:{1}")]
+    #[error("Incompatible mcp protocol version: client:{0} server:{1}")]
     IncompatibleProtocolVersion(String, String),
+}
+
+impl McpSdkError {
+    /// Returns the RPC error message if the error is of type `McpSdkError::RpcError`.
+    pub fn rpc_error_message(&self) -> Option<&String> {
+        if let McpSdkError::RpcError(rpc_error) = self {
+            return Some(&rpc_error.message);
+        }
+        None
+    }
 }
 
 #[deprecated(since = "0.2.0", note = "Use `McpSdkError` instead.")]
