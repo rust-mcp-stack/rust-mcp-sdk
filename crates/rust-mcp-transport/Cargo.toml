@@ -9,6 +9,7 @@ documentation = "https://docs.rs/rust-mcp-transport"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk"]
 license = "MIT"
 edition = "2021"
+exclude = ["assets/"]
 
 [dependencies]
 
