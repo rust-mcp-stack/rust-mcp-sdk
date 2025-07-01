@@ -31,10 +31,6 @@ pub trait ServerHandler: Send + Sync + 'static {
         initialize_request: InitializeRequest,
         runtime: &dyn McpServer,
     ) -> std::result::Result<InitializeResult, RpcError> {
-        runtime
-            .set_client_details(initialize_request.params.clone())
-            .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
-
         let mut server_info = runtime.server_info().to_owned();
         // Provide compatibility for clients using older MCP protocol versions.
 
@@ -42,10 +38,20 @@ pub trait ServerHandler: Send + Sync + 'static {
             &initialize_request.params.protocol_version,
             &server_info.protocol_version,
         )
-        .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
-        {
-            server_info.protocol_version = initialize_request.params.protocol_version;
+        .map_err(|err| {
+            tracing::error!(
+                "Incompatible protocol version : client: {} server: {}",
+                &initialize_request.params.protocol_version,
+                &server_info.protocol_version
+            );
+            RpcError::internal_error().with_message(err.to_string())
+        })? {
+            server_info.protocol_version = updated_protocol_version;
         }
+
+        runtime
+            .set_client_details(initialize_request.params.clone())
+            .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
 
         Ok(server_info)
     }

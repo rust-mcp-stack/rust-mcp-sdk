@@ -106,7 +106,14 @@ impl McpServer for ServerRuntime {
                     // create a response to send back to the client
                     let response: MessageFromServer = match result {
                         Ok(success_value) => success_value.into(),
-                        Err(error_value) => MessageFromServer::Error(error_value),
+                        Err(error_value) => {
+                            // Error occurred during initialization.
+                            // A likely cause could be an unsupported protocol version.
+                            if !self.is_initialized() {
+                                return Err(error_value.into());
+                            }
+                            MessageFromServer::Error(error_value)
+                        }
                     };
 
                     // send the response back with corresponding request id

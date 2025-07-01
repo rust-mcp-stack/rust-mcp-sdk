@@ -40,5 +40,13 @@ async fn main() -> SdkResult<()> {
     let server = server_runtime_core::create_server(server_details, transport, handler);
 
     // STEP 5: Start the server
-    server.start().await
+    if let Err(start_error) = server.start().await {
+        eprintln!(
+            "{}",
+            start_error
+                .rpc_error_message()
+                .unwrap_or(&start_error.to_string())
+        );
+    };
+    Ok(())
 }

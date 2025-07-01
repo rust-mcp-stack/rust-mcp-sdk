@@ -36,9 +36,15 @@ impl ServerHandlerCore for MyServerHandler {
                         &initialize_request.params.protocol_version,
                         &server_info.protocol_version,
                     )
-                    .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
-                    {
-                        server_info.protocol_version = initialize_request.params.protocol_version;
+                    .map_err(|err| {
+                        tracing::error!(
+                            "Incompatible protocol version :\nclient: {}\nserver: {}",
+                            &initialize_request.params.protocol_version,
+                            &server_info.protocol_version
+                        );
+                        RpcError::internal_error().with_message(err.to_string())
+                    })? {
+                        server_info.protocol_version = updated_protocol_version;
                     }
 
                     return Ok(server_info.into());
