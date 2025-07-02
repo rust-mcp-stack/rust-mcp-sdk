@@ -308,7 +308,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     #[cfg(not(feature = "2025_06_18"))]
     let meta = quote! {};
     #[cfg(feature = "2025_06_18")]
-    let meta = macro_attributes.meta.map_or(quote! { meta: None }, |m| {
+    let meta = macro_attributes.meta.map_or(quote! { meta: None, }, |m| {
         quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
     });
 
@@ -316,7 +316,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let title = quote! {};
     #[cfg(feature = "2025_06_18")]
     let title = macro_attributes.title.map_or(
-        quote! { title: None },
+        quote! { title: None, },
         |t| quote! { title: Some(#t.to_string()), },
     );
 
@@ -362,7 +362,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let annotations_token = {
         #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
         {
-            quote! { annotations: #annotations }
+            quote! { annotations: #annotations, }
         }
         #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
         {
@@ -374,11 +374,11 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         #base_crate::Tool {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
-            input_schema: #base_crate::ToolInputSchema::new(required, properties),
             #output_schema
             #title
             #meta
             #annotations_token
+            input_schema: #base_crate::ToolInputSchema::new(required, properties)
         }
     };
 
