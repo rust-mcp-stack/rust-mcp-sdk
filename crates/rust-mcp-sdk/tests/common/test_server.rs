@@ -23,6 +23,8 @@ pub mod test_server_common {
             server_info: Implementation {
                 name: "Test MCP Server".to_string(),
                 version: "0.1.0".to_string(),
+                #[cfg(feature = "2025_06_18")]
+                title: None,
             },
             capabilities: ServerCapabilities {
                 // indicates that server support mcp tools

@@ -31,8 +31,9 @@ async fn main() -> SdkResult<()> {
     let client_details: InitializeRequestParams = InitializeRequestParams {
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
-            name: "simple-rust-mcp-client-core-sse".into(),
-            version: "0.1.0".into(),
+            name: "simple-rust-mcp-client-core-sse".to_string(),
+            version: "0.1.0".to_string(),
+            title: Some("Simple Rust MCP Client (Core,SSE)".to_string()),
         },
         protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };

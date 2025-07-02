@@ -142,7 +142,10 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                             .await;
 
                         Ok(result.map_or_else(
-                            |err| CallToolResult::with_error(CallToolError::new(err)).into(),
+                            |err| {
+                                let r: CallToolResult = CallToolError::new(err).into();
+                                r.into()
+                            },
                             |value| value.into(),
                         ))
                     }

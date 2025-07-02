@@ -12,33 +12,35 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 
 /// Represents the attributes for the `mcp_tool` procedural macro.
 ///
-/// This struct parses and validates the `name` and `description` attributes provided
-/// to the `mcp_tool` macro. Both attributes are required and must not be empty strings.
+/// This struct parses and validates the attributes provided to the `mcp_tool` macro.
+/// The `name` and `description` attributes are required and must not be empty strings.
 ///
 /// # Fields
-/// * `name` - An optional string representing the tool's name.
-/// * `description` - An optional string describing the tool.
-///
-/// The following fields are available only with the `2025_03_26` feature:
-/// * `destructive_hint` - Optional boolean for `ToolAnnotations::destructive_hint`.
-/// * `idempotent_hint` - Optional boolean for `ToolAnnotations::idempotent_hint`.
-/// * `open_world_hint` - Optional boolean for `ToolAnnotations::open_world_hint`.
-/// * `read_only_hint` - Optional boolean for `ToolAnnotations::read_only_hint`.
-/// * `title` - Optional string for `ToolAnnotations::title`.
+/// * `name` - A string representing the tool's name (required).
+/// * `description` - A string describing the tool (required).
+/// * `meta` - An optional JSON string for metadata.
+/// * `title` - An optional string for the tool's title.
+/// * The following fields are available only with the `2025_03_26` feature and later:
+///   * `destructive_hint` - Optional boolean for `ToolAnnotations::destructive_hint`.
+///   * `idempotent_hint` - Optional boolean for `ToolAnnotations::idempotent_hint`.
+///   * `open_world_hint` - Optional boolean for `ToolAnnotations::open_world_hint`.
+///   * `read_only_hint` - Optional boolean for `ToolAnnotations::read_only_hint`.
 ///
 struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
-    #[cfg(feature = "2025_03_26")]
-    destructive_hint: Option<bool>,
-    #[cfg(feature = "2025_03_26")]
-    idempotent_hint: Option<bool>,
-    #[cfg(feature = "2025_03_26")]
-    open_world_hint: Option<bool>,
-    #[cfg(feature = "2025_03_26")]
-    read_only_hint: Option<bool>,
-    #[cfg(feature = "2025_03_26")]
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    meta: Option<String>, // Store raw JSON string instead of parsed Map
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     title: Option<String>,
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    destructive_hint: Option<bool>,
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    idempotent_hint: Option<bool>,
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    open_world_hint: Option<bool>,
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    read_only_hint: Option<bool>,
 }
 
 use syn::parse::ParseStream;
@@ -58,27 +60,32 @@ impl Parse for ExprList {
 impl Parse for McpToolMacroAttributes {
     /// Parses the macro attributes from a `ParseStream`.
     ///
-    /// This implementation extracts `name` and `description` from the attribute input,
-    /// ensuring they are provided as string literals and are non-empty.
+    /// This implementation extracts `name`, `description`, `meta`, and `title` from the attribute input.
+    /// The `name` and `description` must be provided as string literals and be non-empty.
+    /// The `meta` attribute must be a valid JSON object provided as a string literal, and `title` must be a string literal.
     ///
     /// # Errors
     /// Returns a `syn::Error` if:
     /// - The `name` attribute is missing or empty.
     /// - The `description` attribute is missing or empty.
+    /// - The `meta` attribute is provided but is not a valid JSON object.
+    /// - The `title` attribute is provided but is not a string literal.
     fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut instance = Self {
             name: None,
             description: None,
-            #[cfg(feature = "2025_03_26")]
-            destructive_hint: None,
-            #[cfg(feature = "2025_03_26")]
-            idempotent_hint: None,
-            #[cfg(feature = "2025_03_26")]
-            open_world_hint: None,
-            #[cfg(feature = "2025_03_26")]
-            read_only_hint: None,
-            #[cfg(feature = "2025_03_26")]
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            meta: None,
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             title: None,
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            destructive_hint: None,
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            idempotent_hint: None,
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            open_world_hint: None,
+            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            read_only_hint: None,
         };
 
         let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
@@ -134,9 +141,55 @@ impl Parse for McpToolMacroAttributes {
                             _ => {}
                         }
                     }
+                    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+                    "meta" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => lit_str.value(),
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a JSON object as a string literal",
+                                ));
+                            }
+                        };
+                        // Validate that the string is a valid JSON object
+                        let parsed: serde_json::Value =
+                            serde_json::from_str(&value).map_err(|e| {
+                                Error::new_spanned(
+                                    &meta_name_value.value,
+                                    format!("Expected a valid JSON object: {e}"),
+                                )
+                            })?;
+                        if !parsed.is_object() {
+                            return Err(Error::new_spanned(
+                                &meta_name_value.value,
+                                "Expected a JSON object",
+                            ));
+                        }
+                        instance.meta = Some(value);
+                    }
+                    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+                    "title" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => lit_str.value(),
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a string literal",
+                                ));
+                            }
+                        };
+                        instance.title = Some(value);
+                    }
                     "destructive_hint" | "idempotent_hint" | "open_world_hint"
                     | "read_only_hint" => {
-                        #[cfg(feature = "2025_03_26")]
+                        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
                         {
                             let value = match &meta_name_value.value {
                                 Expr::Lit(ExprLit {
@@ -159,22 +212,6 @@ impl Parse for McpToolMacroAttributes {
                                 _ => {}
                             }
                         }
-                    }
-                    #[cfg(feature = "2025_03_26")]
-                    "title" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal",
-                                ));
-                            }
-                        };
-                        instance.title = Some(value);
                     }
                     _ => {}
                 }
@@ -214,39 +251,46 @@ impl Parse for McpToolMacroAttributes {
 /// The `mcp_tool` macro generates an implementation for the annotated struct that includes:
 /// - A `tool_name()` method returning the tool's name as a string.
 /// - A `tool()` method returning a `rust_mcp_schema::Tool` instance with the tool's name,
-///   description, and input schema derived from the struct's fields.
+///   description, input schema, meta, and title derived from the struct's fields and attributes.
 ///
 /// # Attributes
 /// * `name` - The name of the tool (required, non-empty string).
 /// * `description` - A description of the tool (required, non-empty string).
+/// * `meta` - Optional JSON object as a string literal for metadata.
+/// * `title` - Optional string for the tool's title.
 ///
 /// # Panics
 /// Panics if the macro is applied to anything other than a struct.
 ///
 /// # Example
 /// ```rust
-/// #[rust_mcp_macros::mcp_tool(name = "example_tool", description = "An example tool", idempotent_hint=true )]
+/// #[rust_mcp_macros::mcp_tool(
+///     name = "example_tool",
+///     description = "An example tool",
+///     meta = "{\"version\": \"1.0\"}",
+///     title = "Example Tool"
+/// )]
 /// #[derive(rust_mcp_macros::JsonSchema)]
 /// struct ExampleTool {
 ///     field1: String,
 ///     field2: i32,
 /// }
 ///
-/// assert_eq!(ExampleTool::tool_name() , "example_tool");
-/// let tool : rust_mcp_schema::Tool = ExampleTool::tool();
-/// assert_eq!(tool.name , "example_tool");
-/// assert_eq!(tool.description.unwrap() , "An example tool");
-/// assert_eq!(tool.annotations.unwrap().idempotent_hint.unwrap() , true);
+/// assert_eq!(ExampleTool::tool_name(), "example_tool");
+/// let tool: rust_mcp_schema::Tool = ExampleTool::tool();
+/// assert_eq!(tool.name, "example_tool");
+/// assert_eq!(tool.description.unwrap(), "An example tool");
+/// assert_eq!(tool.meta.as_ref().unwrap().get("version").unwrap(), "1.0");
+/// assert_eq!(tool.title.unwrap(), "Example Tool");
 ///
 /// let schema_properties = tool.input_schema.properties.unwrap();
-/// assert_eq!(schema_properties.len() , 2);
+/// assert_eq!(schema_properties.len(), 2);
 /// assert!(schema_properties.contains_key("field1"));
 /// assert!(schema_properties.contains_key("field2"));
-///
 /// ```
 #[proc_macro_attribute]
 pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput); // Parse the input as a function
+    let input = parse_macro_input!(input as DeriveInput);
     let input_ident = &input.ident;
 
     // Conditionally select the path for Tool
@@ -261,14 +305,28 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let tool_name = macro_attributes.name.unwrap_or_default();
     let tool_description = macro_attributes.description.unwrap_or_default();
 
-    #[cfg(feature = "2025_03_26")]
+    #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
+    let meta = quote! {};
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    let meta = macro_attributes.meta.map_or(quote! { meta: None }, |m| {
+        quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")) }
+    });
+
+    #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
+    let title = quote! {};
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    let title = macro_attributes.title.map_or(
+        quote! { title: None },
+        |t| quote! { title: Some(#t.to_string()) },
+    );
+
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     let some_annotations = macro_attributes.destructive_hint.is_some()
         || macro_attributes.idempotent_hint.is_some()
         || macro_attributes.open_world_hint.is_some()
-        || macro_attributes.read_only_hint.is_some()
-        || macro_attributes.title.is_some();
+        || macro_attributes.read_only_hint.is_some();
 
-    #[cfg(feature = "2025_03_26")]
+    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     let annotations = if some_annotations {
         let destructive_hint = macro_attributes
             .destructive_hint
@@ -283,28 +341,25 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         let read_only_hint = macro_attributes
             .read_only_hint
             .map_or(quote! {None}, |v| quote! {Some(#v)});
-        let title = macro_attributes
-            .title
-            .map_or(quote! {None}, |v| quote! {Some(#v)});
         quote! {
             Some(#base_crate::ToolAnnotations {
-                                    destructive_hint: #destructive_hint,
-                                    idempotent_hint: #idempotent_hint,
-                                    open_world_hint: #open_world_hint,
-                                    read_only_hint: #read_only_hint,
-                                    title: #title,
-                                }),
+                destructive_hint: #destructive_hint,
+                idempotent_hint: #idempotent_hint,
+                open_world_hint: #open_world_hint,
+                read_only_hint: #read_only_hint,
+                title: None,
+            })
         }
     } else {
-        quote! {None}
+        quote! { None }
     };
 
     let annotations_token = {
-        #[cfg(feature = "2025_03_26")]
+        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
         {
             quote! { annotations: #annotations }
         }
-        #[cfg(not(feature = "2025_03_26"))]
+        #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
         {
             quote! {}
         }
@@ -315,6 +370,9 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
             input_schema: #base_crate::ToolInputSchema::new(required, properties),
+            output_schema: None,
+            #title,
+            #meta,
             #annotations_token
         }
     };
@@ -322,16 +380,15 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let output = quote! {
         impl #input_ident {
             /// Returns the name of the tool as a string.
-            pub fn tool_name()->String{
+            pub fn tool_name() -> String {
                 #tool_name.to_string()
             }
 
             /// Constructs and returns a `rust_mcp_schema::Tool` instance.
             ///
-            /// The tool includes the name, description, and input schema derived from
+            /// The tool includes the name, description, input schema, meta, and title derived from
             /// the struct's attributes.
-            pub fn tool()-> #base_crate::Tool
-            {
+            pub fn tool() -> #base_crate::Tool {
                 let json_schema = &#input_ident::json_schema();
 
                 let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
@@ -482,11 +539,13 @@ mod tests {
     use syn::parse_str;
     #[test]
     fn test_valid_macro_attributes() {
-        let input = r#"name = "test_tool", description = "A test tool.""#;
+        let input = r#"name = "test_tool", description = "A test tool.", meta = "{\"version\": \"1.0\"}", title = "Test Tool""#;
         let parsed: McpToolMacroAttributes = parse_str(input).unwrap();
 
         assert_eq!(parsed.name.unwrap(), "test_tool");
         assert_eq!(parsed.description.unwrap(), "A test tool.");
+        assert_eq!(parsed.meta.unwrap(), "{\"version\": \"1.0\"}");
+        assert_eq!(parsed.title.unwrap(), "Test Tool");
     }
 
     #[test]
@@ -497,7 +556,7 @@ mod tests {
         assert_eq!(
             result.err().unwrap().to_string(),
             "The 'name' attribute is required and must not be empty."
-        )
+        );
     }
 
     #[test]
@@ -508,7 +567,7 @@ mod tests {
         assert_eq!(
             result.err().unwrap().to_string(),
             "The 'description' attribute is required and must not be empty."
-        )
+        );
     }
 
     #[test]
@@ -521,6 +580,7 @@ mod tests {
             "The 'name' attribute is required and must not be empty."
         );
     }
+
     #[test]
     fn test_empty_description_field() {
         let input = r#"name = "my-tool", description = """#;
@@ -530,5 +590,26 @@ mod tests {
             result.err().unwrap().to_string(),
             "The 'description' attribute is required and must not be empty."
         );
+    }
+
+    #[test]
+    fn test_invalid_meta() {
+        let input =
+            r#"name = "test_tool", description = "A test tool.", meta = "not_a_json_object""#;
+        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert!(result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("Expected a valid JSON object"));
+    }
+
+    #[test]
+    fn test_non_object_meta() {
+        let input = r#"name = "test_tool", description = "A test tool.", meta = "[1, 2, 3]""#;
+        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "Expected a JSON object");
     }
 }

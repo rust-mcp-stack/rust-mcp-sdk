@@ -31,6 +31,8 @@ impl ClientHandlerCore for MyClientHandler {
                     Err(RpcError::internal_error()
                         .with_message("ListRootsRequest handler is not implemented".to_string()))
                 }
+                ServerRequest::ElicitRequest(_elicit_request) => Err(RpcError::internal_error()
+                    .with_message("ElicitRequest handler is not implemented".to_string())),
             },
             RequestFromServer::CustomRequest(_value) => Err(RpcError::internal_error()
                 .with_message("CustomRequest handler is not implemented".to_string())),
