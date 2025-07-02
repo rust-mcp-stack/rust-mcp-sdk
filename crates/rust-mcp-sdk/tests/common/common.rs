@@ -2,9 +2,7 @@ mod test_server;
 use async_trait::async_trait;
 use rust_mcp_schema::ProtocolVersion;
 use rust_mcp_sdk::mcp_client::ClientHandler;
-use rust_mcp_sdk::schema::{
-    ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
-};
+use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 
 pub use test_server::*;
 
