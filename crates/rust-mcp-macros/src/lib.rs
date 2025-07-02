@@ -29,9 +29,9 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    #[cfg(feature = "2025_06_18")]
     meta: Option<String>, // Store raw JSON string instead of parsed Map
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    #[cfg(feature = "2025_06_18")]
     title: Option<String>,
     #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     destructive_hint: Option<bool>,
@@ -74,9 +74,9 @@ impl Parse for McpToolMacroAttributes {
         let mut instance = Self {
             name: None,
             description: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            #[cfg(feature = "2025_06_18")]
             meta: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+            #[cfg(feature = "2025_06_18")]
             title: None,
             #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             destructive_hint: None,
@@ -141,7 +141,7 @@ impl Parse for McpToolMacroAttributes {
                             _ => {}
                         }
                     }
-                    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+                    #[cfg(feature = "2025_06_18")]
                     "meta" => {
                         let value = match &meta_name_value.value {
                             Expr::Lit(ExprLit {
@@ -171,7 +171,7 @@ impl Parse for McpToolMacroAttributes {
                         }
                         instance.meta = Some(value);
                     }
-                    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+                    #[cfg(feature = "2025_06_18")]
                     "title" => {
                         let value = match &meta_name_value.value {
                             Expr::Lit(ExprLit {
@@ -305,20 +305,25 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let tool_name = macro_attributes.name.unwrap_or_default();
     let tool_description = macro_attributes.description.unwrap_or_default();
 
-    #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
+    #[cfg(not(feature = "2025_06_18"))]
     let meta = quote! {};
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    #[cfg(feature = "2025_06_18")]
     let meta = macro_attributes.meta.map_or(quote! { meta: None }, |m| {
-        quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")) }
+        quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
     });
 
-    #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
+    #[cfg(not(feature = "2025_06_18"))]
     let title = quote! {};
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
+    #[cfg(feature = "2025_06_18")]
     let title = macro_attributes.title.map_or(
         quote! { title: None },
-        |t| quote! { title: Some(#t.to_string()) },
+        |t| quote! { title: Some(#t.to_string()), },
     );
+
+    #[cfg(not(feature = "2025_06_18"))]
+    let output_schema = quote! {};
+    #[cfg(feature = "2025_06_18")]
+    let output_schema = quote! { output_schema: None,};
 
     #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     let some_annotations = macro_attributes.destructive_hint.is_some()
@@ -370,9 +375,9 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             name: #tool_name.to_string(),
             description: Some(#tool_description.to_string()),
             input_schema: #base_crate::ToolInputSchema::new(required, properties),
-            output_schema: None,
-            #title,
-            #meta,
+            #output_schema
+            #title
+            #meta
             #annotations_token
         }
     };
