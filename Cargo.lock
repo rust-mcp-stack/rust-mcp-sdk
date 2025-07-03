@@ -1671,7 +1671,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rust-mcp-schema",
- "rust-mcp-sdk",
  "serde",
  "serde_json",
  "syn",
