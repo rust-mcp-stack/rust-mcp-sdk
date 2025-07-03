@@ -70,7 +70,7 @@ Create a new module in the project called `tools.rs` and include the definitions
 
 ```rust
 //src/tools.rs
-use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult};
+use rust_mcp_sdk::schema::{CallToolResult, TextContent, schema_utils::CallToolError};
 use rust_mcp_sdk::{
     macros::{mcp_tool, JsonSchema},
     tool_box,
@@ -159,8 +159,8 @@ impl ServerHandler for MyServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,
-        request: ListToolsRequest,
-        runtime: &dyn McpServer,
+        _request: ListToolsRequest,
+        _runtime: &dyn McpServer,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             meta: None,
@@ -173,7 +173,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request(
         &self,
         request: CallToolRequest,
-        runtime: &dyn McpServer,
+        _runtime: &dyn McpServer,
     ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =
