@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.6...rust-mcp-transport-v0.4.0) (2025-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* implement support for the MCP protocol version 2025-06-18 ([#73](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/73))
+
+### 🚀 Features
+
+* Implement support for the MCP protocol version 2025-06-18 ([#73](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/73)) ([6a24f78](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6a24f782a7314c3adf302e0c24b42d3fcaae8753))
+
+
+### 🐛 Bug Fixes
+
+* Exclude assets from published packages ([#70](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/70)) ([0b73873](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0b738738939708449d9037abbc563d9470f55f8a))
+
 ## [0.3.6](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.3.5...rust-mcp-transport-v0.3.6) (2025-06-20)
 
 

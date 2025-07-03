@@ -688,7 +688,7 @@ checksum = "5971ac85611da7067dbfcabef3c70ebb5606018acd9e2a3903a0da507521e0d5"
 
 [[package]]
 name = "hello-world-mcp-server"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "async-trait",
  "futures",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-mcp-server-core"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "async-trait",
  "futures",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-server-core-sse"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "async-trait",
  "futures",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-server-sse"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "async-trait",
  "futures",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-macros"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1688,7 +1688,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.4.7"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1711,7 +1711,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-transport"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "async-trait",
  "colored",
@@ -1927,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-core"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "async-trait",
  "colored",
@@ -1941,7 +1941,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-core-sse"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "async-trait",
  "colored",
@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-sse"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "async-trait",
  "colored",

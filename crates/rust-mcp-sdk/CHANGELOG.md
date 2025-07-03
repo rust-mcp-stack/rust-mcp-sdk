@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.7...rust-mcp-sdk-v0.5.0) (2025-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* implement support for the MCP protocol version 2025-06-18 ([#73](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/73))
+
+### 🚀 Features
+
+* Implement support for the MCP protocol version 2025-06-18 ([#73](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/73)) ([6a24f78](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6a24f782a7314c3adf302e0c24b42d3fcaae8753))
+
+
+### 🐛 Bug Fixes
+
+* Address issue with improper server start failure handling ([#72](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/72)) ([fc4d664](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/fc4d6646e050ab84ab15fcd8a2f95109df4af256))
+* Exclude assets from published packages ([#70](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/70)) ([0b73873](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0b738738939708449d9037abbc563d9470f55f8a))
+
 ## [0.4.7](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.6...rust-mcp-sdk-v0.4.7) (2025-06-29)
 
 
