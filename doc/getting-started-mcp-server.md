@@ -93,7 +93,7 @@ pub struct SayHelloTool {
 impl SayHelloTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let hello_message = format!("Hello, {}!", self.name);
-        Ok(CallToolResult::text_content(hello_message, None))
+        Ok(CallToolResult::text_content( vec![TextContent::from(hello_message)] ))
     }
 }
 
@@ -112,7 +112,7 @@ pub struct SayGoodbyeTool {
 impl SayGoodbyeTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let hello_message = format!("Goodbye, {}!", self.name);
-        Ok(CallToolResult::text_content(hello_message, None))
+        Ok(CallToolResult::text_content( vec![TextContent::from(hello_message)] ))
     }
 }
 
@@ -225,6 +225,7 @@ async fn main() -> SdkResult<()> {
         server_info: Implementation {
             name: "Hello World MCP Server".to_string(),
             version: "0.1.0".to_string(),
+            title: Some("Hello World MCP Server".to_string()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools

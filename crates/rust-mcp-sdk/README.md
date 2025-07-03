@@ -63,6 +63,7 @@ async fn main() -> SdkResult<()> {
         server_info: Implementation {
             name: "Hello World MCP Server".to_string(),
             version: "0.1.0".to_string(),
+            title: Some("Hello World MCP Server".to_string()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -106,6 +107,7 @@ let server_details = InitializeResult {
     server_info: Implementation {
         name: "Hello World MCP Server".to_string(),
         version: "0.1.0".to_string(),
+        title: Some("Hello World MCP Server".to_string()),
     },
     capabilities: ServerCapabilities {
         // indicates that server support mcp tools
@@ -167,10 +169,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: &dyn McpServer, ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
-            Ok(CallToolResult::text_content(
-                "Hello World!".to_string(),
-                None,
-            ))
+            Ok(CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())] )
         } else {
             Err(CallToolError::unknown_tool(request.tool_name().to_string()))
         }
