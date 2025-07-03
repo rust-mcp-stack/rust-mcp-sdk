@@ -17,6 +17,12 @@ Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 **rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.
 Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
 
+
+**rust-mcp-sdk**  supports all three official versions of the MCP protocol.
+By default, it uses the **2025-06-18** version, but earlier versions can be enabled via Cargo features.
+
+
+
 This project currently supports following transports:
 - **stdio** (Standard Input/Output)
 - **sse** (Server-Sent Events).
@@ -169,7 +175,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: &dyn McpServer, ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
-            Ok(CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())] )
+            Ok( CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())]  ))
         } else {
             Err(CallToolError::unknown_tool(request.tool_name().to_string()))
         }
@@ -300,7 +306,8 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 
 #### MCP Protocol Versions with Corresponding Features
 
-- `2025_03_26` : Activates MCP Protocol version 2025-03-26 (enabled by default)
+- `2025_06_18` : Activates MCP Protocol version 2025-06-18 (enabled by default)
+- `2025_03_26` : Activates MCP Protocol version 2025-03-26
 - `2024_11_05` : Activates MCP Protocol version 2024-11-05
 
 > Note: MCP protocol versions are mutually exclusive—only one can be active at any given time.

@@ -143,10 +143,10 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 
                         Ok(result.map_or_else(
                             |err| {
-                                let r: CallToolResult = CallToolError::new(err).into();
-                                r.into()
+                                let result: CallToolResult = CallToolError::new(err).into();
+                                result.into()
                             },
-                            |value| value.into(),
+                            Into::into,
                         ))
                     }
                     ClientRequest::SetLevelRequest(set_level_request) => self
