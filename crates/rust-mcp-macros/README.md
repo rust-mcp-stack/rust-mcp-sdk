@@ -12,17 +12,31 @@ The `mcp_tool` macro generates an implementation for the annotated struct that i
 
 - `name` - The name of the tool (required, non-empty string).
 - `description` - A description of the tool (required, non-empty string).
+- `title` - An optional human-readable and easily understood title.
+- `meta` - An optional JSON string that provides additional metadata for the tool.
+- `destructive_hint` – Optional boolean, indicates whether the tool may make destructive changes to its environment.
+- `idempotent_hint` – Optional boolean, indicates whether repeated calls with the same input have the same effect.
+- `open_world_hint` – Optional boolean, indicates whether the tool can interact with external or unknown entities.
+- `read_only_hint` – Optional boolean, indicates whether the tool makes no modifications to its environment.
+
+
 
 ## Usage Example
 
 ```rust
 #[mcp_tool(
    name = "write_file",
+   title = "Write File Tool"
    description = "Create a new file or completely overwrite an existing file with new content."
    destructive_hint = false
    idempotent_hint = false
    open_world_hint = false
    read_only_hint = false
+   meta = r#"{
+       "key" : "value",
+       "string_meta" : "meta value",
+       "numeric_meta" : 15
+   }"#
 )]
 #[derive(rust_mcp_macros::JsonSchema)]
 pub struct WriteFileTool {
@@ -38,7 +52,14 @@ fn main() {
 
     let tool: rust_mcp_schema::Tool = WriteFileTool::tool();
     assert_eq!(tool.name, "write_file");
+    assert_eq!(tool.title.as_ref().unwrap(), "Write File Tool");
     assert_eq!( tool.description.unwrap(),"Create a new file or completely overwrite an existing file with new content.");
+
+    let meta: &Map<String, Value> = tool.meta.as_ref().unwrap();
+    assert_eq!(
+        meta.get("key").unwrap(),
+        &Value::String("value".to_string())
+    );
 
     let schema_properties = tool.input_schema.properties.unwrap();
     assert_eq!(schema_properties.len(), 2);

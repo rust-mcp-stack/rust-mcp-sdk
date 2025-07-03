@@ -4,6 +4,9 @@ use crate::schema::{
     PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     Result, RpcError, ToolListChangedNotification,
 };
+#[cfg(feature = "2025_06_18")]
+use crate::schema::{ElicitRequest, ElicitResult};
+
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -43,6 +46,19 @@ pub trait ClientHandler: Send + Sync + 'static {
         request: ListRootsRequest,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ListRootsResult, RpcError> {
+        runtime.assert_client_request_capabilities(request.method())?;
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            request.method(),
+        )))
+    }
+
+    #[cfg(feature = "2025_06_18")]
+    async fn handle_elicit_request(
+        &self,
+        request: ElicitRequest,
+        runtime: &dyn McpClient,
+    ) -> std::result::Result<ElicitResult, RpcError> {
         runtime.assert_client_request_capabilities(request.method())?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",

@@ -23,6 +23,10 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 rust-mcp-schema = { workspace = true, default-features = false }
+rust-mcp-sdk = { workspace = true, default-features = false, features = [
+    "server",
+    "client",
+] }
 
 [lints]
 workspace = true
@@ -33,13 +37,27 @@ proc-macro = true
 
 [features]
 # defalt features
-default = ["2025_03_26"] # Default features
+default = ["2025_06_18"] # Default features
 
 # activates the latest MCP schema version, this will be updated once a new version of schema is published
-latest = ["2025_03_26"]
+latest = ["2025_06_18"]
 
-# enabled mcp schema version 2025_03_26
-2025_03_26 = ["rust-mcp-schema/2025_03_26","rust-mcp-schema/schema_utils"]
-# enabled mcp schema version 2024_11_05
-2024_11_05 = ["rust-mcp-schema/2024_11_05","rust-mcp-schema/schema_utils"]
+# enables mcp schema version 2025_06_18
+2025_06_18 = [
+    "rust-mcp-schema/2025_06_18",
+    "rust-mcp-schema/schema_utils",
+    "rust-mcp-sdk/2025_06_18",
+]
+# enables mcp schema version 2025_03_26
+2025_03_26 = [
+    "rust-mcp-schema/2025_03_26",
+    "rust-mcp-schema/schema_utils",
+    "rust-mcp-sdk/2025_03_26",
+]
+# enables mcp schema version 2024_11_05
+2024_11_05 = [
+    "rust-mcp-schema/2024_11_05",
+    "rust-mcp-schema/schema_utils",
+    "rust-mcp-sdk/2024_11_05",
+]
 sdk = []

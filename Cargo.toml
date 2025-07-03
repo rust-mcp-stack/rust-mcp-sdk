@@ -21,7 +21,8 @@ rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
 rust-mcp-macros = { version = "0.4.2", path = "crates/rust-mcp-macros", default-features = false }
 
 # External crates
-rust-mcp-schema = { version = "0.6", default-features = false }
+rust-mcp-schema = { version = "0.7", default-features = false }
+
 
 futures = { version = "0.3" }
 tokio = { version = "1.4", features = ["full"] }

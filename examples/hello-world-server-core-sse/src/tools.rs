@@ -1,4 +1,4 @@
-use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult};
+use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult, TextContent};
 use rust_mcp_sdk::{
     macros::{mcp_tool, JsonSchema},
     tool_box,
@@ -20,7 +20,9 @@ pub struct SayHelloTool {
 impl SayHelloTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let hello_message = format!("Hello, {}!", self.name);
-        Ok(CallToolResult::text_content(hello_message, None))
+        Ok(CallToolResult::text_content(vec![TextContent::from(
+            hello_message,
+        )]))
     }
 }
 
@@ -38,8 +40,10 @@ pub struct SayGoodbyeTool {
 }
 impl SayGoodbyeTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
-        let hello_message = format!("Goodbye, {}!", self.name);
-        Ok(CallToolResult::text_content(hello_message, None))
+        let goodbye_message = format!("Goodbye, {}!", self.name);
+        Ok(CallToolResult::text_content(vec![TextContent::from(
+            goodbye_message,
+        )]))
     }
 }
 

@@ -88,6 +88,12 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                     .handle_list_roots_request(list_roots_request, runtime)
                     .await
                     .map(|value| value.into()),
+                #[cfg(feature = "2025_06_18")]
+                ServerRequest::ElicitRequest(elicit_request) => self
+                    .handler
+                    .handle_elicit_request(elicit_request, runtime)
+                    .await
+                    .map(|value| value.into()),
             },
             // Handles custom notifications received from the server by passing the request to self.handler
             RequestFromServer::CustomRequest(custom_request) => self

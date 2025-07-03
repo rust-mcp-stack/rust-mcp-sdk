@@ -13,7 +13,7 @@ exclude = ["assets/", "tests/"]
 
 [dependencies]
 rust-mcp-schema = { workspace = true, default-features = false }
-rust-mcp-transport = { workspace = true, default-features = false, optional = true }
+rust-mcp-transport = { workspace = true, default-features = false }
 rust-mcp-macros = { workspace = true, optional = true, default-features = false }
 
 tokio.workspace = true
@@ -53,7 +53,7 @@ default = [
     "macros",
     "hyper-server",
     "ssl",
-    "2025_03_26",
+    "2025_06_18",
 ] # All features enabled by default
 server = ["rust-mcp-transport/stdio"] # Server feature
 client = ["rust-mcp-transport/stdio", "rust-mcp-transport/sse"] # Client feature
@@ -69,7 +69,15 @@ hyper-server = [
 ssl = ["axum-server/tls-rustls"]
 macros = ["rust-mcp-macros/sdk"]
 
-# enabled mcp protocol version 2025_03_26
+# enables mcp protocol version 2025_06_18
+2025_06_18 = [
+    "rust-mcp-schema/2025_06_18",
+    "rust-mcp-macros/2025_06_18",
+    "rust-mcp-transport/2025_06_18",
+    "rust-mcp-schema/schema_utils",
+]
+
+# enables mcp protocol version 2025_03_26
 2025_03_26 = [
     "rust-mcp-schema/2025_03_26",
     "rust-mcp-macros/2025_03_26",
@@ -77,7 +85,7 @@ macros = ["rust-mcp-macros/sdk"]
     "rust-mcp-schema/schema_utils",
 ]
 
-# enabled mcp protocol version 2024_11_05
+# enables mcp protocol version 2024_11_05
 2024_11_05 = [
     "rust-mcp-schema/2024_11_05",
     "rust-mcp-macros/2024_11_05",
