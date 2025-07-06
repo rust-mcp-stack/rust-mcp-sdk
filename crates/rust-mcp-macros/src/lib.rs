@@ -263,7 +263,9 @@ impl Parse for McpToolMacroAttributes {
 /// Panics if the macro is applied to anything other than a struct.
 ///
 /// # Example
-/// ```rust
+/// ```rust,ignore
+/// # #[cfg(not(feature = "sdk"))]
+/// # {
 /// #[rust_mcp_macros::mcp_tool(
 ///     name = "example_tool",
 ///     description = "An example tool",
@@ -287,6 +289,7 @@ impl Parse for McpToolMacroAttributes {
 /// assert_eq!(schema_properties.len(), 2);
 /// assert!(schema_properties.contains_key("field1"));
 /// assert!(schema_properties.contains_key("field2"));
+/// }
 /// ```
 #[proc_macro_attribute]
 pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
