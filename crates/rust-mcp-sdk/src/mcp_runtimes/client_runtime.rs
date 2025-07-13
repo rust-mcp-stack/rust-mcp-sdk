@@ -76,13 +76,13 @@ impl McpClient for ClientRuntime {
     where
         MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>,
     {
-        (self.transport.sender().await) as _
+        (self.transport.message_sender().await) as _
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
         let mut stream = self.transport.start().await?;
 
-        let mut error_io_stream = self.transport.error_io().await.write().await;
+        let mut error_io_stream = self.transport.error_stream().await.write().await;
         let error_io_stream = error_io_stream.take();
 
         let self_clone = Arc::clone(&self);

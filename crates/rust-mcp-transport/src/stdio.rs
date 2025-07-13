@@ -254,11 +254,11 @@ where
         *result
     }
 
-    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
+    async fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
         &self.message_sender as _
     }
 
-    async fn error_io(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
+    async fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
         &self.error_stream as _
     }
 
