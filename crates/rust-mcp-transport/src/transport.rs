@@ -113,8 +113,8 @@ where
     async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
     where
         MessageDispatcher<R>: McpDispatch<R, S>;
-    async fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>>;
-    async fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>>;
+    fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>>;
+    fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>>;
     async fn shut_down(&self) -> TransportResult<()>;
     async fn is_shut_down(&self) -> bool;
 }

@@ -66,14 +66,14 @@ impl McpServer for ServerRuntime {
     where
         MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>,
     {
-        (self.transport.message_sender().await) as _
+        (self.transport.message_sender()) as _
     }
 
     /// Main runtime loop, processes incoming messages and handles requests
     async fn start(&self) -> SdkResult<()> {
         let mut stream = self.transport.start().await?;
 
-        let sender = self.transport.message_sender().await.read().await;
+        let sender = self.transport.message_sender().read().await;
         let sender = sender
             .as_ref()
             .ok_or(schema_utils::SdkError::connection_closed())?;
@@ -124,7 +124,7 @@ impl McpServer for ServerRuntime {
     }
 
     async fn stderr_message(&self, message: String) -> SdkResult<()> {
-        let mut lock = self.transport.error_stream().await.write().await;
+        let mut lock = self.transport.error_stream().write().await;
         if let Some(IoStream::Writable(stderr)) = lock.as_mut() {
             stderr.write_all(message.as_bytes()).await?;
             stderr.write_all(b"\n").await?;
