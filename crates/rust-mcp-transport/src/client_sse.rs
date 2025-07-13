@@ -52,7 +52,10 @@ impl Default for ClientSseTransportOptions {
 /// Client-side Server-Sent Events (SSE) transport implementation
 ///
 /// Manages SSE connections, HTTP POST requests, and message streaming for client-server communication.
-pub struct ClientSseTransport {
+pub struct ClientSseTransport<R>
+where
+    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+{
     /// Optional cancellation token source for shutting down the transport
     shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
     /// Flag indicating if the transport is shut down
@@ -73,9 +76,14 @@ pub struct ClientSseTransport {
     custom_headers: Option<HeaderMap>,
     sse_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
     post_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
+    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<R>>>,
+    error_stream: tokio::sync::RwLock<Option<IoStream>>,
 }
 
-impl ClientSseTransport {
+impl<R> ClientSseTransport<R>
+where
+    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+{
     /// Creates a new ClientSseTransport instance
     ///
     /// Initializes the transport with the provided server URL and options.
@@ -111,6 +119,8 @@ impl ClientSseTransport {
             custom_headers: headers,
             sse_task: tokio::sync::RwLock::new(None),
             post_task: tokio::sync::RwLock::new(None),
+            message_sender: tokio::sync::RwLock::new(None),
+            error_stream: tokio::sync::RwLock::new(None),
         })
     }
 
@@ -161,10 +171,23 @@ impl ClientSseTransport {
         }
         Ok(endpoint)
     }
+
+    pub(crate) async fn set_message_sender(&self, sender: MessageDispatcher<R>) {
+        let mut lock = self.message_sender.write().await;
+        *lock = Some(sender);
+    }
+
+    pub(crate) async fn set_error_stream(
+        &self,
+        error_stream: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
+    ) {
+        let mut lock = self.error_stream.write().await;
+        *lock = Some(IoStream::Readable(error_stream));
+    }
 }
 
 #[async_trait]
-impl<R, S> Transport<R, S> for ClientSseTransport
+impl<R, S> Transport<R, S> for ClientSseTransport<R>
 where
     R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: McpMessage + Clone + Send + Sync + serde::Serialize + 'static,
@@ -176,13 +199,7 @@ where
     /// # Returns
     /// * `TransportResult<(Pin<Box<dyn Stream<Item = R> + Send>>, MessageDispatcher<R>, IoStream)>`
     ///   - The message stream, dispatcher, and error stream
-    async fn start(
-        &self,
-    ) -> TransportResult<(
-        Pin<Box<dyn Stream<Item = R> + Send>>,
-        MessageDispatcher<R>,
-        IoStream,
-    )>
+    async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
     where
         MessageDispatcher<R>: McpDispatch<R, S>,
     {
@@ -290,7 +307,21 @@ where
             cancellation_token,
         );
 
-        Ok((stream, sender, error_stream))
+        self.set_message_sender(sender).await;
+
+        if let IoStream::Readable(error_stream) = error_stream {
+            self.set_error_stream(error_stream).await;
+        }
+
+        Ok(stream)
+    }
+
+    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
+        &self.message_sender as _
+    }
+
+    async fn error_io(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
+        &self.error_stream as _
     }
 
     /// Checks if the transport has been shut down

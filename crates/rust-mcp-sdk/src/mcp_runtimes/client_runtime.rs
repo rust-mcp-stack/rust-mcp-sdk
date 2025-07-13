@@ -28,16 +28,10 @@ pub struct ClientRuntime {
     client_details: InitializeRequestParams,
     // Details about the connected server
     server_details: Arc<RwLock<Option<InitializeResult>>>,
-    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>,
     handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), McpSdkError>>>>,
 }
 
 impl ClientRuntime {
-    pub(crate) async fn set_message_sender(&self, sender: MessageDispatcher<ServerMessage>) {
-        let mut lock = self.message_sender.write().await;
-        *lock = Some(sender);
-    }
-
     pub(crate) fn new(
         client_details: InitializeRequestParams,
         transport: impl Transport<ServerMessage, MessageFromClient>,
@@ -48,7 +42,6 @@ impl ClientRuntime {
             handler,
             client_details,
             server_details: Arc::new(RwLock::new(None)),
-            message_sender: tokio::sync::RwLock::new(None),
             handlers: Mutex::new(vec![]),
         }
     }
@@ -83,12 +76,14 @@ impl McpClient for ClientRuntime {
     where
         MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>,
     {
-        (&self.message_sender) as _
+        (self.transport.sender().await) as _
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
-        let (mut stream, sender, error_io) = self.transport.start().await?;
-        self.set_message_sender(sender).await;
+        let mut stream = self.transport.start().await?;
+
+        let mut error_io_stream = self.transport.error_io().await.write().await;
+        let error_io_stream = error_io_stream.take();
 
         let self_clone = Arc::clone(&self);
         let self_clone_err = Arc::clone(&self);
@@ -96,30 +91,32 @@ impl McpClient for ClientRuntime {
         let err_task = tokio::spawn(async move {
             let self_ref = &*self_clone_err;
 
-            if let IoStream::Readable(error_input) = error_io {
-                let mut reader = BufReader::new(error_input).lines();
-                loop {
-                    tokio::select! {
-                        should_break = self_ref.transport.is_shut_down() =>{
-                            if should_break {
-                                break;
+            if let Some(error_io) = error_io_stream {
+                if let IoStream::Readable(error_input) = error_io {
+                    let mut reader = BufReader::new(error_input).lines();
+                    loop {
+                        tokio::select! {
+                            should_break = self_ref.transport.is_shut_down() =>{
+                                if should_break {
+                                    break;
+                                }
                             }
-                        }
-                        line = reader.next_line() =>{
-                            match line {
-                                Ok(Some(error_message)) => {
-                                    self_ref
-                                        .handler
-                                        .handle_process_error(error_message, self_ref)
-                                        .await?;
-                                }
-                                Ok(None) => {
-                                    // end of input
-                                    break;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error reading from std_err: {e}");
-                                    break;
+                            line = reader.next_line() =>{
+                                match line {
+                                    Ok(Some(error_message)) => {
+                                        self_ref
+                                            .handler
+                                            .handle_process_error(error_message, self_ref)
+                                            .await?;
+                                    }
+                                    Ok(None) => {
+                                        // end of input
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Error reading from std_err: {e}");
+                                        break;
+                                    }
                                 }
                             }
                         }

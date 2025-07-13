@@ -19,6 +19,7 @@ use axum::{
     Extension, Router,
 };
 use futures::stream::{self};
+use rust_mcp_schema::schema_utils::ClientMessage;
 use rust_mcp_transport::{error::TransportError, SessionId, SseTransport};
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::{
@@ -78,7 +79,7 @@ pub async fn handle_sse(
     State(state): State<Arc<AppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     let messages_endpoint =
-        SseTransport::message_endpoint(&state.sse_message_endpoint, &session_id);
+        SseTransport::<ClientMessage>::message_endpoint(&state.sse_message_endpoint, &session_id);
 
     // readable stream of string to be used in transport
     let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
