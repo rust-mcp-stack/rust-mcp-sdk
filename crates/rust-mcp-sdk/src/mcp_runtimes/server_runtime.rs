@@ -125,12 +125,10 @@ impl McpServer for ServerRuntime {
 
     async fn stderr_message(&self, message: String) -> SdkResult<()> {
         let mut lock = self.transport.error_io().await.write().await;
-        if let Some(io_stream) = lock.as_mut() {
-            if let IoStream::Writable(stderr) = io_stream {
-                stderr.write_all(message.as_bytes()).await?;
-                stderr.write_all(b"\n").await?;
-                stderr.flush().await?;
-            }
+        if let Some(IoStream::Writable(stderr)) = lock.as_mut() {
+            stderr.write_all(message.as_bytes()).await?;
+            stderr.write_all(b"\n").await?;
+            stderr.flush().await?;
         }
         Ok(())
     }

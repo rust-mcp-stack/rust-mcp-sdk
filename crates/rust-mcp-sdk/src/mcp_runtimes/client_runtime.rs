@@ -91,38 +91,37 @@ impl McpClient for ClientRuntime {
         let err_task = tokio::spawn(async move {
             let self_ref = &*self_clone_err;
 
-            if let Some(error_io) = error_io_stream {
-                if let IoStream::Readable(error_input) = error_io {
-                    let mut reader = BufReader::new(error_input).lines();
-                    loop {
-                        tokio::select! {
-                            should_break = self_ref.transport.is_shut_down() =>{
-                                if should_break {
+            if let Some(IoStream::Readable(error_input)) = error_io_stream {
+                let mut reader = BufReader::new(error_input).lines();
+                loop {
+                    tokio::select! {
+                        should_break = self_ref.transport.is_shut_down() =>{
+                            if should_break {
+                                break;
+                            }
+                        }
+                        line = reader.next_line() =>{
+                            match line {
+                                Ok(Some(error_message)) => {
+                                    self_ref
+                                        .handler
+                                        .handle_process_error(error_message, self_ref)
+                                        .await?;
+                                }
+                                Ok(None) => {
+                                    // end of input
                                     break;
                                 }
-                            }
-                            line = reader.next_line() =>{
-                                match line {
-                                    Ok(Some(error_message)) => {
-                                        self_ref
-                                            .handler
-                                            .handle_process_error(error_message, self_ref)
-                                            .await?;
-                                    }
-                                    Ok(None) => {
-                                        // end of input
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("Error reading from std_err: {e}");
-                                        break;
-                                    }
+                                Err(e) => {
+                                    tracing::error!("Error reading from std_err: {e}");
+                                    break;
                                 }
                             }
                         }
                     }
                 }
             }
+
             Ok::<(), McpSdkError>(())
         });
 
