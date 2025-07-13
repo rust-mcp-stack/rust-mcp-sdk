@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use schema_utils::ClientMessage;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use tokio::io::AsyncWriteExt;
 
@@ -27,9 +26,6 @@ pub struct ServerRuntime {
     server_details: Arc<InitializeResult>,
     // Details about the connected client
     client_details: Arc<RwLock<Option<InitializeRequestParams>>>,
-
-    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>,
-    error_stream: tokio::sync::RwLock<Option<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>>,
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
 }
@@ -70,24 +66,14 @@ impl McpServer for ServerRuntime {
     where
         MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>,
     {
-        (&self.message_sender) as _
+        (self.transport.message_sender().await) as _
     }
 
     /// Main runtime loop, processes incoming messages and handles requests
     async fn start(&self) -> SdkResult<()> {
-        // Start the transport layer to begin handling messages
-        // self.transport.start().await?;
-        // Open the transport stream
-        // let mut stream = self.transport.open();
-        let (mut stream, sender, error_io) = self.transport.start().await?;
+        let mut stream = self.transport.start().await?;
 
-        self.set_message_sender(sender).await;
-
-        if let IoStream::Writable(error_stream) = error_io {
-            self.set_error_stream(error_stream).await;
-        }
-
-        let sender = self.sender().await.read().await;
+        let sender = self.transport.message_sender().await.read().await;
         let sender = sender
             .as_ref()
             .ok_or(schema_utils::SdkError::connection_closed())?;
@@ -138,8 +124,8 @@ impl McpServer for ServerRuntime {
     }
 
     async fn stderr_message(&self, message: String) -> SdkResult<()> {
-        let mut lock = self.error_stream.write().await;
-        if let Some(stderr) = lock.as_mut() {
+        let mut lock = self.transport.error_stream().await.write().await;
+        if let Some(IoStream::Writable(stderr)) = lock.as_mut() {
             stderr.write_all(message.as_bytes()).await?;
             stderr.write_all(b"\n").await?;
             stderr.flush().await?;
@@ -149,22 +135,9 @@ impl McpServer for ServerRuntime {
 }
 
 impl ServerRuntime {
-    pub(crate) async fn set_message_sender(&self, sender: MessageDispatcher<ClientMessage>) {
-        let mut lock = self.message_sender.write().await;
-        *lock = Some(sender);
-    }
-
     #[cfg(feature = "hyper-server")]
     pub(crate) async fn session_id(&self) -> Option<SessionId> {
         self.session_id.to_owned()
-    }
-
-    pub(crate) async fn set_error_stream(
-        &self,
-        error_stream: Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>,
-    ) {
-        let mut lock = self.error_stream.write().await;
-        *lock = Some(error_stream);
     }
 
     #[cfg(feature = "hyper-server")]
@@ -179,8 +152,6 @@ impl ServerRuntime {
             client_details: Arc::new(RwLock::new(None)),
             transport: Box::new(transport),
             handler,
-            message_sender: tokio::sync::RwLock::new(None),
-            error_stream: tokio::sync::RwLock::new(None),
             session_id: Some(session_id),
         }
     }
@@ -195,8 +166,6 @@ impl ServerRuntime {
             client_details: Arc::new(RwLock::new(None)),
             transport: Box::new(transport),
             handler,
-            message_sender: tokio::sync::RwLock::new(None),
-            error_stream: tokio::sync::RwLock::new(None),
             #[cfg(feature = "hyper-server")]
             session_id: None,
         }

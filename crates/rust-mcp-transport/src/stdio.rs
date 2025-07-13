@@ -2,6 +2,7 @@ use crate::schema::schema_utils::{McpMessage, RpcMessage};
 use crate::schema::RequestId;
 use async_trait::async_trait;
 use futures::Stream;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,16 +23,24 @@ use crate::{IoStream, McpDispatch, TransportOptions};
 /// and server-side communication by optionally launching a subprocess or using the current
 /// process's stdio streams. The transport handles message streaming, dispatching, and shutdown
 /// operations, integrating with the MCP runtime ecosystem.
-pub struct StdioTransport {
+pub struct StdioTransport<R>
+where
+    R: RpcMessage + Clone + Send + Sync + DeserializeOwned + 'static,
+{
     command: Option<String>,
     args: Option<Vec<String>>,
     env: Option<HashMap<String, String>>,
     options: TransportOptions,
     shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
     is_shut_down: Mutex<bool>,
+    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<R>>>,
+    error_stream: tokio::sync::RwLock<Option<IoStream>>,
 }
 
-impl StdioTransport {
+impl<R> StdioTransport<R>
+where
+    R: RpcMessage + Clone + Send + Sync + DeserializeOwned + 'static,
+{
     /// Creates a new `StdioTransport` instance for MCP Server.
     ///
     /// This constructor configures the transport to use the current process's stdio streams,
@@ -53,6 +62,8 @@ impl StdioTransport {
             options,
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
+            message_sender: tokio::sync::RwLock::new(None),
+            error_stream: tokio::sync::RwLock::new(None),
         })
     }
 
@@ -84,6 +95,8 @@ impl StdioTransport {
             options,
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
+            message_sender: tokio::sync::RwLock::new(None),
+            error_stream: tokio::sync::RwLock::new(None),
         })
     }
 
@@ -109,10 +122,23 @@ impl StdioTransport {
             (command, command_args)
         }
     }
+
+    pub(crate) async fn set_message_sender(&self, sender: MessageDispatcher<R>) {
+        let mut lock = self.message_sender.write().await;
+        *lock = Some(sender);
+    }
+
+    pub(crate) async fn set_error_stream(
+        &self,
+        error_stream: Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>,
+    ) {
+        let mut lock = self.error_stream.write().await;
+        *lock = Some(IoStream::Writable(error_stream));
+    }
 }
 
 #[async_trait]
-impl<R, S> Transport<R, S> for StdioTransport
+impl<R, S> Transport<R, S> for StdioTransport<R>
 where
     R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: McpMessage + Clone + Send + Sync + serde::Serialize + 'static,
@@ -130,13 +156,7 @@ where
     ///
     /// # Errors
     /// Returns a `TransportError` if the subprocess fails to spawn or stdio streams cannot be accessed.
-    async fn start(
-        &self,
-    ) -> TransportResult<(
-        Pin<Box<dyn Stream<Item = R> + Send>>,
-        MessageDispatcher<R>,
-        IoStream,
-    )>
+    async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
     where
         MessageDispatcher<R>: McpDispatch<R, S>,
     {
@@ -200,7 +220,13 @@ where
                 cancellation_token,
             );
 
-            Ok((stream, sender, error_stream))
+            self.set_message_sender(sender).await;
+
+            if let IoStream::Writable(error_stream) = error_stream {
+                self.set_error_stream(error_stream).await;
+            }
+
+            Ok(stream)
         } else {
             let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>> =
                 Arc::new(Mutex::new(HashMap::new()));
@@ -213,7 +239,12 @@ where
                 cancellation_token,
             );
 
-            Ok((stream, sender, error_stream))
+            self.set_message_sender(sender).await;
+
+            if let IoStream::Writable(error_stream) = error_stream {
+                self.set_error_stream(error_stream).await;
+            }
+            Ok(stream)
         }
     }
 
@@ -221,6 +252,14 @@ where
     async fn is_shut_down(&self) -> bool {
         let result = self.is_shut_down.lock().await;
         *result
+    }
+
+    async fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
+        &self.message_sender as _
+    }
+
+    async fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
+        &self.error_stream as _
     }
 
     // Shuts down the transport, terminating any subprocess and signaling closure.
