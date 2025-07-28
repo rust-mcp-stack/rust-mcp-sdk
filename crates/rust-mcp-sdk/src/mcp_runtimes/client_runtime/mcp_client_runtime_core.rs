@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use crate::schema::{
     schema_utils::{
-        MessageFromClient, NotificationFromServer, RequestFromServer, ResultFromClient,
-        ServerMessage,
+        ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
+        RequestFromServer, ResultFromClient, ServerMessage, ServerMessages,
     },
     InitializeRequestParams, RpcError,
 };
 use async_trait::async_trait;
+
 use rust_mcp_transport::Transport;
 
 use crate::{
@@ -41,7 +42,13 @@ use super::ClientRuntime;
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core)
 pub fn create_client(
     client_details: InitializeRequestParams,
-    transport: impl Transport<ServerMessage, MessageFromClient>,
+    transport: impl Transport<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    >,
     handler: impl ClientHandlerCore,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new(

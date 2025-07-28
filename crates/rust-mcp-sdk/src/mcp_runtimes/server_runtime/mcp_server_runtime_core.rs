@@ -1,19 +1,19 @@
-use std::sync::Arc;
-
-use crate::schema::schema_utils::{
-    self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
-    ResultFromServer,
-};
-use crate::schema::{ClientRequest, InitializeResult, RpcError};
-use async_trait::async_trait;
-use rust_mcp_transport::Transport;
-
+use super::ServerRuntime;
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
-
-use super::ServerRuntime;
+use crate::schema::schema_utils::{
+    self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
+    ResultFromServer, ServerMessage,
+};
+use crate::schema::{
+    schema_utils::{ClientMessages, ServerMessages},
+    ClientRequest, InitializeResult, RpcError,
+};
+use async_trait::async_trait;
+use rust_mcp_transport::TransportDispatcher;
+use std::sync::Arc;
 
 /// Creates a new MCP server runtime with the specified configuration.
 ///
@@ -35,7 +35,13 @@ use super::ServerRuntime;
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core)
 pub fn create_server(
     server_details: InitializeResult,
-    transport: impl Transport<ClientMessage, MessageFromServer>,
+    transport: impl TransportDispatcher<
+        ClientMessages,
+        MessageFromServer,
+        ClientMessage,
+        ServerMessages,
+        ServerMessage,
+    >,
     handler: impl ServerHandlerCore,
 ) -> ServerRuntime {
     ServerRuntime::new(

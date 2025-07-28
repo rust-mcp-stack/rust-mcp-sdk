@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use crate::schema::{
     schema_utils::{
-        self, CallToolError, ClientMessage, MessageFromServer, NotificationFromClient,
-        RequestFromClient, ResultFromServer,
+        self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
+        NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage, ServerMessages,
     },
     CallToolResult, ClientNotification, ClientRequest, InitializeResult, RpcError,
 };
 use async_trait::async_trait;
-use rust_mcp_transport::Transport;
+
+use rust_mcp_transport::TransportDispatcher;
 
 use super::ServerRuntime;
 #[cfg(feature = "hyper-server")]
@@ -40,7 +41,13 @@ use crate::{
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)
 pub fn create_server(
     server_details: InitializeResult,
-    transport: impl Transport<ClientMessage, MessageFromServer>,
+    transport: impl TransportDispatcher<
+        ClientMessages,
+        MessageFromServer,
+        ClientMessage,
+        ServerMessages,
+        ServerMessage,
+    >,
     handler: impl ServerHandler,
 ) -> ServerRuntime {
     ServerRuntime::new(
@@ -53,11 +60,10 @@ pub fn create_server(
 #[cfg(feature = "hyper-server")]
 pub(crate) fn create_server_instance(
     server_details: Arc<InitializeResult>,
-    transport: impl Transport<ClientMessage, MessageFromServer>,
     handler: Arc<dyn McpServerHandler>,
     session_id: SessionId,
 ) -> ServerRuntime {
-    ServerRuntime::new_instance(server_details, transport, handler, session_id)
+    ServerRuntime::new_instance(server_details, handler, session_id)
 }
 
 pub(crate) struct ServerRuntimeInternalHandler<H> {

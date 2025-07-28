@@ -1,12 +1,10 @@
-use crate::schema::schema_utils::RpcMessage;
-use crate::schema::{RequestId, RpcError};
+use crate::schema::RequestId;
 use crate::{
     error::{GenericSendError, TransportError},
     message_dispatcher::MessageDispatcher,
     utils::CancellationToken,
     IoStream,
 };
-use futures::Stream;
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -16,7 +14,7 @@ use std::{
 use tokio::task::JoinHandle;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
-    sync::{broadcast::Sender, oneshot, Mutex},
+    sync::Mutex,
 };
 
 const CHANNEL_CAPACITY: usize = 36;
@@ -32,7 +30,7 @@ impl MCPStream {
     /// - A `Pin<Box<dyn Stream<Item = R> + Send>>`: A stream that yields items of type `R`.
     /// - A `MessageDispatcher<R>`: A sender that can be used to send messages of type `R`.
     /// - An `IoStream`: An error handling stream for managing error I/O (stderr).
-    pub fn create<R>(
+    pub fn create<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
         error_io: IoStream,
@@ -40,29 +38,24 @@ impl MCPStream {
         request_timeout: Duration,
         cancellation_token: CancellationToken,
     ) -> (
-        Pin<Box<dyn Stream<Item = R> + Send>>,
+        tokio_stream::wrappers::ReceiverStream<X>,
         MessageDispatcher<R>,
         IoStream,
     )
     where
-        R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        X: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
-        let (tx, rx) = tokio::sync::broadcast::channel::<R>(CHANNEL_CAPACITY);
+        let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
         // Clone cancellation_token for reader
         let reader_token = cancellation_token.clone();
 
         #[allow(clippy::let_underscore_future)]
-        let _ = Self::spawn_reader(readable, tx, pending_requests.clone(), reader_token);
+        let _ = Self::spawn_reader(readable, tx, reader_token);
 
-        let stream = {
-            Box::pin(futures::stream::unfold(rx, |mut rx| async move {
-                match rx.recv().await {
-                    Ok(msg) => Some((msg, rx)),
-                    Err(_) => None,
-                }
-            }))
-        };
+        // rpc message stream that receives incoming messages
 
         let sender = MessageDispatcher::new(
             pending_requests,
@@ -78,14 +71,13 @@ impl MCPStream {
     /// The received data is deserialized into a JsonrpcMessage. If the deserialization is successful,
     /// the object is transmitted. If the object is a response or error corresponding to a pending request,
     /// the associated pending request will ber removed from pending_requests.
-    fn spawn_reader<R>(
+    fn spawn_reader<X>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
-        tx: Sender<R>,
-        pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
+        tx: tokio::sync::mpsc::Sender<X>,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<Result<(), TransportError>>
     where
-        R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        X: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
         tokio::spawn(async move {
             let mut lines_stream = BufReader::new(readable).lines();
@@ -100,38 +92,16 @@ impl MCPStream {
                     line = lines_stream.next_line() =>{
                         match line {
                             Ok(Some(line)) => {
+
                                             // deserialize and send it to the stream
-                                            let message: R = match serde_json::from_str(&line){
+                                            let message: X = match serde_json::from_str(&line){
                                                 Ok(mcp_message) => mcp_message,
                                                 Err(_) => {
                                                     // continue if malformed message is received
                                                     continue;
                                                 },
                                             };
-
-                                            if message.is_response() || message.is_error() {
-                                                if let Some(request_id) = &message.request_id() {
-                                                    let mut pending_requests = pending_requests.lock().await;
-
-                                                    if let Some(tx_response) = pending_requests.remove(request_id) {
-                                                        tx_response.send(message).map_err(|_| {
-                                                            crate::error::TransportError::JsonrpcError(
-                                                                RpcError::internal_error(),
-                                                            )
-                                                        })?;
-                                                    } else if message.is_error() {
-                                                        //An error that is unrelated to a request.
-                                                        tx.send(message).map_err(GenericSendError::new)?;
-                                                    } else {
-                                                        tracing::warn!(
-                                                            "Received response or error without a matching request: {:?}",
-                                                            &message.is_response()
-                                                        );
-                                                    }
-                                                }
-                                            } else {
-                                                tx.send(message).map_err(GenericSendError::new)?;
-                                            }
+                                            tx.send(message).await.map_err(GenericSendError::new)?;
                                         }
                                         Ok(None) => {
                                             // EOF reached, exit loop

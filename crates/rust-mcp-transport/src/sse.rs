@@ -1,37 +1,44 @@
-use crate::schema::schema_utils::{McpMessage, RpcMessage};
+use crate::schema::schema_utils::{
+    ClientMessage, ClientMessages, MessageFromServer, SdkError, ServerMessage, ServerMessages,
+};
 use crate::schema::RequestId;
 use async_trait::async_trait;
-use futures::Stream;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::DuplexStream;
-use tokio::sync::Mutex;
+use std::time::Duration;
+use tokio::io::{AsyncWriteExt, DuplexStream};
+use tokio::sync::oneshot::Sender;
+use tokio::sync::{oneshot, Mutex};
+use tokio::task::JoinHandle;
+use tokio::time::{self, Interval};
 
 use crate::error::{TransportError, TransportResult};
 use crate::mcp_stream::MCPStream;
 use crate::message_dispatcher::MessageDispatcher;
 use crate::transport::Transport;
 use crate::utils::{endpoint_with_session_id, CancellationTokenSource};
-use crate::{IoStream, McpDispatch, SessionId, TransportOptions};
+use crate::{IoStream, McpDispatch, SessionId, TransportDispatcher, TransportOptions};
 
 pub struct SseTransport<R>
 where
-    R: RpcMessage + Clone + Send + Sync + DeserializeOwned + 'static,
+    R: Clone + Send + Sync + DeserializeOwned + 'static,
 {
     shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
     is_shut_down: Mutex<bool>,
     read_write_streams: Mutex<Option<(DuplexStream, DuplexStream)>>,
+    receiver_tx: Mutex<DuplexStream>, // receiving string payload
     options: Arc<TransportOptions>,
-    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<R>>>,
+    message_sender: Arc<tokio::sync::RwLock<Option<MessageDispatcher<R>>>>,
     error_stream: tokio::sync::RwLock<Option<IoStream>>,
+    pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
 }
 
 /// Server-Sent Events (SSE) transport implementation
 impl<R> SseTransport<R>
 where
-    R: RpcMessage + Clone + Send + Sync + DeserializeOwned + 'static,
+    R: Clone + Send + Sync + DeserializeOwned + 'static,
 {
     /// Creates a new SseTransport instance
     ///
@@ -40,6 +47,7 @@ where
     /// # Arguments
     /// * `read_rx` - Duplex stream for receiving messages
     /// * `write_tx` - Duplex stream for sending messages
+    /// * `receiver_tx` - Duplex stream for receiving string payload
     /// * `options` - Shared transport configuration options
     ///
     /// # Returns
@@ -47,6 +55,7 @@ where
     pub fn new(
         read_rx: DuplexStream,
         write_tx: DuplexStream,
+        receiver_tx: DuplexStream,
         options: Arc<TransportOptions>,
     ) -> TransportResult<Self> {
         Ok(Self {
@@ -54,8 +63,10 @@ where
             options,
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
-            message_sender: tokio::sync::RwLock::new(None),
+            receiver_tx: Mutex::new(receiver_tx),
+            message_sender: Arc::new(tokio::sync::RwLock::new(None)),
             error_stream: tokio::sync::RwLock::new(None),
+            pending_requests: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -78,10 +89,50 @@ where
 }
 
 #[async_trait]
-impl<R, S> Transport<R, S> for SseTransport<R>
-where
-    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
-    S: McpMessage + Clone + Send + Sync + serde::Serialize + 'static,
+impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
+    for SseTransport<ClientMessage>
+{
+    async fn send_message(
+        &self,
+        message: ServerMessages,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ClientMessages>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+
+        sender.send_message(message, request_timeout).await
+    }
+
+    async fn send(
+        &self,
+        message: ServerMessage,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ClientMessage>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send(message, request_timeout).await
+    }
+
+    async fn send_batch(
+        &self,
+        message: Vec<ServerMessage>,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<Vec<ClientMessage>>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send_batch(message, request_timeout).await
+    }
+
+    async fn write_str(&self, payload: &str) -> TransportResult<()> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.write_str(payload).await
+    }
+}
+
+#[async_trait] //RSMX
+impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages, ServerMessage>
+    for SseTransport<ClientMessage>
 {
     /// Starts the transport, initializing streams and message dispatcher
     ///
@@ -93,17 +144,15 @@ where
     ///
     /// # Errors
     /// * Returns `TransportError` if streams are already taken or not initialized
-    async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
+    async fn start(&self) -> TransportResult<tokio_stream::wrappers::ReceiverStream<ClientMessages>>
     where
-        MessageDispatcher<R>: McpDispatch<R, S>,
+        MessageDispatcher<ClientMessage>:
+            McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>,
     {
         // Create CancellationTokenSource and token
         let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
         let mut lock = self.shutdown_source.write().await;
         *lock = Some(cancellation_source);
-
-        let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
 
         let mut lock = self.read_write_streams.lock().await;
         let (read_rx, write_tx) = lock.take().ok_or_else(|| {
@@ -112,11 +161,11 @@ where
             )
         })?;
 
-        let (stream, sender, error_stream) = MCPStream::create(
+        let (stream, sender, error_stream) = MCPStream::create::<ClientMessages, ClientMessage>(
             Box::pin(read_rx),
             Mutex::new(Box::pin(write_tx)),
             IoStream::Writable(Box::pin(tokio::io::stderr())),
-            pending_requests,
+            self.pending_requests.clone(),
             self.options.timeout,
             cancellation_token,
         );
@@ -139,12 +188,21 @@ where
         *result
     }
 
-    async fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
-        &self.message_sender as _
+    fn message_sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>> {
+        self.message_sender.clone() as _
     }
 
-    async fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
+    fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
         &self.error_stream as _
+    }
+
+    async fn consume_string_payload(&self, payload: &str) -> TransportResult<()> {
+        let mut transmit = self.receiver_tx.lock().await;
+        transmit
+            .write_all(format!("{payload}\n").as_bytes())
+            .await?;
+        transmit.flush().await?;
+        Ok(())
     }
 
     /// Shuts down the transport, terminating tasks and signaling closure
@@ -166,4 +224,49 @@ where
         *is_shut_down_lock = true;
         Ok(())
     }
+
+    async fn keep_alive(
+        &self,
+        interval: Duration,
+        disconnect_tx: oneshot::Sender<()>,
+    ) -> TransportResult<JoinHandle<()>> {
+        let sender = self.message_sender();
+
+        let handle = tokio::spawn(async move {
+            let mut interval: Interval = time::interval(interval);
+            interval.tick().await; // Skip the first immediate tick
+            loop {
+                interval.tick().await;
+                let sender = sender.read().await;
+                if let Some(sender) = sender.as_ref() {
+                    match sender.write_str(":\n").await {
+                        Ok(_) => {}
+                        Err(TransportError::StdioError(error)) => {
+                            if error.kind() == std::io::ErrorKind::BrokenPipe {
+                                let _ = disconnect_tx.send(());
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+        Ok(handle)
+    }
+    async fn pending_request_tx(&self, request_id: &RequestId) -> Option<Sender<ClientMessage>> {
+        let mut pending_requests = self.pending_requests.lock().await;
+        pending_requests.remove(request_id)
+    }
+}
+
+impl
+    TransportDispatcher<
+        ClientMessages,
+        MessageFromServer,
+        ClientMessage,
+        ServerMessages,
+        ServerMessage,
+    > for SseTransport<ClientMessage>
+{
 }

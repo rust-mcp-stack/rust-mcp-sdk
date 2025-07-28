@@ -1,9 +1,12 @@
-use std::{pin::Pin, time::Duration};
+use std::{pin::Pin, sync::Arc, time::Duration};
 
-use crate::schema::{schema_utils::McpMessage, RequestId};
+use crate::schema::RequestId;
 use async_trait::async_trait;
 
-use futures::Stream;
+use tokio::{
+    sync::oneshot::{self, Sender},
+    task::JoinHandle,
+};
 
 use crate::{error::TransportResult, message_dispatcher::MessageDispatcher};
 
@@ -40,81 +43,120 @@ impl Default for TransportOptions {
     }
 }
 
-/// A trait for sending MCP messages.
+/// A trait for dispatching MCP (Message Communication Protocol) messages.
 ///
-///It is intended to be implemented by types that send messages in the MCP protocol, such as servers or clients.
-///
-/// The `McpDispatch` trait requires two associated types:
-/// - `R`: The type of the response, which must implement the `McpMessage` trait and be capable of deserialization.
-/// - `S`: The type of the message to send, which must be serializable and cloneable.
-///
-/// Both associated types `R` and `S` must be `Send`, `Sync`, and `'static` to ensure they can be used
-/// safely in an asynchronous context and across threads.
+/// This trait is designed to be implemented by components such as clients, servers, or transports
+/// that send and receive messages in the MCP protocol. It defines the interface for transmitting messages,
+/// optionally awaiting responses, writing raw payloads, and handling batch communication.
 ///
 /// # Associated Types
 ///
-/// - `R`: The response type, which must implement the `McpMessage` trait, be `Clone`, `Send`, `Sync`, and
-///   be deserializable (`DeserializeOwned`).
-/// - `S`: The type of the message to send, which must be `Clone`, `Send`, `Sync`, and serializable (`Serialize`).
-///
-/// # Methods
-///
-/// ### `send`
-///
-/// Sends a raw message represented by type `S` and optionally includes a `request_id`.
-/// The method returns a `TransportResult<Option<R>>`, where:
-/// - `Option<R>`: The response, which can be `None` or contain the response of type `R`.
-/// - `TransportResult`: Represents the result of the operation, which can include success or failure.
-///
-/// # Arguments
-/// - `message`: The message to send, of type `S`, which will be serialized before transmission.
-/// - `request_id`: An optional `RequestId` to associate with this message. It can be used for tracking
-///   or correlating the request with its response.
-///
-/// # Example
-///
-/// let sender: Box<dyn McpDispatch<MyResponse, MyMessage>> = ...;
-/// let result = sender.send(my_message, Some(request_id)).await;
+/// - `R`: The response type expected from a message. This must implement deserialization and be safe
+///   for concurrent use in async contexts.
+/// - `S`: The type of the outgoing message sent directly to the wire. Must be serializable.
+/// - `M`: The internal message type used for responses received from a remote peer.
+/// - `OM`: The outgoing message type submitted to the dispatcher. This is the higher-level form of `S`
+///   used by clients or services submitting requests.
 ///
 #[async_trait]
-pub trait McpDispatch<R, S>: Send + Sync + 'static
+pub trait McpDispatch<R, S, M, OM>: Send + Sync + 'static
 where
-    R: McpMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: Clone + Send + Sync + serde::Serialize + 'static,
+    M: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    OM: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
     /// Sends a raw message represented by type `S` and optionally includes a `request_id`.
     /// The `request_id` is used when sending a message in response to an MCP request.
     /// It should match the `request_id` of the original request.
-    async fn send(
+    async fn send_message(
         &self,
         message: S,
-        request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
     ) -> TransportResult<Option<R>>;
+
+    async fn send(&self, message: OM, timeout: Option<Duration>) -> TransportResult<Option<M>>;
+    async fn send_batch(
+        &self,
+        message: Vec<OM>,
+        timeout: Option<Duration>,
+    ) -> TransportResult<Option<Vec<M>>>;
+
+    /// Writes a string payload to the underlying asynchronous writable stream,
+    /// appending a newline character and flushing the stream afterward.
+    ///
+    async fn write_str(&self, payload: &str) -> TransportResult<()>;
 }
 
-/// A trait representing the transport layer for MCP.
+/// A trait representing the transport layer for the MCP (Message Communication Protocol).
 ///
-/// This trait is designed for handling the transport of messages within an MCP protocol system. It
-/// provides a method to start the transport process, which involves setting up a stream, a message sender,
-/// and handling I/O operations.
+/// This trait abstracts the transport layer functionality required to send and receive messages
+/// within an MCP-based system. It provides methods to initialize the transport, send and receive
+/// messages, handle errors, manage pending requests, and implement keep-alive functionality.
 ///
-/// The `Transport` trait requires three associated types:
-/// - `R`: The message type to send, which must implement the `McpMessage` trait.
-/// - `S`: The message type to send.
-/// - `M`: The type of message that we expect to receive as a response to the sent message.
+/// # Associated Types
+///
+/// - `R`: The type of message expected to be received from the transport layer. Must be deserializable.
+/// - `S`: The type of message to be sent over the transport layer. Must be serializable.
+/// - `M`: The internal message type used by the dispatcher. Typically this wraps or transforms `R`.
+/// - `OR`: The outbound response type expected to be produced by the dispatcher when handling incoming messages.
+/// - `OM`: The outbound message type that the dispatcher expects to send as a reply to received messages.
 ///
 #[async_trait]
-pub trait Transport<R, S>: Send + Sync + 'static
+pub trait Transport<R, S, M, OR, OM>: Send + Sync + 'static
 where
-    R: McpMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: Clone + Send + Sync + serde::Serialize + 'static,
+    M: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    OR: Clone + Send + Sync + serde::Serialize + 'static,
+    OM: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
-    async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
+    async fn start(&self) -> TransportResult<tokio_stream::wrappers::ReceiverStream<R>>
     where
-        MessageDispatcher<R>: McpDispatch<R, S>;
-    async fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>>;
-    async fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>>;
+        MessageDispatcher<M>: McpDispatch<R, OR, M, OM>;
+    fn message_sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<M>>>>;
+    fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>>;
     async fn shut_down(&self) -> TransportResult<()>;
     async fn is_shut_down(&self) -> bool;
+    async fn consume_string_payload(&self, payload: &str) -> TransportResult<()>;
+    async fn pending_request_tx(&self, request_id: &RequestId) -> Option<Sender<M>>;
+    async fn keep_alive(
+        &self,
+        interval: Duration,
+        disconnect_tx: oneshot::Sender<()>,
+    ) -> TransportResult<JoinHandle<()>>;
+}
+
+/// A composite trait that combines both transport and dispatch capabilities for the MCP protocol.
+///
+/// `TransportDispatcher` unifies the functionality of [`Transport`] and [`McpDispatch`], allowing implementors
+/// to both manage the transport layer and handle message dispatch logic in a single abstraction.
+///
+/// This trait applies to components responsible for the following operations:
+/// - Handle low-level I/O (stream management, payload parsing, lifecycle control)
+/// - Dispatch and route messages, potentially awaiting or sending responses
+///
+/// # Supertraits
+///
+/// - [`Transport<R, S, M, OR, OM>`]: Provides the transport-level operations (starting, shutting down,
+///   receiving messages, etc.).
+/// - [`McpDispatch<R, OR, M, OM>`]: Provides message-sending and dispatching capabilities.
+///
+/// # Associated Types
+///
+/// - `R`: The raw message type expected to be received. Must be deserializable.
+/// - `S`: The message type sent over the transport (often serialized directly to wire).
+/// - `M`: The internal message type used within the dispatcher.
+/// - `OR`: The outbound response type returned from processing a received message.
+/// - `OM`: The outbound message type submitted by clients or application code.
+///
+pub trait TransportDispatcher<R, S, M, OR, OM>:
+    Transport<R, S, M, OR, OM> + McpDispatch<R, OR, M, OM>
+where
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    S: Clone + Send + Sync + serde::Serialize + 'static,
+    M: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    OR: Clone + Send + Sync + serde::Serialize + 'static,
+    OM: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+{
 }

@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::utils::CancellationError;
 use core::fmt;
 use std::any::Any;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 /// A wrapper around a broadcast send error. This structure allows for generic error handling
 /// by boxing the underlying error into a type-erased form.
@@ -15,7 +15,7 @@ pub struct GenericSendError {
 
 #[allow(unused)]
 impl GenericSendError {
-    pub fn new<T: Send + 'static>(error: broadcast::error::SendError<T>) -> Self {
+    pub fn new<T: Send + 'static>(error: mpsc::error::SendError<T>) -> Self {
         Self {
             inner: Box::new(error),
         }
