@@ -32,8 +32,8 @@ This project supports following transports:
 🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
 
-**Streamable HTTP support checklist**
 
+**MCP Streamable HTTP Support**
 - [x] Streamable HTTP Support for MCP Servers
 - [x] DNS Rebinding Protection
 - [x] Batch Messages
