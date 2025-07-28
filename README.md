@@ -23,15 +23,26 @@ By default, it uses the **2025-06-18** version, but earlier versions can be enab
 
 
 
-This project currently supports following transports:
-- **stdio** (Standard Input/Output)
-- **sse** (Server-Sent Events).
-
+This project supports following transports:
+- **Stdio** (Standard Input/Output)
+- **SSE** (Server-Sent Events).
+- **Streamable HTTP**.
 
 
 🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
-**⚠️** **Streamable HTTP** transport and authentication still in progress and not yet available. Project is currently under development and should be used at your own risk.
+
+**Streamable HTTP support checklist**
+
+- [x] Streamable HTTP Support for MCP Servers
+- [x] DNS Rebinding Protection
+- [x] Batch Messages
+- [x] Streaming & non-streaming JSON response
+- [ ] Streamable HTTP Support for MCP Clients
+- [ ] Resumability
+- [ ] Authentication / Oauth
+
+**⚠️** Project is currently under development and should be used at your own risk.
 
 ## Table of Contents
 - [Usage Examples](#usage-examples)
