@@ -181,7 +181,7 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                     .filter(|message| message.is_request())
                     .map(|message| {
                         (
-                            message.request_id().unwrap(), // guranteed to have request_id
+                            message.request_id().unwrap(), // guaranteed to have request_id
                             self.store_pending_request_for_message(message),
                         )
                     })
@@ -309,7 +309,7 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
                     .filter(|message| message.is_request())
                     .map(|message| {
                         (
-                            message.request_id().unwrap(), // guranteed to have request_id
+                            message.request_id().unwrap(), // guaranteed to have request_id
                             self.store_pending_request_for_message(message),
                         )
                     })

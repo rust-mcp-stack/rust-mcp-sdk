@@ -70,7 +70,7 @@ pub struct HyperServerOptions {
     /// Optional thread-safe session id generator to generate unique session IDs.
     pub session_id_generator: Option<Arc<dyn IdGenerator>>,
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
-    pub support_sse: Option<bool>,
+    pub sse_support: bool,
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
@@ -206,7 +206,7 @@ impl Default for HyperServerOptions {
             ssl_key_path: None,
             session_id_generator: None,
             enable_json_response: None,
-            support_sse: Some(true),
+            sse_support: true,
             allowed_hosts: None,
             allowed_origins: None,
             dns_rebinding_protection: false,
@@ -316,7 +316,7 @@ impl HyperServer {
             self.options.streamable_http_endpoint()
         );
 
-        if self.options.support_sse.unwrap_or_default() {
+        if self.options.sse_support {
             let sse_url = format!(
                 "\n• SSE {} is available at {}://{}{}",
                 server_type,

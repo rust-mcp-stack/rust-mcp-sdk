@@ -27,7 +27,7 @@ pub fn app_routes(state: Arc<AppState>, server_options: &HyperServerOptions) -> 
         ))
         .merge({
             let mut r = Router::new();
-            if matches!(server_options.support_sse, Some(support_sse) if support_sse) {
+            if server_options.sse_support {
                 r = r
                     .merge(sse_routes::routes(
                         state.clone(),
