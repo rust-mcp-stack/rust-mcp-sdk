@@ -25,9 +25,9 @@ async fn main() -> SdkResult<()> {
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Hello World MCP Server SSE".to_string(),
+            name: "Hello World MCP Server Streamable HTTP + SSE".to_string(),
             version: "0.1.0".to_string(),
-            title: Some("Hello World MCP Server SSE".to_string()),
+            title: Some("Hello World MCP Server Streamable HTTP + SSE".to_string()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -43,8 +43,14 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     // STEP 3: create a MCP server
-    let server =
-        hyper_server_core::create_server(server_details, handler, HyperServerOptions::default());
+    let server = hyper_server_core::create_server(
+        server_details,
+        handler,
+        HyperServerOptions {
+            sse_support: true,
+            ..Default::default()
+        },
+    );
 
     // STEP 4: Start the server
     server.start().await?;

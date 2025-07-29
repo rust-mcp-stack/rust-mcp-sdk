@@ -36,15 +36,11 @@ const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
 pub struct HyperServerOptions {
-    /// Hostname or IP address the server will bind to (default: "localhost")
+    /// Hostname or IP address the server will bind to (default: "127.0.0.1")
     pub host: String,
+
     /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
-
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
-    pub custom_sse_endpoint: Option<String>,
-    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
-    pub custom_messages_endpoint: Option<String>,
 
     /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
     pub custom_streamable_http_endpoint: Option<String>,
@@ -57,26 +53,43 @@ pub struct HyperServerOptions {
 
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
+
+    /// Shared transport configuration used by the server
+    pub transport_options: Arc<TransportOptions>,
+
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
+
     /// Path to the SSL/TLS certificate file (e.g., "cert.pem").
     /// Required if `enable_ssl` is `true`.
     pub ssl_cert_path: Option<String>,
+
     /// Path to the SSL/TLS private key file (e.g., "key.pem").
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
-    /// Shared transport configuration used by the server
-    pub transport_options: Arc<TransportOptions>,
-    /// Optional thread-safe session id generator to generate unique session IDs.
-    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
     pub sse_support: bool,
+
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
+    /// Applicable only if sse_support is true
+    pub custom_sse_endpoint: Option<String>,
+
+    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
+    /// Applicable only if sse_support is true
+    pub custom_messages_endpoint: Option<String>,
+
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
+
     /// List of allowed origin header values for DNS rebinding protection.
     /// If not specified, origin validation is disabled.
     pub allowed_origins: Option<Vec<String>>,
+
     /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
     /// Default is false for backwards compatibility.
     pub dns_rebinding_protection: bool,
@@ -189,8 +202,8 @@ impl HyperServerOptions {
 
 /// Default implementation for HyperServerOptions
 ///
-/// Provides default values for the server configuration, including localhost address,
-/// port 8080, default SSE endpoint, and 12-second ping interval.
+/// Provides default values for the server configuration, including 127.0.0.1 address,
+/// port 8080, default Streamable HTTP endpoint, and 12-second ping interval.
 impl Default for HyperServerOptions {
     fn default() -> Self {
         Self {
