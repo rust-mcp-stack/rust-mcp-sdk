@@ -38,6 +38,17 @@ async fn create_sse_stream(
     payload: Option<&str>,
     standalone: bool,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
+    let payload_string = payload.map(|p| p.to_string());
+
+    // TODO: this logic should be moved out after refactoing the mcp_stream.rs
+    let result = payload_string
+        .as_ref()
+        .map(|json_str| contains_request(json_str))
+        .unwrap_or(Ok(false));
+    let Ok(payload_contains_request) = result else {
+        return Ok((StatusCode::BAD_REQUEST, Json(SdkError::parse_error())).into_response());
+    };
+
     // readable stream of string to be used in transport
     let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
     // writable stream to deliver message to the client
@@ -58,8 +69,6 @@ async fn create_sse_stream(
     };
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
-
-    let payload_string = payload.map(|p| p.to_string());
 
     //Start the server runtime
     tokio::spawn(async move {
@@ -99,9 +108,27 @@ async fn create_sse_stream(
         MCP_SESSION_ID_HEADER,
         HeaderValue::from_str(&session_id).unwrap(),
     );
-    //TODO: move deserialization out of mcp_stream.rs
-    // *response.status_mut() = StatusCode::ACCEPTED;
+
+    if !payload_contains_request {
+        *response.status_mut() = StatusCode::ACCEPTED;
+    }
     Ok(response)
+}
+
+// TODO: this function will be removed after refactoring the readable stream of the transports
+// so we would deserialize the string syncronousely and have more control over the flow
+// this function could potentially add a 20-250 ns overhead which could be avoided
+fn contains_request(json_str: &str) -> Result<bool, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(json_str)?;
+    match value {
+        serde_json::Value::Object(obj) => Ok(obj.contains_key("id") && obj.contains_key("method")),
+        serde_json::Value::Array(arr) => Ok(arr.iter().all(|item| {
+            item.as_object()
+                .map(|obj| obj.contains_key("id") && obj.contains_key("method"))
+                .unwrap_or(false)
+        })),
+        _ => Ok(false),
+    }
 }
 
 pub async fn create_standalone_stream(
@@ -119,14 +146,16 @@ pub async fn create_standalone_stream(
         return Ok((StatusCode::CONFLICT, Json(error)).into_response());
     }
 
-    create_sse_stream(
+    let mut response = create_sse_stream(
         runtime.clone(),
         session_id.clone(),
         state.clone(),
         None,
         true,
     )
-    .await
+    .await?;
+    *response.status_mut() = StatusCode::OK;
+    Ok(response)
 }
 
 pub async fn start_new_session(
