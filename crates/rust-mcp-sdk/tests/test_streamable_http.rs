@@ -544,27 +544,47 @@ async fn should_reject_unsupported_content_type() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-//TODO: move deserialization logic out of mcp_stream.rs
 // should handle JSON-RPC batch notification messages with 202 response
-// #[tokio::test]
-// async fn should_handle_batch_notification_messages_with_202_response() {
-//     let (server, session_id) = initialize_server(None).await.unwrap();
+#[tokio::test]
+async fn should_handle_batch_notification_messages_with_202_response() {
+    let (server, session_id) = initialize_server(None).await.unwrap();
 
-//     let batch_notification = ClientMessages::Batch(vec![
-//         RootsListChangedNotification::new(None).into(),
-//         RootsListChangedNotification::new(None).into(),
-//     ]);
+    let batch_notification = ClientMessages::Batch(vec![
+        ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
+        ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
+    ]);
 
-//     let response = send_post_request(
-//         &server.streamable_url,
-//         &serde_json::to_string(&batch_notification).unwrap(),
-//         Some(&session_id),
-//         None,
-//     )
-//     .await
-//     .expect("Request failed");
-//     assert_eq!(response.status(), StatusCode::ACCEPTED);
-// }
+    let response = send_post_request(
+        &server.streamable_url,
+        &serde_json::to_string(&batch_notification).unwrap(),
+        Some(&session_id),
+        None,
+    )
+    .await
+    .expect("Request failed");
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+// should properly handle invalid JSON data
+#[tokio::test]
+async fn should_properly_handle_invalid_json_data() {
+    let (server, session_id) = initialize_server(None).await.unwrap();
+
+    let response = send_post_request(
+        &server.streamable_url,
+        "This is not a valid JSON",
+        Some(&session_id),
+        None,
+    )
+    .await
+    .expect("Request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let error_data: SdkError = response.json().await.unwrap();
+    assert_eq!(error_data.code, SdkErrorCodes::PARSE_ERROR as i64);
+    assert!(error_data.message.contains("Parse Error"));
+}
 
 // should send response messages to the connection that sent the request
 #[tokio::test]
@@ -1252,3 +1272,6 @@ async fn should_skip_all_validations_when_false() {
     server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
     server.hyper_runtime.await_server().await.unwrap()
 }
+
+//TODO:
+// should return 400 error for invalid JSON-RPC messages
