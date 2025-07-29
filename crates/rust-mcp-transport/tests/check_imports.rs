@@ -2,7 +2,7 @@
 mod tests {
     use std::fs::File;
     use std::io::{self, Read};
-    use std::path::Path;
+    use std::path::{Path, MAIN_SEPARATOR_STR};
 
     // List of files to exclude from the check
     const EXCLUDED_FILES: &[&str] = &["src/schema.rs"];
@@ -24,7 +24,10 @@ mod tests {
                 let path_str = relative_path.to_string_lossy();
 
                 // Skip excluded files
-                if EXCLUDED_FILES.iter().any(|&excluded| abs_path == excluded) {
+                if EXCLUDED_FILES
+                    .iter()
+                    .any(|&excluded| abs_path.replace(MAIN_SEPARATOR_STR, "/") == excluded)
+                {
                     continue;
                 }
 
