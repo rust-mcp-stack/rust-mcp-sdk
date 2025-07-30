@@ -390,7 +390,10 @@ impl ServerRuntime {
                             }
                         }
                     }
-
+                    // close the stream after all messages are sent, unless it is a standalone stream
+                    if !stream_id.eq(DEFAULT_STREAM_ID){
+                        return  Ok(());
+                    }
                 }
                 _ = &mut disconnect_rx => {
                                 self.remove_transport(stream_id).await?;
