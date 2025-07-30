@@ -339,6 +339,7 @@ pub async fn delete_session(
             let runtime = runtime.lock().await.to_owned();
             runtime.shutdown().await;
             state.session_store.delete(&session_id).await;
+            tracing::info!("client disconnected : {}", &session_id);
             Ok((StatusCode::OK, Json("ok")).into_response())
         }
         None => {
