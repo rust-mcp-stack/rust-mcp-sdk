@@ -76,7 +76,7 @@ async fn create_sse_stream(
             .start_stream(transport, &stream_id, ping_interval, payload_string)
             .await
         {
-            Ok(_) => tracing::info!("stream {} exited gracefully.", &stream_id),
+            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id),
             Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id, err),
         }
         let _ = runtime.remove_transport(&stream_id).await;

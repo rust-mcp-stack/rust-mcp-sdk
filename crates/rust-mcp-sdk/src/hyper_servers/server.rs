@@ -25,7 +25,7 @@ use rust_mcp_transport::TransportOptions;
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
-const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 30;
+const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
 // Default Server-Sent Events (SSE) endpoint path
 const DEFAULT_SSE_ENDPOINT: &str = "/sse";
 // Default MCP Messages endpoint path
@@ -393,7 +393,7 @@ impl HyperServer {
         // Spawn a task to trigger shutdown on signal
         let handle_clone = self.handle.clone();
         tokio::spawn(async move {
-            shutdown_signal(handle_clone).await;
+            shutdown_signal(handle_clone, self.state.clone()).await;
         });
 
         let handle_clone = self.handle.clone();
@@ -428,7 +428,7 @@ impl HyperServer {
 }
 
 // Shutdown signal handler
-async fn shutdown_signal(handle: Handle) {
+async fn shutdown_signal(handle: Handle, state: Arc<AppState>) {
     // Wait for a Ctrl+C or SIGTERM signal
     let ctrl_c = async {
         signal::ctrl_c()
@@ -453,6 +453,7 @@ async fn shutdown_signal(handle: Handle) {
     }
 
     tracing::info!("Signal received, starting graceful shutdown");
+    state.session_store.clear();
     // Trigger graceful shutdown with a timeout
     handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
 }
