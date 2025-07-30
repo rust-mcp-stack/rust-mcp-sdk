@@ -7,11 +7,11 @@ A basic MCP server implementation using SSE transport, featuring two custom tool
 This project showcases a fundamental MCP server implementation, highlighting the capabilities of [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) with these features:
 
 - Streamable HTTP transport
-- SSE transport (for backward compability)
+- SSE transport (for backward compatibility)
 - Custom server handler
 - Basic server capabilities
 
-💡 By default, both **Streamable HTTP** and **SSE** transports are enabled for backward compability.
+💡 By default, both **Streamable HTTP** and **SSE** transports are enabled for backward compatibility.
 To disable the SSE transport, set the `sse_support` value in the `HyperServerOptions` accordingly:
 
 ```rs
