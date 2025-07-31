@@ -21,8 +21,7 @@ const MCP_SERVER_URL: &str = "http://localhost:3001/sse";
 async fn main() -> SdkResult<()> {
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME")).into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();

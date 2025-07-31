@@ -43,9 +43,7 @@ async fn tets_client_launch_uvx_server() {
     .unwrap();
 
     let client = client_runtime::create_client(test_client_info(), transport, TestClientHandler {});
-
     client.clone().start().await.unwrap();
-
     let server_capabilities = client.server_capabilities().unwrap();
     let server_info = client.server_info().unwrap();
 

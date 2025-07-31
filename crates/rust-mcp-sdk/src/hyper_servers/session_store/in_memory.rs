@@ -3,7 +3,6 @@ use super::{SessionStore, TxServer};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::io::DuplexStream;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
@@ -59,8 +58,12 @@ impl SessionStore for InMemorySessionStore {
         let store = self.store.read().await;
         store.keys().cloned().collect::<Vec<_>>()
     }
-    async fn values(&self) -> Vec<Arc<Mutex<DuplexStream>>> {
+    async fn values(&self) -> Vec<Arc<Mutex<TxServer>>> {
         let store = self.store.read().await;
         store.values().cloned().collect::<Vec<_>>()
+    }
+    async fn has(&self, session: &SessionId) -> bool {
+        let store = self.store.read().await;
+        store.contains_key(session)
     }
 }

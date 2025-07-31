@@ -2,8 +2,8 @@ use std::{sync::Arc, time::Duration};
 
 use crate::schema::{
     schema_utils::{
-        self, McpMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
-        ResultFromServer, ServerMessage,
+        self, ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromClient,
+        NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage, ServerMessages,
     },
     CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequest, CompleteRequestParams,
     CreateMessageRequest, GetPromptRequest, GetPromptRequestParams, Implementation,
@@ -15,10 +15,9 @@ use crate::schema::{
     SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
     UnsubscribeRequest, UnsubscribeRequestParams,
 };
+use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
 use rust_mcp_transport::{McpDispatch, MessageDispatcher};
-
-use crate::{error::SdkResult, utils::format_assertion_message};
 
 #[async_trait]
 pub trait McpClient: Sync + Send {
@@ -28,9 +27,10 @@ pub trait McpClient: Sync + Send {
     async fn shut_down(&self) -> SdkResult<()>;
     async fn is_shut_down(&self) -> bool;
 
-    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
+    fn sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>>
     where
-        MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>;
+        MessageDispatcher<ServerMessage>:
+            McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>;
 
     fn client_info(&self) -> &InitializeRequestParams;
     fn server_info(&self) -> Option<InitializeResult>;
@@ -175,20 +175,26 @@ pub trait McpClient: Sync + Send {
         request: RequestFromClient,
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromServer> {
-        let sender = self.sender().await.read().await;
+        let sender = self.sender();
+        let sender = sender.read().await;
         let sender = sender
             .as_ref()
             .ok_or(schema_utils::SdkError::connection_closed())?;
 
-        // Send the request and receive the response.
+        let request_id = sender.next_request_id();
+
+        let mcp_message =
+            ClientMessage::from_message(MessageFromClient::from(request), Some(request_id))?;
         let response = sender
-            .send(MessageFromClient::RequestFromClient(request), None, timeout)
+            .send_message(ClientMessages::Single(mcp_message), timeout)
             .await?;
 
         let server_message = response.ok_or_else(|| {
             RpcError::internal_error()
                 .with_message("An empty response was received from the server.".to_string())
         })?;
+
+        let server_message = server_message.as_single()?;
 
         if server_message.is_error() {
             return Err(server_message.as_error()?.error.into());
@@ -197,20 +203,68 @@ pub trait McpClient: Sync + Send {
         return Ok(server_message.as_response()?.result);
     }
 
+    async fn send(
+        &self,
+        message: ClientMessage,
+        timeout: Option<Duration>,
+    ) -> SdkResult<Option<ServerMessage>> {
+        let sender = self.sender();
+        let sender = sender.read().await;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let response = sender
+            .send_message(ClientMessages::Single(message), timeout)
+            .await?;
+
+        match response {
+            Some(res) => {
+                let server_results = res.as_single()?;
+                Ok(Some(server_results))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn send_batch(
+        &self,
+        messages: Vec<ClientMessage>,
+        timeout: Option<Duration>,
+    ) -> SdkResult<Option<Vec<ServerMessage>>> {
+        let sender = self.sender();
+        let sender = sender.read().await;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let response = sender
+            .send_message(ClientMessages::Batch(messages), timeout)
+            .await?;
+
+        match response {
+            Some(res) => {
+                let server_results = res.as_batch()?;
+                Ok(Some(server_results))
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Sends a notification. This is a one-way message that is not expected
     /// to return any response. The method asynchronously sends the notification using
     /// the transport layer and does not wait for any acknowledgement or result.
     async fn send_notification(&self, notification: NotificationFromClient) -> SdkResult<()> {
-        let sender = self.sender().await.read().await;
+        let sender = self.sender();
+        let sender = sender.read().await;
         let sender = sender
             .as_ref()
             .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let mcp_message = ClientMessage::from_message(MessageFromClient::from(notification), None)?;
+
         sender
-            .send(
-                MessageFromClient::NotificationFromClient(notification),
-                None,
-                None,
-            )
+            .send_message(ClientMessages::Single(mcp_message), None)
             .await?;
         Ok(())
     }

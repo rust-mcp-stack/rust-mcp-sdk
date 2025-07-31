@@ -21,6 +21,8 @@ pub enum TransportServerError {
     InvalidServerOptions(String),
     #[error("{0}")]
     SslCertError(String),
+    #[error("{0}")]
+    TransportError(String),
 }
 
 impl IntoResponse for TransportServerError {
