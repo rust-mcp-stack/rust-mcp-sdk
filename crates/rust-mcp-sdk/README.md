@@ -37,10 +37,10 @@ This project supports following transports:
 - [x] Streamable HTTP Support for MCP Servers
 - [x] DNS Rebinding Protection
 - [x] Batch Messages
-- [x] Streaming & non-streaming JSON response
+- [x] Streaming & non-streaming JSON responses
 - [ ] Streamable HTTP Support for MCP Clients
 - [ ] Resumability
-- [ ] Authentication / Oauth
+- [ ] Authentication / OAuth
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
