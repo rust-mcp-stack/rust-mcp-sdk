@@ -377,7 +377,7 @@ impl HyperServer {
         // Spawn a task to trigger shutdown on signal
         let handle_clone = self.handle.clone();
         tokio::spawn(async move {
-            shutdown_signal(handle_clone).await;
+            shutdown_signal(handle_clone, self.state.clone()).await;
         });
 
         let handle_clone = self.handle.clone();
@@ -466,7 +466,7 @@ async fn shutdown_signal(handle: Handle, state: Arc<AppState>) {
     }
 
     tracing::info!("Signal received, starting graceful shutdown");
-    state.session_store.clear();
+    state.session_store.clear().await;
     // Trigger graceful shutdown with a timeout
     handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
 }
