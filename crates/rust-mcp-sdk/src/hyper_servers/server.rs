@@ -376,8 +376,9 @@ impl HyperServer {
 
         // Spawn a task to trigger shutdown on signal
         let handle_clone = self.handle.clone();
+        let state_clone = self.state().clone();
         tokio::spawn(async move {
-            shutdown_signal(handle_clone, self.state.clone()).await;
+            shutdown_signal(handle_clone, state_clone).await;
         });
 
         let handle_clone = self.handle.clone();
