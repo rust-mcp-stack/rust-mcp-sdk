@@ -1,12 +1,15 @@
+use crate::schema::schema_utils::ClientMessage;
 use crate::{
-    error::McpSdkError,
     hyper_servers::{
-        app_state::AppState, error::TransportServerResult,
-        middlewares::session_id_gen::generate_session_id,
+        app_state::AppState,
+        error::TransportServerResult,
+        middlewares::{
+            protect_dns_rebinding::protect_dns_rebinding, session_id_gen::generate_session_id,
+        },
     },
+    mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::mcp_handler::McpServerHandler,
-    McpServer,
 };
 use axum::{
     extract::State,
@@ -19,16 +22,10 @@ use axum::{
     Extension, Router,
 };
 use futures::stream::{self};
-use rust_mcp_schema::schema_utils::ClientMessage;
-use rust_mcp_transport::{error::TransportError, SessionId, SseTransport};
+use rust_mcp_transport::{SessionId, SseTransport};
 use std::{convert::Infallible, sync::Arc, time::Duration};
-use tokio::{
-    io::{duplex, AsyncBufReadExt, BufReader},
-    time::{self, Interval},
-};
+use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 use tokio_stream::StreamExt;
-
-const CLIENT_PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
@@ -62,6 +59,10 @@ pub fn routes(state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>>
             state.clone(),
             generate_session_id,
         ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            protect_dns_rebinding,
+        ))
 }
 
 /// Handles Server-Sent Events (SSE) connections
@@ -82,76 +83,56 @@ pub async fn handle_sse(
         SseTransport::<ClientMessage>::message_endpoint(&state.sse_message_endpoint, &session_id);
 
     // readable stream of string to be used in transport
+    // writing string to read_tx will be received as messages inside the transport and messages will be processed
     let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
+
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    state
-        .session_store
-        .set(session_id.to_owned(), read_tx)
-        .await;
-
     // create a transport for sending/receiving messages
-    let transport =
-        SseTransport::new(read_rx, write_tx, Arc::clone(&state.transport_options)).unwrap();
-    let d: Arc<dyn McpServerHandler> = state.handler.clone();
+    let transport = SseTransport::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    )
+    .unwrap();
+    let h: Arc<dyn McpServerHandler> = state.handler.clone();
     // create a new server instance with unique session_id and
     let server: Arc<ServerRuntime> = Arc::new(server_runtime::create_server_instance(
         Arc::clone(&state.server_details),
-        transport,
-        d,
+        h,
         session_id.to_owned(),
     ));
 
-    // Ping the server periodically to check if the SSE client is still connected
-    let server_ping = Arc::clone(&server);
-    tokio::spawn(async move {
-        let mut interval: Interval = time::interval(state.ping_interval);
-        loop {
-            interval.tick().await; // Wait for the next tick (10 seconds)
-            if !server_ping.is_initialized() {
-                continue;
-            }
-            match server_ping.ping(Some(CLIENT_PING_TIMEOUT)).await {
-                Ok(_) => {}
-                Err(McpSdkError::TransportError(TransportError::StdioError(error))) => {
-                    if error.kind() == std::io::ErrorKind::BrokenPipe {
-                        if let Some(session_id) = server_ping.session_id().await {
-                            tracing::info!("Stopping {} server task ...", session_id);
-                            state.session_store.delete(&session_id).await;
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
+    state
+        .session_store
+        .set(session_id.to_owned(), server.clone())
+        .await;
 
-    tracing::info!(
-        "A new client joined : {}",
-        server.session_id().await.unwrap_or_default().to_owned()
-    );
+    tracing::info!("A new client joined : {}", session_id.to_owned());
 
     // Start the server
     tokio::spawn(async move {
-        match server.start().await {
-            Ok(_) => tracing::info!(
-                "server {} exited gracefully.",
-                server.session_id().await.unwrap_or_default().to_owned()
-            ),
+        match server
+            .start_stream(transport, DEFAULT_STREAM_ID, state.ping_interval, None)
+            .await
+        {
+            Ok(_) => tracing::info!("server {} exited gracefully.", session_id.to_owned()),
             Err(err) => tracing::info!(
                 "server {} exited with error : {}",
-                server.session_id().await.unwrap_or_default().to_owned(),
+                session_id.to_owned(),
                 err
             ),
-        }
+        };
+
+        state.session_store.delete(&session_id).await;
     });
 
     // Initial SSE message to inform the client about the server's endpoint
     let initial_event = stream::once(async move { initial_event(&messages_endpoint) });
 
-    // Construct SSE stream for sending MCP messages to the server
+    // Construct SSE stream
     let reader = BufReader::new(write_rx);
 
     let message_stream = stream::unfold(reader, |mut reader| async move {

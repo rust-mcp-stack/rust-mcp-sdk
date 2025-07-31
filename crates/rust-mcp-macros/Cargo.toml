@@ -21,6 +21,7 @@ syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
 
+
 [dev-dependencies]
 rust-mcp-schema = { workspace = true, default-features = false }
 

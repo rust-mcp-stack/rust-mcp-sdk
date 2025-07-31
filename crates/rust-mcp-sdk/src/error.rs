@@ -1,6 +1,8 @@
-use crate::schema::RpcError;
+use crate::schema::{ParseProtocolVersionError, RpcError};
+
 use rust_mcp_transport::error::TransportError;
 use thiserror::Error;
+use tokio::task::JoinError;
 
 #[cfg(feature = "hyper-server")]
 use crate::hyper_servers::error::TransportServerError;
@@ -16,14 +18,18 @@ pub enum McpSdkError {
     #[error("{0}")]
     TransportError(#[from] TransportError),
     #[error("{0}")]
+    JoinError(#[from] JoinError),
+    #[error("{0}")]
     AnyError(Box<(dyn std::error::Error + Send + Sync)>),
     #[error("{0}")]
     SdkError(#[from] crate::schema::schema_utils::SdkError),
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
     TransportServerError(#[from] TransportServerError),
-    #[error("Incompatible mcp protocol version: client:{0} server:{1}")]
+    #[error("Incompatible mcp protocol version: requested:{0} current:{1}")]
     IncompatibleProtocolVersion(String, String),
+    #[error("{0}")]
+    ParseProtocolVersionError(#[from] ParseProtocolVersionError),
 }
 
 impl McpSdkError {

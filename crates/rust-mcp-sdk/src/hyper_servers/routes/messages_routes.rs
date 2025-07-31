@@ -3,6 +3,7 @@ use crate::{
         app_state::AppState,
         error::{TransportServerError, TransportServerResult},
     },
+    mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     utils::remove_query_and_hash,
 };
 use axum::{
@@ -12,7 +13,6 @@ use axum::{
     Router,
 };
 use std::{collections::HashMap, sync::Arc};
-use tokio::io::AsyncWriteExt;
 
 pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new().route(
@@ -30,6 +30,7 @@ pub async fn handle_messages(
         .get("sessionId")
         .ok_or(TransportServerError::SessionIdMissing)?;
 
+    // transmit to the readable stream, that transport is reading from
     let transmit =
         state
             .session_store
@@ -38,17 +39,16 @@ pub async fn handle_messages(
             .ok_or(TransportServerError::SessionIdInvalid(
                 session_id.to_string(),
             ))?;
-    let mut transmit = transmit.lock().await;
+
+    let transmit = transmit.lock().await;
 
     transmit
-        .write_all(format!("{message}\n").as_bytes())
+        .consume_payload_string(DEFAULT_STREAM_ID, &message)
         .await
-        .map_err(|err| TransportServerError::StreamIoError(err.to_string()))?;
+        .map_err(|err| {
+            tracing::trace!("{}", err);
+            TransportServerError::StreamIoError(err.to_string())
+        })?;
 
-    transmit
-        .flush()
-        .await
-        .map_err(|err| TransportServerError::StreamIoError(err.to_string()))?;
-
-    Ok(axum::http::StatusCode::OK)
+    Ok(axum::http::StatusCode::ACCEPTED)
 }

@@ -1,14 +1,18 @@
 pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 
-use crate::schema::schema_utils::{self, MessageFromClient, ServerMessage};
 use crate::schema::{
+    schema_utils::{
+        self, ClientMessage, ClientMessages, FromMessage, MessageFromClient, ServerMessage,
+        ServerMessages,
+    },
     InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
     RpcError, ServerResult,
 };
 use async_trait::async_trait;
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
+
 use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -21,7 +25,15 @@ use crate::utils::ensure_server_protocole_compatibility;
 
 pub struct ClientRuntime {
     // The transport interface for handling messages between client and server
-    transport: Box<dyn Transport<ServerMessage, MessageFromClient>>,
+    transport: Arc<
+        dyn Transport<
+            ServerMessages,
+            MessageFromClient,
+            ServerMessage,
+            ClientMessages,
+            ClientMessage,
+        >,
+    >,
     // The handler for processing MCP messages
     handler: Box<dyn McpClientHandler>,
     // // Information about the server
@@ -34,11 +46,17 @@ pub struct ClientRuntime {
 impl ClientRuntime {
     pub(crate) fn new(
         client_details: InitializeRequestParams,
-        transport: impl Transport<ServerMessage, MessageFromClient>,
+        transport: impl Transport<
+            ServerMessages,
+            MessageFromClient,
+            ServerMessage,
+            ClientMessages,
+            ClientMessage,
+        >,
         handler: Box<dyn McpClientHandler>,
     ) -> Self {
         Self {
-            transport: Box::new(transport),
+            transport: Arc::new(transport),
             handler,
             client_details,
             server_details: Arc::new(RwLock::new(None)),
@@ -68,21 +86,79 @@ impl ClientRuntime {
         }
         Ok(())
     }
+
+    pub(crate) async fn handle_message(
+        &self,
+        message: ServerMessage,
+        transport: &Arc<
+            dyn Transport<
+                ServerMessages,
+                MessageFromClient,
+                ServerMessage,
+                ClientMessages,
+                ClientMessage,
+            >,
+        >,
+    ) -> SdkResult<Option<ClientMessage>> {
+        let response = match message {
+            ServerMessage::Request(jsonrpc_request) => {
+                let result = self
+                    .handler
+                    .handle_request(jsonrpc_request.request, self)
+                    .await;
+
+                // create a response to send back to the server
+                let response: MessageFromClient = match result {
+                    Ok(success_value) => success_value.into(),
+                    Err(error_value) => MessageFromClient::Error(error_value),
+                };
+
+                let mcp_message = ClientMessage::from_message(response, Some(jsonrpc_request.id))?;
+                Some(mcp_message)
+            }
+            ServerMessage::Notification(jsonrpc_notification) => {
+                self.handler
+                    .handle_notification(jsonrpc_notification.notification, self)
+                    .await?;
+                None
+            }
+            ServerMessage::Error(jsonrpc_error) => {
+                self.handler.handle_error(jsonrpc_error.error, self).await?;
+                None
+            }
+            ServerMessage::Response(response) => {
+                if let Some(tx_response) = transport.pending_request_tx(&response.id).await {
+                    tx_response
+                        .send(ServerMessage::Response(response))
+                        .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
+                } else {
+                    tracing::warn!(
+                        "Received response or error without a matching request: {:?}",
+                        &response.id
+                    );
+                }
+                None
+            }
+        };
+        Ok(response)
+    }
 }
 
 #[async_trait]
 impl McpClient for ClientRuntime {
-    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>
+    fn sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>>
     where
-        MessageDispatcher<ServerMessage>: McpDispatch<ServerMessage, MessageFromClient>,
+        MessageDispatcher<ServerMessage>:
+            McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>,
     {
-        (self.transport.message_sender()) as _
+        (self.transport.message_sender().clone()) as _
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
+        //TODO: improve the flow
         let mut stream = self.transport.start().await?;
-
-        let mut error_io_stream = self.transport.error_stream().write().await;
+        let transport = self.transport.clone();
+        let mut error_io_stream = transport.error_stream().write().await;
         let error_io_stream = error_io_stream.take();
 
         let self_clone = Arc::clone(&self);
@@ -125,52 +201,57 @@ impl McpClient for ClientRuntime {
             Ok::<(), McpSdkError>(())
         });
 
-        // send initialize request to the MCP server
-        self_clone.initialize_request().await?;
+        let transport = self.transport.clone();
 
         let main_task = tokio::spawn(async move {
-            let sender = self_clone.sender().await.read().await;
+            let sender = self_clone.sender();
+            let sender = sender.read().await;
             let sender = sender
                 .as_ref()
                 .ok_or(schema_utils::SdkError::connection_closed())?;
-            while let Some(mcp_message) = stream.next().await {
+            while let Some(mcp_messages) = stream.next().await {
                 let self_ref = &*self_clone;
 
-                match mcp_message {
-                    ServerMessage::Request(jsonrpc_request) => {
-                        let result = self_ref
-                            .handler
-                            .handle_request(jsonrpc_request.request, self_ref)
-                            .await;
+                match mcp_messages {
+                    ServerMessages::Single(server_message) => {
+                        let result = self_ref.handle_message(server_message, &transport).await;
 
-                        // create a response to send back to the server
-                        let response: MessageFromClient = match result {
-                            Ok(success_value) => success_value.into(),
-                            Err(error_value) => MessageFromClient::Error(error_value),
-                        };
-                        // send the response back with corresponding request id
-                        sender
-                            .send(response, Some(jsonrpc_request.id), None)
-                            .await?;
+                        match result {
+                            Ok(result) => {
+                                if let Some(result) = result {
+                                    sender
+                                        .send_message(ClientMessages::Single(result), None)
+                                        .await?;
+                                }
+                            }
+                            Err(error) => {
+                                tracing::error!("Error handling message : {}", error)
+                            }
+                        }
                     }
-                    ServerMessage::Notification(jsonrpc_notification) => {
-                        self_ref
-                            .handler
-                            .handle_notification(jsonrpc_notification.notification, self_ref)
-                            .await?;
+                    ServerMessages::Batch(server_messages) => {
+                        let handling_tasks: Vec<_> = server_messages
+                            .into_iter()
+                            .map(|server_message| {
+                                self_ref.handle_message(server_message, &transport)
+                            })
+                            .collect();
+                        let results: Vec<_> = try_join_all(handling_tasks).await?;
+                        let results: Vec<_> = results.into_iter().flatten().collect();
+
+                        if !results.is_empty() {
+                            sender
+                                .send_message(ClientMessages::Batch(results), None)
+                                .await?;
+                        }
                     }
-                    ServerMessage::Error(jsonrpc_error) => {
-                        self_ref
-                            .handler
-                            .handle_error(jsonrpc_error.error, self_ref)
-                            .await?;
-                    }
-                    // The response is the result of a request, it is processed at the transport level.
-                    ServerMessage::Response(_) => {}
                 }
             }
             Ok::<(), McpSdkError>(())
         });
+
+        // send initialize request to the MCP server
+        self.initialize_request().await?;
 
         let mut lock = self.handlers.lock().await;
         lock.push(main_task);
