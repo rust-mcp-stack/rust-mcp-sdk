@@ -37,10 +37,10 @@ This project supports following transports:
 - [x] Streamable HTTP Support for MCP Servers
 - [x] DNS Rebinding Protection
 - [x] Batch Messages
-- [x] Streaming & non-streaming JSON responses
+- [x] Streaming & non-streaming JSON response
 - [ ] Streamable HTTP Support for MCP Clients
 - [ ] Resumability
-- [ ] Authentication / OAuth
+- [ ] Authentication / Oauth
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
@@ -50,6 +50,9 @@ This project supports following transports:
   - [MCP Server (sse)](#mcp-server-sse)
   - [MCP Client (stdio)](#mcp-client-stdio)
   - [MCP Client (sse)](#mcp-client-sse)
+- [Getting Started](#getting-started)
+- [HyperServerOptions](#hyperserveroptions)
+  - [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
     - [MCP protocol versions with corresponding features](#mcp-protocol-versions-with-corresponding-features)
@@ -111,10 +114,14 @@ See hello-world-mcp-server example running in [MCP Inspector](https://modelconte
 
 ![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
 
-### MCP Server (sse)
+### MCP Server (Streamable HTTP)
 
 Creating an MCP server in `rust-mcp-sdk` with the `sse` transport allows multiple clients to connect simultaneously with no additional setup.
-Simply create a Hyper Server using `hyper_server::create_server()` and pass in the same handler and transform options.
+Simply create a Hyper Server using `hyper_server::create_server()` and pass in the same handler and HyperServerOptions.
+
+
+💡 By default, both **Streamable HTTP** and **SSE** transports are enabled for backward compatibility. To disable the SSE transport , set the `sse_support` to false in the `HyperServerOptions`.
+
 
 ```rust
 
@@ -145,6 +152,7 @@ let server = hyper_server::create_server(
     handler,
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
+        sse_support: false,
         ..Default::default()
     },
 );
@@ -199,9 +207,9 @@ impl ServerHandler for MyServerHandler {
 
 👉 For a more detailed example of a [Hello World MCP](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) Server that supports multiple tools and provides more type-safe handling of `CallToolRequest`, check out: **[examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)**
 
-See hello-world-server-sse example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
+See hello-world-server-streamable-http example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
-![mcp-server in rust](assets/examples/hello-world-server-sse.gif)
+![mcp-server in rust](assets/examples/hello-world-server-streamable-http.gif)
 
 ---
 
@@ -302,6 +310,103 @@ Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost
 ## Getting Started
 
 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
+
+## HyperServerOptions
+
+HyperServer is a lightweight Axum-based server that streamlines MCP servers by supporting **Streamable HTTP** and **SSE** transports. It supports simultaneous client connections, internal session management, and includes built-in security features like DNS rebinding protection and more.
+
+HyperServer is highly customizable through HyperServerOptions provided during initialization.
+
+A typical example of creating a HyperServer that exposes the MCP server via Streamable HTTP and SSE transports at:
+
+```rs
+
+let server = hyper_server::create_server(
+    server_details,
+    handler,
+    HyperServerOptions {
+        host: "127.0.0.1".to_string(),
+        enable_ssl: true,
+        ..Default::default()
+    },
+);
+
+server.start().await?;
+
+```
+
+Here is a list of available options with descriptions for configuring the HyperServer:
+```rs
+pub struct HyperServerOptions {
+    /// Hostname or IP address the server will bind to (default: "127.0.0.1")
+    pub host: String,
+
+    /// Hostname or IP address the server will bind to (default: "8080")
+    pub port: u16,
+
+    /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
+    pub custom_streamable_http_endpoint: Option<String>,
+
+    /// This setting only applies to streamable HTTP.
+    /// If true, the server will return JSON responses instead of starting an SSE stream.
+    /// This can be useful for simple request/response scenarios without streaming.
+    /// Default is false (SSE streams are preferred).
+    pub enable_json_response: Option<bool>,
+
+    /// Interval between automatic ping messages sent to clients to detect disconnects
+    pub ping_interval: Duration,
+
+    /// Shared transport configuration used by the server
+    pub transport_options: Arc<TransportOptions>,
+
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+
+    /// Enables SSL/TLS if set to `true`
+    pub enable_ssl: bool,
+
+    /// Path to the SSL/TLS certificate file (e.g., "cert.pem").
+    /// Required if `enable_ssl` is `true`.
+    pub ssl_cert_path: Option<String>,
+
+    /// Path to the SSL/TLS private key file (e.g., "key.pem").
+    /// Required if `enable_ssl` is `true`.
+    pub ssl_key_path: Option<String>,
+
+    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
+    pub sse_support: bool,
+
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
+    /// Applicable only if sse_support is true
+    pub custom_sse_endpoint: Option<String>,
+
+    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
+    /// Applicable only if sse_support is true
+    pub custom_messages_endpoint: Option<String>,
+
+    /// List of allowed host header values for DNS rebinding protection.
+    /// If not specified, host validation is disabled.
+    pub allowed_hosts: Option<Vec<String>>,
+
+    /// List of allowed origin header values for DNS rebinding protection.
+    /// If not specified, origin validation is disabled.
+    pub allowed_origins: Option<Vec<String>>,
+
+    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
+    /// Default is false for backwards compatibility.
+    pub dns_rebinding_protection: bool,
+}
+
+```
+
+### Security Considerations
+
+When using Streamable HTTP transport, following security best practices are recommended:
+
+- Enable DNS rebinding protection and provide proper `allowed_hosts` and `allowed_origins` to prevent DNS rebinding attacks.
+- When running locally, bind only to localhost (127.0.0.1 / localhost) rather than all network interfaces (0.0.0.0)
+- Use TLS/HTTPS for production deployments
+
 
 ## Cargo Features
 

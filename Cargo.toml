@@ -8,8 +8,8 @@ members = [
     "examples/simple-mcp-client-core",
     "examples/hello-world-mcp-server",
     "examples/hello-world-mcp-server-core",
-    "examples/hello-world-server-sse",
-    "examples/hello-world-server-core-sse",
+    "examples/hello-world-server-streamable-http",
+    "examples/hello-world-server-core-streamable-http",
     "examples/simple-mcp-client-sse",
     "examples/simple-mcp-client-core-sse",
 ]
