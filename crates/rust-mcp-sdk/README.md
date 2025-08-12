@@ -25,8 +25,8 @@ By default, it uses the **2025-06-18** version, but earlier versions can be enab
 
 This project supports following transports:
 - **Stdio** (Standard Input/Output)
-- **SSE** (Server-Sent Events).
-- **Streamable HTTP**.
+- **Streamable HTTP**
+- **SSE** (Server-Sent Events)
 
 
 🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `sse` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
@@ -34,20 +34,20 @@ This project supports following transports:
 
 
 **MCP Streamable HTTP Support**
-- [x] Streamable HTTP Support for MCP Servers
-- [x] DNS Rebinding Protection
-- [x] Batch Messages
-- [x] Streaming & non-streaming JSON response
-- [ ] Streamable HTTP Support for MCP Clients
-- [ ] Resumability
-- [ ] Authentication / Oauth
+- ✅ Streamable HTTP Support for MCP Servers
+- ✅ DNS Rebinding Protection
+- ✅ Batch Messages
+- ✅ Streaming & non-streaming JSON response
+- ⬜ Streamable HTTP Support for MCP Clients
+- ⬜ Resumability
+- ⬜ Authentication / Oauth
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
 ## Table of Contents
 - [Usage Examples](#usage-examples)
   - [MCP Server (stdio)](#mcp-server-stdio)
-  - [MCP Server (sse)](#mcp-server-sse)
+  - [MCP Server (Streamable HTTP)](#mcp-server-streamable-http)
   - [MCP Client (stdio)](#mcp-client-stdio)
   - [MCP Client (sse)](#mcp-client-sse)
 - [Getting Started](#getting-started)
@@ -522,7 +522,13 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 | <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
 | <a href="https://github.com/EricLBuehler/mistral.rs"><img src="https://avatars.githubusercontent.com/u/65165915?s=64" width="64"/></a> | [mistral.rs](https://github.com/EricLBuehler/mistral.rs) | Blazingly fast LLM inference. | [GitHub](https://github.com/EricLBuehler/mistral.rs) |
 | <a href="https://github.com/moonrepo/moon"><img src="https://avatars.githubusercontent.com/u/102833400?s=64" width="64"/></a> | [moon](https://github.com/moonrepo/moon) | moon is a repository management, organization, orchestration, and notification tool for the web ecosystem, written in Rust. | [GitHub](https://github.com/moonrepo/moon) |
-|  | [Ruskel](https://github.com/cortesi/ruskel) | Ruskel produces a syntactically correct, single-page skeleton of a crate's public API. | [GitHub](https://github.com/cortesi/ruskel) |
+| <a href="https://github.com/cortesi/ruskel"><img src="https://avatars.githubusercontent.com/u/22544?s=64" width="64"/></a>  | [Ruskel](https://github.com/cortesi/ruskel) | Ruskel produces a syntactically correct, single-page skeleton of a crate's public API. | [GitHub](https://github.com/cortesi/ruskel) |
+| <a href="https://github.com/angreal/angreal"><img src="https://avatars.githubusercontent.com/u/45580675?s=64" width="64"/></a> | [angreal](https://github.com/angreal/angreal) | Angreal provides a way to template the structure of projects and a way of executing methods for interacting with that project in a consistent manner. | [GitHub](https://github.com/angreal/angreal) |
+| <a href="https://github.com/cablehead/mcp-server-nu"><img src="https://avatars.githubusercontent.com/u/1394?s=64" width="64"/></a> | [mcp-server-nu](https://github.com/cablehead/mcp-server-nu) | An MCP server that allows AI assistants to execute Nushell scripts with full system access. | [GitHub](https://github.com/cablehead/mcp-server-nu) |
+| <a href="https://github.com/FalkorDB/text-to-cypher"><img src="https://avatars.githubusercontent.com/u/140048192?s=64" width="64"/></a> | [text-to-cypher](https://github.com/FalkorDB/text-to-cypher) | A high-performance Rust-based API service that translates natural language text to Cypher queries for graph databases. | [GitHub](https://github.com/FalkorDB/text-to-cypher) |
+| <a href="https://github.com/Tuurlijk/notify-mcp"><img src="https://avatars.githubusercontent.com/u/790979?s=64" width="64"/></a> | [notify-mcp](https://github.com/Tuurlijk/notify-mcp) | A Model Context Protocol (MCP) server that provides desktop notification functionality. | [GitHub](https://github.com/Tuurlijk/notify-mcp) |
+| <a href="https://github.com/WismutHansen/lst"><img src="https://avatars.githubusercontent.com/u/86825018?s=64" width="64"/></a> | [lst](https://github.com/WismutHansen/lst) | `lst` is a personal lists, notes, and blog posts management application with a focus on plain-text storage, offline-first functionality, and multi-device synchronization. | [GitHub](https://github.com/WismutHansen/lst) |
+
 
 
 
