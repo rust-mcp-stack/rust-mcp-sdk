@@ -42,8 +42,14 @@ pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
 
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+
     /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
     pub custom_streamable_http_endpoint: Option<String>,
+
+    /// Shared transport configuration used by the server
+    pub transport_options: Arc<TransportOptions>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
@@ -53,12 +59,6 @@ pub struct HyperServerOptions {
 
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
-
-    /// Shared transport configuration used by the server
-    pub transport_options: Arc<TransportOptions>,
-
-    /// Optional thread-safe session id generator to generate unique session IDs.
-    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
 
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
@@ -71,17 +71,6 @@ pub struct HyperServerOptions {
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
 
-    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
-    pub sse_support: bool,
-
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
-    /// Applicable only if sse_support is true
-    pub custom_sse_endpoint: Option<String>,
-
-    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
-    /// Applicable only if sse_support is true
-    pub custom_messages_endpoint: Option<String>,
-
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
@@ -93,6 +82,17 @@ pub struct HyperServerOptions {
     /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
     /// Default is false for backwards compatibility.
     pub dns_rebinding_protection: bool,
+
+    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
+    pub sse_support: bool,
+
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
+    /// Applicable only if sse_support is true
+    pub custom_sse_endpoint: Option<String>,
+
+    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
+    /// Applicable only if sse_support is true
+    pub custom_messages_endpoint: Option<String>,
 }
 
 impl HyperServerOptions {
