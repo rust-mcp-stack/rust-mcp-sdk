@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.0...rust-mcp-sdk-v0.5.1) (2025-08-12)
+
+
+### 🚀 Features
+
+* Add Streamable HTTP Support to MCP Server ([#76](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/76)) ([1864ce8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1864ce85775912ef6062d70cf9a3dcaf18cf7308))
+* Update examples and docs for streamable http ([#77](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/77)) ([e714482](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e714482e65d8b4ff6e0942b15609f920d78235d9))
+
+
+### 📚 Documentation
+
+* Update readme ([31d5d67](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/31d5d672bf340292a6f54961bab09afbe468539e))
+* Update readme ([470a51a](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/470a51a8bf8b0ed78b8dfb171e43eb847d8a0666))
+
 ## [0.5.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.4.7...rust-mcp-sdk-v0.5.0) (2025-07-03)
 
 

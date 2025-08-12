@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.5.0...rust-mcp-macros-v0.5.1) (2025-08-12)
+
+
+### 🚀 Features
+
+* Add Streamable HTTP Support to MCP Server ([#76](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/76)) ([1864ce8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1864ce85775912ef6062d70cf9a3dcaf18cf7308))
+
 ## [0.5.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.4.2...rust-mcp-macros-v0.5.0) (2025-07-03)
 
 
