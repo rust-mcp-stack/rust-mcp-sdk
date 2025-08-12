@@ -101,6 +101,7 @@ mod tests {
         let mut buf2 = vec![0; 6];
         reader.read_exact(&mut buf2).await.unwrap();
         assert_eq!(&buf2, b" world");
+        drop(tx);
     }
 
     #[tokio::test]

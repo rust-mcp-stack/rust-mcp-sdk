@@ -4,11 +4,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 pub use in_memory::*;
 use rust_mcp_transport::SessionId;
-use tokio::{io::DuplexStream, sync::Mutex};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::mcp_server::ServerRuntime;
+
 // Type alias for the server-side duplex stream used in sessions
-pub type TxServer = DuplexStream;
+pub type TxServer = Arc<ServerRuntime>;
 
 /// Trait defining the interface for session storage operations
 ///
@@ -40,7 +42,9 @@ pub trait SessionStore: Send + Sync {
 
     async fn keys(&self) -> Vec<SessionId>;
 
-    async fn values(&self) -> Vec<Arc<Mutex<DuplexStream>>>;
+    async fn values(&self) -> Vec<Arc<Mutex<TxServer>>>;
+
+    async fn has(&self, session: &SessionId) -> bool;
 }
 
 /// Trait for generating session identifiers

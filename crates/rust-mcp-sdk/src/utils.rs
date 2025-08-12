@@ -1,6 +1,8 @@
-use std::cmp::Ordering;
+use crate::schema::schema_utils::{ClientMessages, SdkError};
 
 use crate::error::{McpSdkError, SdkResult};
+use crate::schema::ProtocolVersion;
+use std::cmp::Ordering;
 
 /// Formats an assertion error message for unsupported capabilities.
 ///
@@ -144,6 +146,11 @@ pub fn enforce_compatible_protocol_version(
     }
 }
 
+pub fn validate_mcp_protocol_version(mcp_protocol_version: &str) -> SdkResult<()> {
+    let _mcp_protocol_version = ProtocolVersion::try_from(mcp_protocol_version)?;
+    Ok(())
+}
+
 /// Removes query string and hash fragment from a URL, returning the base path.
 ///
 /// # Arguments
@@ -168,6 +175,39 @@ pub(crate) fn remove_query_and_hash(endpoint: &str) -> String {
     } else {
         without_query.to_string()
     }
+}
+
+/// Checks if the input string is valid JSON and represents an "initialize" method request.
+pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
+    // Attempt to deserialize the input string into ClientMessages
+    let Ok(request) = serde_json::from_str::<ClientMessages>(json_str) else {
+        return Err(SdkError::bad_request()
+            .with_message("Bad Request: Session not found")
+            .into());
+    };
+
+    match request {
+        ClientMessages::Single(client_message) => {
+            if !client_message.is_initialize_request() {
+                return Err(SdkError::bad_request()
+                    .with_message("Bad Request: Session not found")
+                    .into());
+            }
+        }
+        ClientMessages::Batch(client_messages) => {
+            let count = client_messages
+                .iter()
+                .filter(|item| item.is_initialize_request())
+                .count();
+            if count > 1 {
+                return Err(SdkError::invalid_request()
+                    .with_message("Bad Request: Only one initialization request is allowed")
+                    .into());
+            }
+        }
+    };
+
+    Ok(())
 }
 
 #[cfg(test)]

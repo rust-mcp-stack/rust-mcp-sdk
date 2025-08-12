@@ -1,10 +1,17 @@
 #[cfg(feature = "hyper-server")]
 pub mod test_server_common {
     use async_trait::async_trait;
+    use rust_mcp_schema::schema_utils::CallToolError;
+    use rust_mcp_schema::{
+        CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, ProtocolVersion,
+        RpcError,
+    };
+    use rust_mcp_sdk::mcp_server::hyper_runtime::HyperRuntime;
     use tokio_stream::StreamExt;
 
     use rust_mcp_sdk::schema::{
-        Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
+        ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
+        InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
     use rust_mcp_sdk::{
         mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
@@ -14,8 +21,31 @@ pub mod test_server_common {
     use std::time::Duration;
     use tokio::time::timeout;
 
-    pub const INITIALIZE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2.0","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"reqwest-test","version":"0.1.0"}}}"#;
+    use crate::common::sample_tools::SayHelloTool;
+
+    pub const INITIALIZE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"reqwest-test","version":"0.1.0"}}}"#;
     pub const PING_REQUEST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+
+    pub struct LaunchedServer {
+        pub hyper_runtime: HyperRuntime,
+        pub streamable_url: String,
+        pub sse_url: String,
+        pub sse_message_url: String,
+    }
+
+    pub fn initialize_request() -> InitializeRequest {
+        InitializeRequest::new(InitializeRequestParams {
+            capabilities: ClientCapabilities {
+                ..Default::default()
+            },
+            client_info: Implementation {
+                name: "test-server".to_string(),
+                title: None,
+                version: "0.1.0".to_string(),
+            },
+            protocol_version: ProtocolVersion::V2025_06_18.to_string(),
+        })
+    }
 
     pub fn test_server_details() -> InitializeResult {
         InitializeResult {
@@ -33,7 +63,7 @@ pub mod test_server_common {
             },
             meta: None,
             instructions: Some("server instructions...".to_string()),
-            protocol_version: "2025-03-26".to_string(),
+            protocol_version: ProtocolVersion::V2025_06_18.to_string(),
         }
     }
 
@@ -46,10 +76,69 @@ pub mod test_server_common {
                 .stderr_message("Server started successfully".into())
                 .await;
         }
+
+        async fn handle_list_tools_request(
+            &self,
+            request: ListToolsRequest,
+            runtime: &dyn McpServer,
+        ) -> std::result::Result<ListToolsResult, RpcError> {
+            runtime.assert_server_request_capabilities(request.method())?;
+
+            Ok(ListToolsResult {
+                meta: None,
+                next_cursor: None,
+                tools: vec![SayHelloTool::tool()],
+            })
+        }
+
+        async fn handle_call_tool_request(
+            &self,
+            request: CallToolRequest,
+            runtime: &dyn McpServer,
+        ) -> std::result::Result<CallToolResult, CallToolError> {
+            runtime
+                .assert_server_request_capabilities(request.method())
+                .map_err(CallToolError::new)?;
+            if request.params.name != "say_hello" {
+                Ok(
+                    CallToolError::unknown_tool(format!("Unknown tool: {}", request.params.name))
+                        .into(),
+                )
+            } else {
+                let tool = SayHelloTool {
+                    name: request.params.arguments.unwrap()["name"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                };
+
+                Ok(tool.call_tool().unwrap())
+            }
+        }
     }
 
     pub fn create_test_server(options: HyperServerOptions) -> HyperServer {
         hyper_server::create_server(test_server_details(), TestServerHandler {}, options)
+    }
+
+    pub async fn create_start_server(options: HyperServerOptions) -> LaunchedServer {
+        let streamable_url = options.streamable_http_url();
+        let sse_url = options.sse_url();
+        let sse_message_url = options.sse_message_url();
+
+        let server =
+            hyper_server::create_server(test_server_details(), TestServerHandler {}, options);
+
+        let hyper_runtime = HyperRuntime::create(server).await.unwrap();
+
+        tokio::time::sleep(Duration::from_millis(75)).await;
+
+        LaunchedServer {
+            hyper_runtime,
+            streamable_url,
+            sse_url,
+            sse_message_url,
+        }
     }
 
     // Tests the session ID generator, ensuring it returns a sequence of predefined session IDs.

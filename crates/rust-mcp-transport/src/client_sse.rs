@@ -8,11 +8,12 @@ use crate::utils::{
 use crate::{IoStream, McpDispatch, TransportOptions};
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::Stream;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::Client;
+use tokio::sync::oneshot::Sender;
+use tokio::task::JoinHandle;
 
-use crate::schema::schema_utils::{McpMessage, RpcMessage};
+use crate::schema::schema_utils::McpMessage;
 use crate::schema::RequestId;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -54,7 +55,7 @@ impl Default for ClientSseTransportOptions {
 /// Manages SSE connections, HTTP POST requests, and message streaming for client-server communication.
 pub struct ClientSseTransport<R>
 where
-    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
     /// Optional cancellation token source for shutting down the transport
     shutdown_source: tokio::sync::RwLock<Option<CancellationTokenSource>>,
@@ -76,13 +77,14 @@ where
     custom_headers: Option<HeaderMap>,
     sse_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
     post_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
-    message_sender: tokio::sync::RwLock<Option<MessageDispatcher<R>>>,
+    message_sender: Arc<tokio::sync::RwLock<Option<MessageDispatcher<R>>>>,
     error_stream: tokio::sync::RwLock<Option<IoStream>>,
+    pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
 }
 
 impl<R> ClientSseTransport<R>
 where
-    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
     /// Creates a new ClientSseTransport instance
     ///
@@ -97,8 +99,15 @@ where
     pub fn new(server_url: &str, options: ClientSseTransportOptions) -> TransportResult<Self> {
         let client = Client::new();
 
-        //TODO: error handling
-        let base_url = extract_origin(server_url).unwrap();
+        let base_url = match extract_origin(server_url) {
+            Some(url) => url,
+            None => {
+                let error_message =
+                    format!("Failed to extract origin from server URL: {server_url}");
+                tracing::error!(error_message);
+                return Err(TransportError::InvalidOptions(error_message));
+            }
+        };
 
         let headers = match &options.custom_headers {
             Some(h) => Some(Self::validate_headers(h)?),
@@ -119,8 +128,9 @@ where
             custom_headers: headers,
             sse_task: tokio::sync::RwLock::new(None),
             post_task: tokio::sync::RwLock::new(None),
-            message_sender: tokio::sync::RwLock::new(None),
+            message_sender: Arc::new(tokio::sync::RwLock::new(None)),
             error_stream: tokio::sync::RwLock::new(None),
+            pending_requests: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -187,10 +197,13 @@ where
 }
 
 #[async_trait]
-impl<R, S> Transport<R, S> for ClientSseTransport<R>
+impl<R, S, M, OR, OM> Transport<R, S, M, OR, OM> for ClientSseTransport<M>
 where
-    R: RpcMessage + Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     S: McpMessage + Clone + Send + Sync + serde::Serialize + 'static,
+    M: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    OR: Clone + Send + Sync + serde::Serialize + 'static,
+    OM: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
     /// Starts the transport, initializing SSE and POST tasks
     ///
@@ -199,17 +212,14 @@ where
     /// # Returns
     /// * `TransportResult<(Pin<Box<dyn Stream<Item = R> + Send>>, MessageDispatcher<R>, IoStream)>`
     ///   - The message stream, dispatcher, and error stream
-    async fn start(&self) -> TransportResult<Pin<Box<dyn Stream<Item = R> + Send>>>
+    async fn start(&self) -> TransportResult<tokio_stream::wrappers::ReceiverStream<R>>
     where
-        MessageDispatcher<R>: McpDispatch<R, S>,
+        MessageDispatcher<M>: McpDispatch<R, OR, M, OM>,
     {
         // Create CancellationTokenSource and token
         let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
         let mut lock = self.shutdown_source.write().await;
         *lock = Some(cancellation_source);
-
-        let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
 
         let (write_tx, mut write_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
         let (read_tx, read_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
@@ -302,7 +312,7 @@ where
             readable,
             writable,
             IoStream::Writable(Box::pin(tokio::io::stderr())),
-            pending_requests,
+            self.pending_requests.clone(),
             self.request_timeout,
             cancellation_token,
         );
@@ -316,12 +326,29 @@ where
         Ok(stream)
     }
 
-    fn message_sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<R>>> {
-        &self.message_sender as _
+    fn message_sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<M>>>> {
+        self.message_sender.clone() as _
     }
 
     fn error_stream(&self) -> &tokio::sync::RwLock<Option<IoStream>> {
         &self.error_stream as _
+    }
+
+    async fn consume_string_payload(&self, _payload: &str) -> TransportResult<()> {
+        Err(TransportError::FromString(
+            "Invalid invocation of consume_string_payload() function for ClientSseTransport"
+                .to_string(),
+        ))
+    }
+
+    async fn keep_alive(
+        &self,
+        _: Duration,
+        _: oneshot::Sender<()>,
+    ) -> TransportResult<JoinHandle<()>> {
+        Err(TransportError::FromString(
+            "Invalid invocation of keep_alive() function for ClientSseTransport".to_string(),
+        ))
     }
 
     /// Checks if the transport has been shut down
@@ -379,5 +406,10 @@ where
                 Err(TransportError::ShutdownTimeout)
             }
         }
+    }
+
+    async fn pending_request_tx(&self, request_id: &RequestId) -> Option<Sender<M>> {
+        let mut pending_requests = self.pending_requests.lock().await;
+        pending_requests.remove(request_id)
     }
 }

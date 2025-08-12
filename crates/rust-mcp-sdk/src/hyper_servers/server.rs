@@ -1,4 +1,7 @@
-use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::{
+    error::SdkResult, mcp_server::hyper_runtime::HyperRuntime,
+    mcp_traits::mcp_handler::McpServerHandler,
+};
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
@@ -22,11 +25,13 @@ use rust_mcp_transport::TransportOptions;
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
-const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 30;
+const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
 // Default Server-Sent Events (SSE) endpoint path
 const DEFAULT_SSE_ENDPOINT: &str = "/sse";
 // Default MCP Messages endpoint path
 const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
+// Default Streamable HTTP endpoint path
+const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
@@ -35,10 +40,21 @@ pub struct HyperServerOptions {
     pub host: String,
     /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
+
     /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
     pub custom_sse_endpoint: Option<String>,
-    /// Optional custom path for the MCP messages endpoint (default: `/messages`)
+    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     pub custom_messages_endpoint: Option<String>,
+
+    /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
+    pub custom_streamable_http_endpoint: Option<String>,
+
+    /// This setting only applies to streamable HTTP.
+    /// If true, the server will return JSON responses instead of starting an SSE stream.
+    /// This can be useful for simple request/response scenarios without streaming.
+    /// Default is false (SSE streams are preferred).
+    pub enable_json_response: Option<bool>,
+
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
     /// Enables SSL/TLS if set to `true`
@@ -53,6 +69,17 @@ pub struct HyperServerOptions {
     pub transport_options: Arc<TransportOptions>,
     /// Optional thread-safe session id generator to generate unique session IDs.
     pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
+    pub sse_support: bool,
+    /// List of allowed host header values for DNS rebinding protection.
+    /// If not specified, host validation is disabled.
+    pub allowed_hosts: Option<Vec<String>>,
+    /// List of allowed origin header values for DNS rebinding protection.
+    /// If not specified, origin validation is disabled.
+    pub allowed_origins: Option<Vec<String>>,
+    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
+    /// Default is false for backwards compatibility.
+    pub dns_rebinding_protection: bool,
 }
 
 impl HyperServerOptions {
@@ -94,7 +121,7 @@ impl HyperServerOptions {
     ///
     /// # Returns
     /// * `TransportServerResult<SocketAddr>` - The resolved server address or an error
-    async fn resolve_server_address(&self) -> TransportServerResult<SocketAddr> {
+    pub(crate) async fn resolve_server_address(&self) -> TransportServerResult<SocketAddr> {
         self.validate()?;
 
         let mut host = self.host.to_string();
@@ -123,6 +150,24 @@ impl HyperServerOptions {
         Ok(addr)
     }
 
+    pub fn base_url(&self) -> String {
+        format!(
+            "{}://{}:{}",
+            if self.enable_ssl { "https" } else { "http" },
+            self.host,
+            self.port
+        )
+    }
+    pub fn streamable_http_url(&self) -> String {
+        format!("{}{}", self.base_url(), self.streamable_http_endpoint())
+    }
+    pub fn sse_url(&self) -> String {
+        format!("{}{}", self.base_url(), self.sse_endpoint())
+    }
+    pub fn sse_message_url(&self) -> String {
+        format!("{}{}", self.base_url(), self.sse_messages_endpoint())
+    }
+
     pub fn sse_endpoint(&self) -> &str {
         self.custom_sse_endpoint
             .as_deref()
@@ -133,6 +178,12 @@ impl HyperServerOptions {
         self.custom_messages_endpoint
             .as_deref()
             .unwrap_or(DEFAULT_MESSAGES_ENDPOINT)
+    }
+
+    pub fn streamable_http_endpoint(&self) -> &str {
+        self.custom_messages_endpoint
+            .as_deref()
+            .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
 }
 
@@ -146,6 +197,7 @@ impl Default for HyperServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
             custom_sse_endpoint: None,
+            custom_streamable_http_endpoint: None,
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             transport_options: Default::default(),
@@ -153,6 +205,11 @@ impl Default for HyperServerOptions {
             ssl_cert_path: None,
             ssl_key_path: None,
             session_id_generator: None,
+            enable_json_response: None,
+            sse_support: true,
+            allowed_hosts: None,
+            allowed_origins: None,
+            dns_rebinding_protection: false,
         }
     }
 }
@@ -161,7 +218,7 @@ impl Default for HyperServerOptions {
 pub struct HyperServer {
     app: Router,
     state: Arc<AppState>,
-    options: HyperServerOptions,
+    pub(crate) options: HyperServerOptions,
     handle: Handle,
 }
 
@@ -192,7 +249,12 @@ impl HyperServer {
             handler,
             ping_interval: server_options.ping_interval,
             sse_message_endpoint: server_options.sse_messages_endpoint().to_owned(),
+            http_streamable_endpoint: server_options.streamable_http_endpoint().to_owned(),
             transport_options: Arc::clone(&server_options.transport_options),
+            enable_json_response: server_options.enable_json_response.unwrap_or(false),
+            allowed_hosts: server_options.allowed_hosts.take(),
+            allowed_origins: server_options.allowed_origins.take(),
+            dns_rebinding_protection: server_options.dns_rebinding_protection,
         });
         let app = app_routes(Arc::clone(&state), &server_options);
         Self {
@@ -246,15 +308,30 @@ impl HyperServer {
             "http"
         };
 
-        let server_url = format!(
-            "{} is available at {}://{}{}",
+        let mut server_url = format!(
+            "\n• Streamable HTTP {} is available at {}://{}{}",
             server_type,
             protocol,
             addr,
-            self.options.sse_endpoint()
+            self.options.streamable_http_endpoint()
         );
 
+        if self.options.sse_support {
+            let sse_url = format!(
+                "\n• SSE {} is available at {}://{}{}",
+                server_type,
+                protocol,
+                addr,
+                self.options.sse_endpoint()
+            );
+            server_url.push_str(&sse_url);
+        };
+
         Ok(server_url)
+    }
+
+    pub fn options(&self) -> &HyperServerOptions {
+        &self.options
     }
 
     // pub fn with_layer<L>(mut self, layer: L) -> Self
@@ -274,7 +351,7 @@ impl HyperServer {
     /// # Returns
     /// * `TransportServerResult<()>` - Ok if the server starts successfully, Err otherwise
     #[cfg(feature = "ssl")]
-    async fn start_ssl(self, addr: SocketAddr) -> TransportServerResult<()> {
+    pub(crate) async fn start_ssl(self, addr: SocketAddr) -> TransportServerResult<()> {
         let config = RustlsConfig::from_pem_file(
             self.options.ssl_cert_path.as_deref().unwrap_or_default(),
             self.options.ssl_key_path.as_deref().unwrap_or_default(),
@@ -286,8 +363,9 @@ impl HyperServer {
 
         // Spawn a task to trigger shutdown on signal
         let handle_clone = self.handle.clone();
+        let state_clone = self.state().clone();
         tokio::spawn(async move {
-            shutdown_signal(handle_clone).await;
+            shutdown_signal(handle_clone, state_clone).await;
         });
 
         let handle_clone = self.handle.clone();
@@ -310,13 +388,13 @@ impl HyperServer {
     ///
     /// # Returns
     /// * `TransportServerResult<()>` - Ok if the server starts successfully, Err otherwise
-    async fn start_http(self, addr: SocketAddr) -> TransportServerResult<()> {
+    pub(crate) async fn start_http(self, addr: SocketAddr) -> TransportServerResult<()> {
         tracing::info!("{}", self.server_info(Some(addr)).await?);
 
         // Spawn a task to trigger shutdown on signal
         let handle_clone = self.handle.clone();
         tokio::spawn(async move {
-            shutdown_signal(handle_clone).await;
+            shutdown_signal(handle_clone, self.state.clone()).await;
         });
 
         let handle_clone = self.handle.clone();
@@ -333,28 +411,25 @@ impl HyperServer {
     /// Panics if SSL is requested but the "ssl" feature is not enabled.
     ///
     /// # Returns
-    /// * `TransportServerResult<()>` - Ok if the server starts successfully, Err otherwise
-    pub async fn start(self) -> TransportServerResult<()> {
-        let addr = self.options.resolve_server_address().await?;
+    /// * `SdkResult<()>` - Ok if the server starts successfully, Err otherwise
+    pub async fn start(self) -> SdkResult<()> {
+        let runtime = HyperRuntime::create(self).await?;
+        runtime.await_server().await
+    }
 
-        #[cfg(feature = "ssl")]
-        if self.options.enable_ssl {
-            self.start_ssl(addr).await
-        } else {
-            self.start_http(addr).await
-        }
-
-        #[cfg(not(feature = "ssl"))]
-        if self.options.enable_ssl {
-            panic!("SSL requested but the 'ssl' feature is not enabled");
-        } else {
-            self.start_http(addr).await
-        }
+    /// Similar to start() , but returns a HyperRuntime after server started
+    ///
+    /// HyperRuntime could be used to access sessions and send server initiated messages if needed
+    ///
+    /// # Returns
+    /// * `SdkResult<HyperRuntime>` - Ok if the server starts successfully, Err otherwise
+    pub async fn start_runtime(self) -> SdkResult<HyperRuntime> {
+        HyperRuntime::create(self).await
     }
 }
 
 // Shutdown signal handler
-async fn shutdown_signal(handle: Handle) {
+async fn shutdown_signal(handle: Handle, state: Arc<AppState>) {
     // Wait for a Ctrl+C or SIGTERM signal
     let ctrl_c = async {
         signal::ctrl_c()
@@ -379,6 +454,7 @@ async fn shutdown_signal(handle: Handle) {
     }
 
     tracing::info!("Signal received, starting graceful shutdown");
+    state.session_store.clear().await;
     // Trigger graceful shutdown with a timeout
     handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
 }

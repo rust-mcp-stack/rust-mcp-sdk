@@ -2,21 +2,20 @@ use std::time::Duration;
 
 use crate::schema::{
     schema_utils::{
-        ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
-        ResultFromClient,
+        ClientMessage, ClientMessages, McpMessage, MessageFromServer, NotificationFromServer,
+        RequestFromServer, ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
     GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
     ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest,
     ListRootsRequestParams, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
     LoggingMessageNotificationParams, PingRequest, PromptListChangedNotification,
-    PromptListChangedNotificationParams, ReadResourceRequest, ResourceListChangedNotification,
-    ResourceListChangedNotificationParams, ResourceUpdatedNotification,
-    ResourceUpdatedNotificationParams, RpcError, ServerCapabilities, SetLevelRequest,
-    ToolListChangedNotification, ToolListChangedNotificationParams,
+    PromptListChangedNotificationParams, ReadResourceRequest, RequestId,
+    ResourceListChangedNotification, ResourceListChangedNotificationParams,
+    ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
+    SetLevelRequest, ToolListChangedNotification, ToolListChangedNotificationParams,
 };
 use async_trait::async_trait;
-use rust_mcp_transport::{McpDispatch, MessageDispatcher};
 
 use crate::{error::SdkResult, utils::format_assertion_message};
 
@@ -38,9 +37,18 @@ pub trait McpServer: Sync + Send {
         self.server_info()
     }
 
-    async fn sender(&self) -> &tokio::sync::RwLock<Option<MessageDispatcher<ClientMessage>>>
-    where
-        MessageDispatcher<ClientMessage>: McpDispatch<ClientMessage, MessageFromServer>;
+    async fn send(
+        &self,
+        message: MessageFromServer,
+        request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
+    ) -> SdkResult<Option<ClientMessages>>;
+
+    async fn send_batch(
+        &self,
+        messages: Vec<ServerMessage>,
+        request_timeout: Option<Duration>,
+    ) -> SdkResult<Option<Vec<ClientMessage>>>;
 
     /// Checks whether the server has been initialized with client
     fn is_initialized(&self) -> bool {
@@ -69,18 +77,17 @@ pub trait McpServer: Sync + Send {
         request: RequestFromServer,
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromClient> {
-        let sender = self.sender().await;
-        let sender = sender.read().await;
-        let sender = sender.as_ref().unwrap();
-
         // Send the request and receive the response.
-        let response = sender
+        let response = self
             .send(MessageFromServer::RequestFromServer(request), None, timeout)
             .await?;
-        let client_message = response.ok_or_else(|| {
+
+        let client_messages = response.ok_or_else(|| {
             RpcError::internal_error()
                 .with_message("An empty response was received from the client.".to_string())
         })?;
+
+        let client_message = client_messages.as_single()?;
 
         if client_message.is_error() {
             return Err(client_message.as_error()?.error.into());
@@ -93,17 +100,12 @@ pub trait McpServer: Sync + Send {
     /// to return any response. The method asynchronously sends the notification using
     /// the transport layer and does not wait for any acknowledgement or result.
     async fn send_notification(&self, notification: NotificationFromServer) -> SdkResult<()> {
-        let sender = self.sender().await;
-        let sender = sender.read().await;
-        let sender = sender.as_ref().unwrap();
-
-        sender
-            .send(
-                MessageFromServer::NotificationFromServer(notification),
-                None,
-                None,
-            )
-            .await?;
+        self.send(
+            MessageFromServer::NotificationFromServer(notification),
+            None,
+            None,
+        )
+        .await?;
         Ok(())
     }
 
