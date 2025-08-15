@@ -76,6 +76,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
             // keep a copy of the InitializeRequestParams which includes client_info and capabilities
             runtime
                 .set_client_details(initialize_request.params.clone())
+                .await
                 .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
         }
 

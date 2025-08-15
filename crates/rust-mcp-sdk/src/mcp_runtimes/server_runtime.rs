@@ -1,30 +1,27 @@
 pub mod mcp_server_runtime;
 pub mod mcp_server_runtime_core;
+use crate::error::SdkResult;
+use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::mcp_traits::mcp_server::McpServer;
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
-        ServerMessages,
+        ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromServer, SdkError,
+        ServerMessage, ServerMessages,
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
-
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
-
+#[cfg(feature = "hyper-server")]
+use rust_mcp_transport::SessionId;
 use rust_mcp_transport::{IoStream, TransportDispatcher};
-
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 
-use crate::error::SdkResult;
-use crate::mcp_traits::mcp_handler::McpServerHandler;
-use crate::mcp_traits::mcp_server::McpServer;
-#[cfg(feature = "hyper-server")]
-use rust_mcp_transport::SessionId;
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 
 // Define a type alias for the TransportDispatcher trait object
@@ -49,21 +46,32 @@ pub struct ServerRuntime {
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
+    client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
+    client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
 }
 
 #[async_trait]
 impl McpServer for ServerRuntime {
     /// Set the client details, storing them in client_details
-    fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
-        match self.client_details.write() {
-            Ok(mut details) => {
-                *details = Some(client_details);
-                Ok(())
+    async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
+        self.handler.on_server_started(self).await;
+
+        self.client_details_tx
+            .send(Some(client_details))
+            .map_err(|_| {
+                RpcError::internal_error()
+                    .with_message("Failed to set client details".to_string())
+                    .into()
+            })
+    }
+
+    async fn wait_for_initialization(&self) {
+        loop {
+            if self.client_details_rx.borrow().is_some() {
+                return;
             }
-            // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            Err(_) => Err(RpcError::internal_error()
-                .with_message("Internal Error: Failed to acquire write lock.".to_string())
-                .into()),
+            let mut rx = self.client_details_rx.clone();
+            rx.changed().await.ok();
         }
     }
 
@@ -79,7 +87,19 @@ impl McpServer for ServerRuntime {
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
 
-        let mcp_message = ServerMessage::from_message(message, request_id)?;
+        // generate a new request_id for request messages
+        let outgoing_request_id = if message.is_request() {
+            match request_id {
+                Some(_) => Err(RpcError::internal_error().with_message(
+                    "request_id should not have a value when sending a new request".to_string(),
+                )),
+                None => Ok(self.next_request_id(transport).await),
+            }
+        } else {
+            Ok(request_id)
+        }?;
+
+        let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
         transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
             .map_err(|err| err.into())
@@ -129,8 +149,6 @@ impl McpServer for ServerRuntime {
         )?;
 
         let mut stream = transport.start().await?;
-
-        self.handler.on_server_started(self).await;
 
         // Process incoming messages from the client
         while let Some(mcp_messages) = stream.next().await {
@@ -205,6 +223,25 @@ impl ServerRuntime {
         transport.consume_string_payload(payload).await?;
 
         Ok(())
+    }
+
+    pub(crate) async fn next_request_id(
+        &self,
+        transport: &Arc<
+            dyn TransportDispatcher<
+                ClientMessages,
+                MessageFromServer,
+                ClientMessage,
+                ServerMessages,
+                ServerMessage,
+            >,
+        >,
+    ) -> Option<RequestId> {
+        let message_sender = transport.message_sender();
+        let guard = message_sender.read().await;
+        guard
+            .as_ref()
+            .map(|dispatcher| dispatcher.next_request_id())
     }
 
     pub(crate) async fn handle_message(
@@ -416,12 +453,16 @@ impl ServerRuntime {
         handler: Arc<dyn McpServerHandler>,
         session_id: SessionId,
     ) -> Self {
+        let (client_details_tx, client_details_rx) =
+            watch::channel::<Option<InitializeRequestParams>>(None);
         Self {
             server_details,
             client_details: Arc::new(RwLock::new(None)),
             handler,
             session_id: Some(session_id),
             transport_map: tokio::sync::RwLock::new(HashMap::new()),
+            client_details_tx,
+            client_details_rx,
         }
     }
 
@@ -438,6 +479,8 @@ impl ServerRuntime {
     ) -> Self {
         let mut map: HashMap<String, TransportType> = HashMap::new();
         map.insert(DEFAULT_STREAM_ID.to_string(), Arc::new(transport));
+        let (client_details_tx, client_details_rx) =
+            watch::channel::<Option<InitializeRequestParams>>(None);
         Self {
             server_details: Arc::new(server_details),
             client_details: Arc::new(RwLock::new(None)),
@@ -445,6 +488,8 @@ impl ServerRuntime {
             #[cfg(feature = "hyper-server")]
             session_id: None,
             transport_map: tokio::sync::RwLock::new(map),
+            client_details_tx,
+            client_details_rx,
         }
     }
 }

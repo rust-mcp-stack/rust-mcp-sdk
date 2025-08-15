@@ -23,9 +23,11 @@ use crate::{error::SdkResult, utils::format_assertion_message};
 #[async_trait]
 pub trait McpServer: Sync + Send {
     async fn start(&self) -> SdkResult<()>;
-    fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()>;
+    async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()>;
     fn server_info(&self) -> &InitializeResult;
     fn client_info(&self) -> Option<InitializeRequestParams>;
+
+    async fn wait_for_initialization(&self);
 
     #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
     fn get_client_info(&self) -> Option<InitializeRequestParams> {

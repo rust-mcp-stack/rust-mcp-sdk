@@ -51,6 +51,7 @@ pub trait ServerHandler: Send + Sync + 'static {
 
         runtime
             .set_client_details(initialize_request.params.clone())
+            .await
             .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
 
         Ok(server_info)
