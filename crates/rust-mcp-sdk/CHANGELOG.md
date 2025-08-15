@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.1...rust-mcp-sdk-v0.5.2) (2025-08-15)
+
+
+### 🐛 Bug Fixes
+
+* Ensure server-initiated requests include a valid request_id ([#80](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/80)) ([5f9a966](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/5f9a966bb523bf61daefcff209199bc774fa5ed6))
+
 ## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.0...rust-mcp-sdk-v0.5.1) (2025-08-12)
 
 
