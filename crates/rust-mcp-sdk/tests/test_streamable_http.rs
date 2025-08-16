@@ -3,13 +3,14 @@ use std::{collections::HashMap, error::Error, sync::Arc, time::Duration, vec};
 use hyper::StatusCode;
 use rust_mcp_schema::{
     schema_utils::{
-        ClientJsonrpcRequest, ClientMessage, ClientMessages, FromMessage, NotificationFromServer,
-        ResultFromServer, RpcMessage, SdkError, SdkErrorCodes, ServerJsonrpcNotification,
-        ServerJsonrpcResponse, ServerMessages,
+        ClientJsonrpcRequest, ClientJsonrpcResponse, ClientMessage, ClientMessages, FromMessage,
+        NotificationFromServer, RequestFromServer, ResultFromServer, RpcMessage, SdkError,
+        SdkErrorCodes, ServerJsonrpcNotification, ServerJsonrpcRequest, ServerJsonrpcResponse,
+        ServerMessages,
     },
-    CallToolRequest, CallToolRequestParams, ListToolsRequest, LoggingLevel,
-    LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
-    ServerResult,
+    CallToolRequest, CallToolRequestParams, ListPromptsRequestParams, ListRootsRequestParams,
+    ListRootsResult, ListToolsRequest, LoggingLevel, LoggingMessageNotificationParams, RequestId,
+    RootsListChangedNotification, ServerNotification, ServerRequest, ServerResult,
 };
 use rust_mcp_sdk::mcp_server::HyperServerOptions;
 use serde_json::{json, Map, Value};
@@ -362,6 +363,80 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
 
     server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
     server.hyper_runtime.await_server().await.unwrap()
+}
+
+// should establish standalone SSE stream and receive server-initiated messages
+#[tokio::test]
+async fn should_establish_standalone_stream_and_receive_server_requests() {
+    let (server, session_id) = initialize_server(None).await.unwrap();
+    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert_eq!(
+        response
+            .headers()
+            .get("mcp-session-id")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        session_id
+    );
+
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "text/event-stream"
+    );
+
+    let hyper_server = Arc::new(server.hyper_runtime);
+    let hyper_server_clone = hyper_server.clone();
+    let session_id_clone = session_id.to_string();
+
+    tokio::spawn(async move {
+        // Send a server-initiated notification that should appear on SSE stream with a valid request_id
+        hyper_server_clone
+            .list_roots(&session_id_clone, None)
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(2250)).await;
+
+    let json_rpc_message: ClientJsonrpcResponse = ClientJsonrpcResponse::new(
+        RequestId::Integer(0),
+        ListRootsResult {
+            meta: None,
+            roots: vec![],
+        }
+        .into(),
+    );
+
+    send_post_request(
+        &server.streamable_url,
+        &serde_json::to_string(&json_rpc_message).unwrap(),
+        Some(&session_id),
+        None,
+    )
+    .await
+    .expect("Request failed");
+
+    let event = read_sse_event(response).await.unwrap();
+
+    let message: ServerJsonrpcRequest = serde_json::from_str(&event).unwrap();
+
+    println!(">>> message {:?} ", message);
+
+    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message.request
+    else {
+        panic!("invalid message received!");
+    };
+
+    hyper_server.graceful_shutdown(ONE_MILLISECOND);
 }
 
 // should not close GET SSE stream after sending multiple server notifications

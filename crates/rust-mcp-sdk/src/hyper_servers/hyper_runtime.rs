@@ -4,7 +4,8 @@ use crate::{
     mcp_server::HyperServer,
     schema::{
         schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-        CreateMessageRequestParams, CreateMessageResult, LoggingMessageNotificationParams,
+        CreateMessageRequestParams, CreateMessageResult, InitializeRequestParams,
+        ListRootsRequestParams, ListRootsResult, LoggingMessageNotificationParams,
         PromptListChangedNotificationParams, ResourceListChangedNotificationParams,
         ResourceUpdatedNotificationParams, ToolListChangedNotificationParams,
     },
@@ -97,6 +98,21 @@ impl HyperRuntime {
         let runtime = self.runtime_by_session(session_id).await?;
         let runtime = runtime.lock().await.to_owned();
         runtime.send_notification(notification).await
+    }
+
+    /// Request a list of root URIs from the client. Roots allow
+    /// servers to ask for specific directories or files to operate on. A common example
+    /// for roots is providing a set of repositories or directories a server should operate on.
+    /// This request is typically used when the server needs to understand the file system
+    /// structure or access specific locations that the client has permission to read from
+    pub async fn list_roots(
+        &self,
+        session_id: &SessionId,
+        params: Option<ListRootsRequestParams>,
+    ) -> SdkResult<ListRootsResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        let runtime = runtime.lock().await.to_owned();
+        runtime.list_roots(params).await
     }
 
     pub async fn send_logging_message(
@@ -194,5 +210,14 @@ impl HyperRuntime {
         let runtime = self.runtime_by_session(session_id).await?;
         let runtime = runtime.lock().await.to_owned();
         runtime.create_message(params).await
+    }
+
+    pub async fn client_info(
+        &self,
+        session_id: &SessionId,
+    ) -> SdkResult<Option<InitializeRequestParams>> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        let runtime = runtime.lock().await.to_owned();
+        Ok(runtime.client_info())
     }
 }

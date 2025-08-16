@@ -87,17 +87,9 @@ impl McpServer for ServerRuntime {
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
 
-        // generate a new request_id for request messages
-        let outgoing_request_id = if message.is_request() {
-            match request_id {
-                Some(_) => Err(RpcError::internal_error().with_message(
-                    "request_id should not have a value when sending a new request".to_string(),
-                )),
-                None => Ok(self.next_request_id(transport).await),
-            }
-        } else {
-            Ok(request_id)
-        }?;
+        let outgoing_request_id = self
+            .request_id_for_message(transport, &message, request_id)
+            .await;
 
         let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
         transport
@@ -225,7 +217,18 @@ impl ServerRuntime {
         Ok(())
     }
 
-    pub(crate) async fn next_request_id(
+    /// Determines the request ID for an outgoing MCP message.
+    ///
+    /// For requests, generates a new ID using the internal counter. For responses or errors,
+    /// uses the provided `request_id`. Notifications receive no ID.
+    ///
+    /// # Arguments
+    /// * `message` - The MCP message to evaluate.
+    /// * `request_id` - An optional existing request ID (required for responses/errors).
+    ///
+    /// # Returns
+    /// An `Option<RequestId>`: `Some` for requests or responses/errors, `None` for notifications.
+    pub(crate) async fn request_id_for_message(
         &self,
         transport: &Arc<
             dyn TransportDispatcher<
@@ -236,12 +239,16 @@ impl ServerRuntime {
                 ServerMessage,
             >,
         >,
+        message: &MessageFromServer,
+        request_id: Option<RequestId>,
     ) -> Option<RequestId> {
         let message_sender = transport.message_sender();
         let guard = message_sender.read().await;
-        guard
-            .as_ref()
-            .map(|dispatcher| dispatcher.next_request_id())
+        if let Some(dispatcher) = guard.as_ref() {
+            dispatcher.request_id_for_message(message, request_id)
+        } else {
+            None
+        }
     }
 
     pub(crate) async fn handle_message(
