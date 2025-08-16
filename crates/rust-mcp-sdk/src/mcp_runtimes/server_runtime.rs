@@ -5,8 +5,8 @@ use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromServer, SdkError,
-        ServerMessage, ServerMessages,
+        ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
+        ServerMessages,
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
