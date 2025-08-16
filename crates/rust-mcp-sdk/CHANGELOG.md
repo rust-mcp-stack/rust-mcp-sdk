@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.1...rust-mcp-sdk-v0.5.2) (2025-08-16)
+
+
+### 🚀 Features
+
+* Integrate list root and client info into hyper runtime ([36dfa4c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/36dfa4cdc821e958ffe78b909ed28f5577d113c8))
+
+
+### 🐛 Bug Fixes
+
+* Abort keep-alive task when transport is removed ([#82](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/82)) ([1ca8e49](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1ca8e49860e990c3562623e75dd723b0d1dc8256))
+* Ensure server-initiated requests include a valid request_id ([#80](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/80)) ([5f9a966](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/5f9a966bb523bf61daefcff209199bc774fa5ed6))
+
 ## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.0...rust-mcp-sdk-v0.5.1) (2025-08-12)
 
 
