@@ -392,7 +392,10 @@ impl ServerRuntime {
         let transport = self.transport_by_stream(stream_id).await?;
 
         let (disconnect_tx, mut disconnect_rx) = oneshot::channel::<()>();
-        let _ = transport.keep_alive(ping_interval, disconnect_tx).await;
+        let abort_alive_task = transport
+            .keep_alive(ping_interval, disconnect_tx)
+            .await?
+            .abort_handle();
 
         // in case there is a payload, we consume it by transport to get processed
         if let Some(payload) = payload {
@@ -429,11 +432,13 @@ impl ServerRuntime {
                     }
                     // close the stream after all messages are sent, unless it is a standalone stream
                     if !stream_id.eq(DEFAULT_STREAM_ID){
+                        abort_alive_task.abort();
                         return  Ok(());
                     }
                 }
                 _ = &mut disconnect_rx => {
                                 self.remove_transport(stream_id).await?;
+                                abort_alive_task.abort();
                                 // Disconnection detected by keep-alive task
                                 return Err(SdkError::connection_closed().into());
 
