@@ -50,7 +50,7 @@ impl ClientHandlerCore for MyClientHandler {
 
     async fn handle_error(
         &self,
-        _error: RpcError,
+        _error: &RpcError,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
         Err(RpcError::internal_error().with_message("handle_error() Not implemented".to_string()))

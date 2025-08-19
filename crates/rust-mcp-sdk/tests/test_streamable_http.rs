@@ -169,8 +169,8 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let event = read_sse_event(response).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response, 1).await.unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -220,8 +220,8 @@ async fn should_call_a_tool_and_return_the_result() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let event = read_sse_event(response).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response, 1).await.unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -345,8 +345,8 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
         .await
         .unwrap();
 
-    let event = read_sse_event(response).await.unwrap();
-    let message: ServerJsonrpcNotification = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response, 1).await.unwrap();
+    let message: ServerJsonrpcNotification = serde_json::from_str(&events[0]).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
         notification,
@@ -365,7 +365,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-// should establish standalone SSE stream and receive server-initiated messages
+// should establish standalone SSE stream and receive server-initiated requests
 #[tokio::test]
 async fn should_establish_standalone_stream_and_receive_server_requests() {
     let (server, session_id) = initialize_server(None).await.unwrap();
@@ -394,47 +394,58 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
     );
 
     let hyper_server = Arc::new(server.hyper_runtime);
-    let hyper_server_clone = hyper_server.clone();
-    let session_id_clone = session_id.to_string();
 
-    tokio::spawn(async move {
-        // Send a server-initiated notification that should appear on SSE stream with a valid request_id
-        hyper_server_clone
-            .list_roots(&session_id_clone, None)
-            .await
-            .unwrap();
-    });
+    // Send two server-initiated request that should appear on SSE stream with a valid request_id
+    for _ in 0..2 {
+        let hyper_server_clone = hyper_server.clone();
+        let session_id_clone = session_id.to_string();
+        tokio::spawn(async move {
+            hyper_server_clone
+                .list_roots(&session_id_clone, None)
+                .await
+                .unwrap();
+        });
+    }
 
-    tokio::time::sleep(Duration::from_millis(2250)).await;
+    for i in 0..2 {
+        // send responses back to the server for two server initiated requests
+        let json_rpc_message: ClientJsonrpcResponse = ClientJsonrpcResponse::new(
+            RequestId::Integer(i),
+            ListRootsResult {
+                meta: None,
+                roots: vec![],
+            }
+            .into(),
+        );
+        send_post_request(
+            &server.streamable_url,
+            &serde_json::to_string(&json_rpc_message).unwrap(),
+            Some(&session_id),
+            None,
+        )
+        .await
+        .expect("Request failed");
+    }
 
-    let json_rpc_message: ClientJsonrpcResponse = ClientJsonrpcResponse::new(
-        RequestId::Integer(0),
-        ListRootsResult {
-            meta: None,
-            roots: vec![],
-        }
-        .into(),
-    );
+    // read two events from the sse stream
+    let events = read_sse_event(response, 2).await.unwrap();
 
-    send_post_request(
-        &server.streamable_url,
-        &serde_json::to_string(&json_rpc_message).unwrap(),
-        Some(&session_id),
-        None,
-    )
-    .await
-    .expect("Request failed");
+    let message1: ServerJsonrpcRequest = serde_json::from_str(&events[0]).unwrap();
 
-    let event = read_sse_event(response).await.unwrap();
-
-    let message: ServerJsonrpcRequest = serde_json::from_str(&event).unwrap();
-
-    println!(">>> message {:?} ", message);
-
-    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message.request
+    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
     else {
         panic!("invalid message received!");
     };
+
+    let message2: ServerJsonrpcRequest = serde_json::from_str(&events[1]).unwrap();
+
+    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
+    else {
+        panic!("invalid message received!");
+    };
+
+    // ensure request_ids are unique
+    assert!(message2.id != message1.id);
 
     hyper_server.graceful_shutdown(ONE_MILLISECOND);
 }
@@ -461,7 +472,7 @@ async fn should_not_close_get_sse_stream() {
         .unwrap();
 
     let mut stream = response.bytes_stream();
-    let event = read_sse_event_from_stream(&mut stream).await.unwrap();
+    let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
     let message: ServerJsonrpcNotification = serde_json::from_str(&event).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
@@ -490,7 +501,7 @@ async fn should_not_close_get_sse_stream() {
         .await
         .unwrap();
 
-    let event = read_sse_event_from_stream(&mut stream).await.unwrap();
+    let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
     let message: ServerJsonrpcNotification = serde_json::from_str(&event).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
@@ -702,8 +713,8 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
     assert_eq!(response_1.status(), StatusCode::OK);
     assert_eq!(response_2.status(), StatusCode::OK);
 
-    let event = read_sse_event(response_2).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response_2, 1).await.unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -718,8 +729,8 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
         "Hello, Ali!"
     );
 
-    let event = read_sse_event(response_1).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response_1, 1).await.unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -1069,8 +1080,8 @@ async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
         "text/event-stream"
     );
 
-    let event = read_sse_event(response).await.unwrap();
-    let message: ServerMessages = serde_json::from_str(&event).unwrap();
+    let events = read_sse_event(response, 1).await.unwrap();
+    let message: ServerMessages = serde_json::from_str(&events[0]).unwrap();
 
     let ServerMessages::Batch(mut messages) = message else {
         panic!("Invalid message type");
