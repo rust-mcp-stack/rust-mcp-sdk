@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.2...rust-mcp-sdk-v0.5.3) (2025-08-19)
+
+
+### 🐛 Bug Fixes
+
+* Handle missing client details and abort keep-alive task on drop ([#83](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/83)) ([308b1db](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/308b1dbd1744ff06046902303d8bcd6c3a92ffbe))
+
 ## [0.5.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.1...rust-mcp-sdk-v0.5.2) (2025-08-16)
 
 
