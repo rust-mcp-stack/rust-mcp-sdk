@@ -113,7 +113,7 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     /// Handles errors received from the server by passing the request to self.handler
     async fn handle_error(
         &self,
-        jsonrpc_error: &RpcError,
+        jsonrpc_error: RpcError,
         runtime: &dyn McpClient,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;

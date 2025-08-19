@@ -98,7 +98,7 @@ impl ServerHandlerCore for MyServerHandler {
     // Process incoming client errors
     async fn handle_error(
         &self,
-        error: &RpcError,
+        error: RpcError,
         _: &dyn McpServer,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

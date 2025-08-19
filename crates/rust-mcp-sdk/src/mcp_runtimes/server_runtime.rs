@@ -3,7 +3,6 @@ pub mod mcp_server_runtime_core;
 use crate::error::SdkResult;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
-use crate::mcp_traits::{RequestIdGen, RequestIdGenNumeric};
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
@@ -46,7 +45,6 @@ pub struct ServerRuntime {
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
-    request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
 }
@@ -81,7 +79,7 @@ impl McpServer for ServerRuntime {
         message: MessageFromServer,
         request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<ClientMessage>> {
+    ) -> SdkResult<Option<ClientMessages>> {
         let transport_map = self.transport_map.read().await;
         let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
             RpcError::internal_error()
@@ -89,18 +87,14 @@ impl McpServer for ServerRuntime {
         )?;
 
         let outgoing_request_id = self
-            .request_id_gen
-            .request_id_for_message(&message, request_id);
+            .request_id_for_message(transport, &message, request_id)
+            .await;
 
         let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
-
-        let response = transport
+        transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
-            .await?
-            .map(|res| res.as_single())
-            .transpose()?;
-
-        Ok(response)
+            .map_err(|err| err.into())
+            .await
     }
 
     async fn send_batch(
@@ -217,6 +211,40 @@ impl ServerRuntime {
         Ok(())
     }
 
+    /// Determines the request ID for an outgoing MCP message.
+    ///
+    /// For requests, generates a new ID using the internal counter. For responses or errors,
+    /// uses the provided `request_id`. Notifications receive no ID.
+    ///
+    /// # Arguments
+    /// * `message` - The MCP message to evaluate.
+    /// * `request_id` - An optional existing request ID (required for responses/errors).
+    ///
+    /// # Returns
+    /// An `Option<RequestId>`: `Some` for requests or responses/errors, `None` for notifications.
+    pub(crate) async fn request_id_for_message(
+        &self,
+        transport: &Arc<
+            dyn TransportDispatcher<
+                ClientMessages,
+                MessageFromServer,
+                ClientMessage,
+                ServerMessages,
+                ServerMessage,
+            >,
+        >,
+        message: &MessageFromServer,
+        request_id: Option<RequestId>,
+    ) -> Option<RequestId> {
+        let message_sender = transport.message_sender();
+        let guard = message_sender.read().await;
+        if let Some(dispatcher) = guard.as_ref() {
+            dispatcher.request_id_for_message(message, request_id)
+        } else {
+            None
+        }
+    }
+
     pub(crate) async fn handle_message(
         &self,
         message: ClientMessage,
@@ -262,19 +290,7 @@ impl ServerRuntime {
                 None
             }
             ClientMessage::Error(jsonrpc_error) => {
-                self.handler
-                    .handle_error(&jsonrpc_error.error, self)
-                    .await?;
-                if let Some(tx_response) = transport.pending_request_tx(&jsonrpc_error.id).await {
-                    tx_response
-                        .send(ClientMessage::Error(jsonrpc_error))
-                        .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
-                } else {
-                    tracing::warn!(
-                        "Received an error response with no corresponding request {:?}",
-                        &jsonrpc_error.id
-                    );
-                }
+                self.handler.handle_error(jsonrpc_error.error, self).await?;
                 None
             }
             // The response is the result of a request, it is processed at the transport level.
@@ -285,7 +301,7 @@ impl ServerRuntime {
                         .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
                 } else {
                     tracing::warn!(
-                        "Received a response with no corresponding request: {:?}",
+                        "Received response or error without a matching request: {:?}",
                         &response.id
                     );
                 }
@@ -455,7 +471,6 @@ impl ServerRuntime {
             transport_map: tokio::sync::RwLock::new(HashMap::new()),
             client_details_tx,
             client_details_rx,
-            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
         }
     }
 
@@ -482,7 +497,6 @@ impl ServerRuntime {
             transport_map: tokio::sync::RwLock::new(map),
             client_details_tx,
             client_details_rx,
-            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
         }
     }
 }
