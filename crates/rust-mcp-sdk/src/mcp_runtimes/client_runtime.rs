@@ -130,7 +130,19 @@ impl ClientRuntime {
                 None
             }
             ServerMessage::Error(jsonrpc_error) => {
-                self.handler.handle_error(jsonrpc_error.error, self).await?;
+                self.handler
+                    .handle_error(&jsonrpc_error.error, self)
+                    .await?;
+                if let Some(tx_response) = transport.pending_request_tx(&jsonrpc_error.id).await {
+                    tx_response
+                        .send(ServerMessage::Error(jsonrpc_error))
+                        .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
+                } else {
+                    tracing::warn!(
+                        "Received an error response with no corresponding request: {:?}",
+                        &jsonrpc_error.id
+                    );
+                }
                 None
             }
             ServerMessage::Response(response) => {
@@ -140,7 +152,7 @@ impl ClientRuntime {
                         .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
                 } else {
                     tracing::warn!(
-                        "Received response or error without a matching request: {:?}",
+                        "Received a response with no corresponding request: {:?}",
                         &response.id
                     );
                 }

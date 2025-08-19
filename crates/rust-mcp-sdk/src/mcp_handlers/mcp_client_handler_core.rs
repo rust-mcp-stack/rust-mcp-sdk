@@ -38,7 +38,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     /// - `error` – The error data received from the MCP server.
     async fn handle_error(
         &self,
-        error: RpcError,
+        error: &RpcError,
         runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError>;
 
