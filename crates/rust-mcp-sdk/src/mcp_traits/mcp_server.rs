@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, McpMessage, MessageFromServer, NotificationFromServer,
-        RequestFromServer, ResultFromClient, ServerMessage,
+        ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
+        ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
     GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
@@ -44,7 +44,7 @@ pub trait McpServer: Sync + Send {
         message: MessageFromServer,
         request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<ClientMessages>>;
+    ) -> SdkResult<Option<ClientMessage>>;
 
     async fn send_batch(
         &self,
@@ -84,12 +84,10 @@ pub trait McpServer: Sync + Send {
             .send(MessageFromServer::RequestFromServer(request), None, timeout)
             .await?;
 
-        let client_messages = response.ok_or_else(|| {
+        let client_message = response.ok_or_else(|| {
             RpcError::internal_error()
                 .with_message("An empty response was received from the client.".to_string())
         })?;
-
-        let client_message = client_messages.as_single()?;
 
         if client_message.is_error() {
             return Err(client_message.as_error()?.error.into());

@@ -16,7 +16,7 @@ use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
 #[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
-use rust_mcp_transport::{IoStream, TransportDispatcher};
+use rust_mcp_transport::{IoStream, RequestIdGen, RequestIdGenNumeric, TransportDispatcher};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,6 +45,7 @@ pub struct ServerRuntime {
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
+    request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
 }
@@ -79,7 +80,7 @@ impl McpServer for ServerRuntime {
         message: MessageFromServer,
         request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<ClientMessages>> {
+    ) -> SdkResult<Option<ClientMessage>> {
         let transport_map = self.transport_map.read().await;
         let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
             RpcError::internal_error()
@@ -87,14 +88,18 @@ impl McpServer for ServerRuntime {
         )?;
 
         let outgoing_request_id = self
-            .request_id_for_message(transport, &message, request_id)
-            .await;
+            .request_id_gen
+            .request_id_for_message(&message, request_id);
 
         let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
-        transport
+
+        let response = transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
-            .map_err(|err| err.into())
-            .await
+            .await?
+            .map(|res| res.as_single())
+            .transpose()?;
+
+        Ok(response)
     }
 
     async fn send_batch(
@@ -209,40 +214,6 @@ impl ServerRuntime {
         transport.consume_string_payload(payload).await?;
 
         Ok(())
-    }
-
-    /// Determines the request ID for an outgoing MCP message.
-    ///
-    /// For requests, generates a new ID using the internal counter. For responses or errors,
-    /// uses the provided `request_id`. Notifications receive no ID.
-    ///
-    /// # Arguments
-    /// * `message` - The MCP message to evaluate.
-    /// * `request_id` - An optional existing request ID (required for responses/errors).
-    ///
-    /// # Returns
-    /// An `Option<RequestId>`: `Some` for requests or responses/errors, `None` for notifications.
-    pub(crate) async fn request_id_for_message(
-        &self,
-        transport: &Arc<
-            dyn TransportDispatcher<
-                ClientMessages,
-                MessageFromServer,
-                ClientMessage,
-                ServerMessages,
-                ServerMessage,
-            >,
-        >,
-        message: &MessageFromServer,
-        request_id: Option<RequestId>,
-    ) -> Option<RequestId> {
-        let message_sender = transport.message_sender();
-        let guard = message_sender.read().await;
-        if let Some(dispatcher) = guard.as_ref() {
-            dispatcher.request_id_for_message(message, request_id)
-        } else {
-            None
-        }
     }
 
     pub(crate) async fn handle_message(
@@ -471,6 +442,7 @@ impl ServerRuntime {
             transport_map: tokio::sync::RwLock::new(HashMap::new()),
             client_details_tx,
             client_details_rx,
+            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
         }
     }
 
@@ -497,6 +469,7 @@ impl ServerRuntime {
             transport_map: tokio::sync::RwLock::new(map),
             client_details_tx,
             client_details_rx,
+            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::schema::{
     InitializeRequestParams, InitializeResult, ListPromptsRequest, ListPromptsRequestParams,
     ListResourceTemplatesRequest, ListResourceTemplatesRequestParams, ListResourcesRequest,
     ListResourcesRequestParams, ListRootsRequest, ListToolsRequest, ListToolsRequestParams,
-    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams,
+    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams, RequestId,
     RootsListChangedNotification, RootsListChangedNotificationParams, RpcError, ServerCapabilities,
     SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
     UnsubscribeRequest, UnsubscribeRequestParams,
@@ -175,26 +175,14 @@ pub trait McpClient: Sync + Send {
         request: RequestFromClient,
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromServer> {
-        let sender = self.sender();
-        let sender = sender.read().await;
-        let sender = sender
-            .as_ref()
-            .ok_or(schema_utils::SdkError::connection_closed())?;
-
-        let request_id = sender.next_request_id();
-
-        let mcp_message =
-            ClientMessage::from_message(MessageFromClient::from(request), Some(request_id))?;
-        let response = sender
-            .send_message(ClientMessages::Single(mcp_message), timeout)
+        let response = self
+            .send(MessageFromClient::RequestFromClient(request), None, timeout)
             .await?;
 
         let server_message = response.ok_or_else(|| {
             RpcError::internal_error()
-                .with_message("An empty response was received from the server.".to_string())
+                .with_message("An empty response was received from the client.".to_string())
         })?;
-
-        let server_message = server_message.as_single()?;
 
         if server_message.is_error() {
             return Err(server_message.as_error()?.error.into());
@@ -205,27 +193,10 @@ pub trait McpClient: Sync + Send {
 
     async fn send(
         &self,
-        message: ClientMessage,
+        message: MessageFromClient,
+        request_id: Option<RequestId>,
         timeout: Option<Duration>,
-    ) -> SdkResult<Option<ServerMessage>> {
-        let sender = self.sender();
-        let sender = sender.read().await;
-        let sender = sender
-            .as_ref()
-            .ok_or(schema_utils::SdkError::connection_closed())?;
-
-        let response = sender
-            .send_message(ClientMessages::Single(message), timeout)
-            .await?;
-
-        match response {
-            Some(res) => {
-                let server_results = res.as_single()?;
-                Ok(Some(server_results))
-            }
-            None => Ok(None),
-        }
-    }
+    ) -> SdkResult<Option<ServerMessage>>;
 
     async fn send_batch(
         &self,

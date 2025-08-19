@@ -6,6 +6,7 @@ mod client_sse;
 pub mod error;
 mod mcp_stream;
 mod message_dispatcher;
+mod request_id_gen;
 mod schema;
 #[cfg(feature = "sse")]
 mod sse;
@@ -16,6 +17,7 @@ mod utils;
 #[cfg(feature = "sse")]
 pub use client_sse::*;
 pub use message_dispatcher::*;
+pub use request_id_gen::*;
 #[cfg(feature = "sse")]
 pub use sse::*;
 pub use stdio::*;

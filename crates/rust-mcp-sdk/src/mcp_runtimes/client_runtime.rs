@@ -7,14 +7,19 @@ use crate::schema::{
         ServerMessages,
     },
     InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
-    RpcError, ServerResult,
+    RequestId, RpcError, ServerResult,
 };
 use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
-use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
-use std::sync::{Arc, RwLock};
+use rust_mcp_transport::{
+    IoStream, McpDispatch, MessageDispatcher, RequestIdGen, RequestIdGenNumeric, Transport,
+};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 
@@ -41,6 +46,7 @@ pub struct ClientRuntime {
     // Details about the connected server
     server_details: Arc<RwLock<Option<InitializeResult>>>,
     handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), McpSdkError>>>>,
+    request_id_gen: Box<dyn RequestIdGen>,
 }
 
 impl ClientRuntime {
@@ -61,6 +67,7 @@ impl ClientRuntime {
             client_details,
             server_details: Arc::new(RwLock::new(None)),
             handlers: Mutex::new(vec![]),
+            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
         }
     }
 
@@ -282,6 +289,33 @@ impl McpClient for ClientRuntime {
             // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
             None
         }
+    }
+
+    async fn send(
+        &self,
+        message: MessageFromClient,
+        request_id: Option<RequestId>,
+        timeout: Option<Duration>,
+    ) -> SdkResult<Option<ServerMessage>> {
+        let sender = self.sender();
+        let sender = sender.read().await;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let outgoing_request_id = self
+            .request_id_gen
+            .request_id_for_message(&message, request_id);
+
+        let mcp_message = ClientMessage::from_message(message, outgoing_request_id)?;
+
+        let response = sender
+            .send_message(ClientMessages::Single(mcp_message), timeout)
+            .await?
+            .map(|res| res.as_single())
+            .transpose()?;
+
+        Ok(response)
     }
 
     async fn is_shut_down(&self) -> bool {
