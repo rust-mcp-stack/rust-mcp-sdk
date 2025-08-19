@@ -10,7 +10,6 @@ use futures::future::join_all;
 
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -31,7 +30,6 @@ use crate::McpDispatch;
 pub struct MessageDispatcher<R> {
     pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
     writable_std: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
-    message_id_counter: Arc<AtomicI64>,
     request_timeout: Duration,
 }
 
@@ -49,51 +47,13 @@ impl<R> MessageDispatcher<R> {
     pub fn new(
         pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
         writable_std: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
-        message_id_counter: Arc<AtomicI64>,
         request_timeout: Duration,
     ) -> Self {
         Self {
             pending_requests,
             writable_std,
-            message_id_counter,
             request_timeout,
         }
-    }
-
-    /// Determines the request ID for an outgoing MCP message.
-    ///
-    /// For requests, generates a new ID using the internal counter. For responses or errors,
-    /// uses the provided `request_id`. Notifications receive no ID.
-    ///
-    /// # Arguments
-    /// * `message` - The MCP message to evaluate.
-    /// * `request_id` - An optional existing request ID (required for responses/errors).
-    ///
-    /// # Returns
-    /// An `Option<RequestId>`: `Some` for requests or responses/errors, `None` for notifications.
-    pub fn request_id_for_message(
-        &self,
-        message: &impl McpMessage,
-        request_id: Option<RequestId>,
-    ) -> Option<RequestId> {
-        // we need to produce next request_id for requests
-        if message.is_request() {
-            // request_id should be None for requests
-            assert!(request_id.is_none());
-            Some(self.next_request_id())
-        } else if !message.is_notification() {
-            // `request_id` must not be `None` for errors, notifications and responses
-            assert!(request_id.is_some());
-            request_id
-        } else {
-            None
-        }
-    }
-    pub fn next_request_id(&self) -> RequestId {
-        RequestId::Integer(
-            self.message_id_counter
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        )
     }
 
     async fn store_pending_request(

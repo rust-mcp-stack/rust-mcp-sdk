@@ -177,7 +177,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 
     async fn handle_error(
         &self,
-        jsonrpc_error: RpcError,
+        jsonrpc_error: &RpcError,
         runtime: &dyn McpServer,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
