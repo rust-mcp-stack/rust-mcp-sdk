@@ -4,6 +4,23 @@ use crate::error::{McpSdkError, SdkResult};
 use crate::schema::ProtocolVersion;
 use std::cmp::Ordering;
 
+/// A guard type that automatically aborts a Tokio task when dropped.
+///
+/// This ensures that the associated task does not outlive the scope
+/// of this struct, preventing runaway or leaked background tasks.
+///
+pub struct AbortTaskOnDrop {
+    /// The handle used to abort the spawned Tokio task.
+    pub handle: tokio::task::AbortHandle,
+}
+
+impl Drop for AbortTaskOnDrop {
+    fn drop(&mut self) {
+        // Automatically abort the associated task when this guard is dropped.
+        self.handle.abort();
+    }
+}
+
 /// Formats an assertion error message for unsupported capabilities.
 ///
 /// Constructs a string describing that a specific entity (e.g., server or client) lacks

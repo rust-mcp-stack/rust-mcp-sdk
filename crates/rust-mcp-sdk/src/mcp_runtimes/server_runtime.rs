@@ -10,6 +10,7 @@ use crate::schema::{
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
+use crate::utils::AbortTaskOnDrop;
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
@@ -17,7 +18,7 @@ use futures::{StreamExt, TryFutureExt};
 use rust_mcp_transport::SessionId;
 use rust_mcp_transport::{IoStream, TransportDispatcher};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{oneshot, watch};
@@ -41,8 +42,6 @@ pub struct ServerRuntime {
     handler: Arc<dyn McpServerHandler>,
     // Information about the server
     server_details: Arc<InitializeResult>,
-    // Details about the connected client
-    client_details: Arc<RwLock<Option<InitializeRequestParams>>>,
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
@@ -123,12 +122,7 @@ impl McpServer for ServerRuntime {
 
     /// Returns the client information if available, after successful initialization , otherwise returns None
     fn client_info(&self) -> Option<InitializeRequestParams> {
-        if let Ok(details) = self.client_details.read() {
-            details.clone()
-        } else {
-            // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            None
-        }
+        self.client_details_rx.borrow().clone()
     }
 
     /// Main runtime loop, processes incoming messages and handles requests
@@ -404,6 +398,11 @@ impl ServerRuntime {
             .await?
             .abort_handle();
 
+        // ensure keep_alive task will be aborted
+        let _abort_guard = AbortTaskOnDrop {
+            handle: abort_alive_task,
+        };
+
         // in case there is a payload, we consume it by transport to get processed
         if let Some(payload) = payload {
             transport.consume_string_payload(&payload).await?;
@@ -439,13 +438,11 @@ impl ServerRuntime {
                     }
                     // close the stream after all messages are sent, unless it is a standalone stream
                     if !stream_id.eq(DEFAULT_STREAM_ID){
-                        abort_alive_task.abort();
                         return  Ok(());
                     }
                 }
                 _ = &mut disconnect_rx => {
                                 self.remove_transport(stream_id).await?;
-                                abort_alive_task.abort();
                                 // Disconnection detected by keep-alive task
                                 return Err(SdkError::connection_closed().into());
 
@@ -469,7 +466,6 @@ impl ServerRuntime {
             watch::channel::<Option<InitializeRequestParams>>(None);
         Self {
             server_details,
-            client_details: Arc::new(RwLock::new(None)),
             handler,
             session_id: Some(session_id),
             transport_map: tokio::sync::RwLock::new(HashMap::new()),
@@ -495,7 +491,6 @@ impl ServerRuntime {
             watch::channel::<Option<InitializeRequestParams>>(None);
         Self {
             server_details: Arc::new(server_details),
-            client_details: Arc::new(RwLock::new(None)),
             handler,
             #[cfg(feature = "hyper-server")]
             session_id: None,
