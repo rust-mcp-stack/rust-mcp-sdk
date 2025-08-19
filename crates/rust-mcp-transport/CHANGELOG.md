@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.4.1...rust-mcp-transport-v0.5.0) (2025-08-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* improve request ID generation, remove deprecated methods and adding improvements
+
+### 🚀 Features
+
+* Improve request ID generation, remove deprecated methods and adding improvements ([95b91aa](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/95b91aad191e1b8777ca4a02612ab9183e0276d3))
+
 ## [0.4.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.4.0...rust-mcp-transport-v0.4.1) (2025-08-12)
 
 

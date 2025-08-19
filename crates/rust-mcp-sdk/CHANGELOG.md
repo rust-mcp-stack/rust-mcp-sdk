@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.3...rust-mcp-sdk-v0.6.0) (2025-08-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* improve request ID generation, remove deprecated methods and adding improvements
+
+### 🚀 Features
+
+* Improve request ID generation, remove deprecated methods and adding improvements ([95b91aa](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/95b91aad191e1b8777ca4a02612ab9183e0276d3))
+
 ## [0.5.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.2...rust-mcp-sdk-v0.5.3) (2025-08-19)
 
 
