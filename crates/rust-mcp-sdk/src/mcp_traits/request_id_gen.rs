@@ -10,7 +10,9 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait RequestIdGen: Send + Sync {
     fn next_request_id(&self) -> RequestId;
+    #[allow(unused)]
     fn last_request_id(&self) -> Option<RequestId>;
+    #[allow(unused)]
     fn reset_to(&self, id: u64);
 
     /// Determines the request ID for an outgoing MCP message.

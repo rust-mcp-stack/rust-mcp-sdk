@@ -35,16 +35,6 @@ pub trait McpClient: Sync + Send {
     fn client_info(&self) -> &InitializeRequestParams;
     fn server_info(&self) -> Option<InitializeResult>;
 
-    #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
-    fn get_client_info(&self) -> &InitializeRequestParams {
-        self.client_info()
-    }
-
-    #[deprecated(since = "0.2.0", note = "Use `server_info()` instead.")]
-    fn get_server_info(&self) -> Option<InitializeResult> {
-        self.server_info()
-    }
-
     /// Checks whether the server has been initialized with client
     fn is_initialized(&self) -> bool {
         self.server_info().is_some()
@@ -57,20 +47,9 @@ pub trait McpClient: Sync + Send {
             .map(|server_details| server_details.server_info)
     }
 
-    #[deprecated(since = "0.2.0", note = "Use `server_version()` instead.")]
-    fn get_server_version(&self) -> Option<Implementation> {
-        self.server_info()
-            .map(|server_details| server_details.server_info)
-    }
-
     /// Returns the server's capabilities.
     /// After initialization has completed, this will be populated with the server's reported capabilities.
     fn server_capabilities(&self) -> Option<ServerCapabilities> {
-        self.server_info().map(|item| item.capabilities)
-    }
-
-    #[deprecated(since = "0.2.0", note = "Use `server_capabilities()` instead.")]
-    fn get_server_capabilities(&self) -> Option<ServerCapabilities> {
         self.server_info().map(|item| item.capabilities)
     }
 
@@ -155,10 +134,6 @@ pub trait McpClient: Sync + Send {
     fn server_supports_logging(&self) -> Option<bool> {
         self.server_info()
             .map(|server_details| server_details.capabilities.logging.is_some())
-    }
-    #[deprecated(since = "0.2.0", note = "Use `instructions()` instead.")]
-    fn get_instructions(&self) -> Option<String> {
-        self.server_info()?.instructions
     }
 
     fn instructions(&self) -> Option<String> {

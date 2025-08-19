@@ -29,16 +29,6 @@ pub trait McpServer: Sync + Send {
 
     async fn wait_for_initialization(&self);
 
-    #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
-    fn get_client_info(&self) -> Option<InitializeRequestParams> {
-        self.client_info()
-    }
-
-    #[deprecated(since = "0.2.0", note = "Use `server_info()` instead.")]
-    fn get_server_info(&self) -> &InitializeResult {
-        self.server_info()
-    }
-
     async fn send(
         &self,
         message: MessageFromServer,
