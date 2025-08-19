@@ -1,21 +1,22 @@
 pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 
-use crate::schema::{
-    schema_utils::{
-        self, ClientMessage, ClientMessages, FromMessage, MessageFromClient, ServerMessage,
-        ServerMessages,
+use crate::{
+    mcp_traits::{RequestIdGen, RequestIdGenNumeric},
+    schema::{
+        schema_utils::{
+            self, ClientMessage, ClientMessages, FromMessage, MessageFromClient, ServerMessage,
+            ServerMessages,
+        },
+        InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
+        RequestId, RpcError, ServerResult,
     },
-    InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
-    RequestId, RpcError, ServerResult,
 };
 use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
-use rust_mcp_transport::{
-    IoStream, McpDispatch, MessageDispatcher, RequestIdGen, RequestIdGenNumeric, Transport,
-};
+use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
 use std::{
     sync::{Arc, RwLock},
     time::Duration,

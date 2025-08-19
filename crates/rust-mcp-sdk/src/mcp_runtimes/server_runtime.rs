@@ -3,6 +3,7 @@ pub mod mcp_server_runtime_core;
 use crate::error::SdkResult;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::mcp_traits::mcp_server::McpServer;
+use crate::mcp_traits::{RequestIdGen, RequestIdGenNumeric};
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
@@ -16,7 +17,7 @@ use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
 #[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
-use rust_mcp_transport::{IoStream, RequestIdGen, RequestIdGenNumeric, TransportDispatcher};
+use rust_mcp_transport::{IoStream, TransportDispatcher};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
