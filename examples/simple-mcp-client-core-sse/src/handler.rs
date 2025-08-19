@@ -41,11 +41,25 @@ impl ClientHandlerCore for MyClientHandler {
 
     async fn handle_notification(
         &self,
-        _notification: NotificationFromServer,
+        notification: NotificationFromServer,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
-        Err(RpcError::internal_error()
-            .with_message("handle_notification() Not implemented".to_string()))
+        if let NotificationFromServer::ServerNotification(
+            schema::ServerNotification::LoggingMessageNotification(logging_message_notification),
+        ) = notification
+        {
+            println!(
+                "Notification from server: {}",
+                logging_message_notification.params.data.to_string()
+            );
+        } else {
+            println!(
+                "A {} notification received from the server",
+                notification.method()
+            );
+        };
+
+        Ok(())
     }
 
     async fn handle_error(
