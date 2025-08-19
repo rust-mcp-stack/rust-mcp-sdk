@@ -50,7 +50,7 @@ impl ClientHandlerCore for MyClientHandler {
         {
             println!(
                 "Notification from server: {}",
-                logging_message_notification.params.data.to_string()
+                logging_message_notification.params.data
             );
         } else {
             println!(
