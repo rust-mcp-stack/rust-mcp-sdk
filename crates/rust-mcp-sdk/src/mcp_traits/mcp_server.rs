@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, McpMessage, MessageFromServer, NotificationFromServer,
-        RequestFromServer, ResultFromClient, ServerMessage,
+        ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
+        ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
     GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
@@ -29,22 +29,12 @@ pub trait McpServer: Sync + Send {
 
     async fn wait_for_initialization(&self);
 
-    #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
-    fn get_client_info(&self) -> Option<InitializeRequestParams> {
-        self.client_info()
-    }
-
-    #[deprecated(since = "0.2.0", note = "Use `server_info()` instead.")]
-    fn get_server_info(&self) -> &InitializeResult {
-        self.server_info()
-    }
-
     async fn send(
         &self,
         message: MessageFromServer,
         request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<ClientMessages>>;
+    ) -> SdkResult<Option<ClientMessage>>;
 
     async fn send_batch(
         &self,
@@ -84,12 +74,10 @@ pub trait McpServer: Sync + Send {
             .send(MessageFromServer::RequestFromServer(request), None, timeout)
             .await?;
 
-        let client_messages = response.ok_or_else(|| {
+        let client_message = response.ok_or_else(|| {
             RpcError::internal_error()
                 .with_message("An empty response was received from the client.".to_string())
         })?;
-
-        let client_message = client_messages.as_single()?;
 
         if client_message.is_error() {
             return Err(client_message.as_error()?.error.into());

@@ -24,8 +24,11 @@ pub trait McpServerHandler: Send + Sync {
         client_jsonrpc_request: RequestFromClient,
         runtime: &dyn McpServer,
     ) -> std::result::Result<ResultFromServer, RpcError>;
-    async fn handle_error(&self, jsonrpc_error: RpcError, runtime: &dyn McpServer)
-        -> SdkResult<()>;
+    async fn handle_error(
+        &self,
+        jsonrpc_error: &RpcError,
+        runtime: &dyn McpServer,
+    ) -> SdkResult<()>;
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
@@ -41,8 +44,11 @@ pub trait McpClientHandler: Send + Sync {
         server_jsonrpc_request: RequestFromServer,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError>;
-    async fn handle_error(&self, jsonrpc_error: RpcError, runtime: &dyn McpClient)
-        -> SdkResult<()>;
+    async fn handle_error(
+        &self,
+        jsonrpc_error: &RpcError,
+        runtime: &dyn McpClient,
+    ) -> SdkResult<()>;
     async fn handle_notification(
         &self,
         server_jsonrpc_notification: NotificationFromServer,

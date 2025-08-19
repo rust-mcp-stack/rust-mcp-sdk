@@ -57,15 +57,6 @@ macro_rules! tool_box {
                     )*
                 ]
             }
-
-            #[deprecated(since = "0.2.0", note = "Use `tools()` instead.")]
-            pub fn get_tools() -> Vec<rust_mcp_sdk::schema::Tool> {
-                vec![
-                    $(
-                        $tool::tool(),
-                    )*
-                ]
-            }
         }
 
 

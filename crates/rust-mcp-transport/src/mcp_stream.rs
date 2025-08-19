@@ -5,12 +5,7 @@ use crate::{
     utils::CancellationToken,
     IoStream,
 };
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    sync::{atomic::AtomicI64, Arc},
-    time::Duration,
-};
+use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -57,12 +52,7 @@ impl MCPStream {
 
         // rpc message stream that receives incoming messages
 
-        let sender = MessageDispatcher::new(
-            pending_requests,
-            writable,
-            Arc::new(AtomicI64::new(0)),
-            request_timeout,
-        );
+        let sender = MessageDispatcher::new(pending_requests, writable, request_timeout);
 
         (stream, sender, error_io)
     }
