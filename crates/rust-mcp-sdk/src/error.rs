@@ -41,3 +41,6 @@ impl McpSdkError {
         None
     }
 }
+
+#[deprecated(since = "0.2.0", note = "Use `McpSdkError` instead.")]
+pub type MCPSdkError = McpSdkError;

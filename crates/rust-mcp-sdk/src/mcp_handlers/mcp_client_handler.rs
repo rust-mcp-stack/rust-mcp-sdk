@@ -148,7 +148,7 @@ pub trait ClientHandler: Send + Sync + 'static {
     //********************//
     async fn handle_error(
         &self,
-        error: &RpcError,
+        error: RpcError,
         runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

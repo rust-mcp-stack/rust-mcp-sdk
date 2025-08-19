@@ -319,7 +319,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_error(
         &self,
-        error: &RpcError,
+        error: RpcError,
         runtime: &dyn McpServer,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

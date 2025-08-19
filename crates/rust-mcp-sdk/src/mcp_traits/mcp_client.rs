@@ -10,7 +10,7 @@ use crate::schema::{
     InitializeRequestParams, InitializeResult, ListPromptsRequest, ListPromptsRequestParams,
     ListResourceTemplatesRequest, ListResourceTemplatesRequestParams, ListResourcesRequest,
     ListResourcesRequestParams, ListRootsRequest, ListToolsRequest, ListToolsRequestParams,
-    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams, RequestId,
+    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams,
     RootsListChangedNotification, RootsListChangedNotificationParams, RpcError, ServerCapabilities,
     SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
     UnsubscribeRequest, UnsubscribeRequestParams,
@@ -35,6 +35,16 @@ pub trait McpClient: Sync + Send {
     fn client_info(&self) -> &InitializeRequestParams;
     fn server_info(&self) -> Option<InitializeResult>;
 
+    #[deprecated(since = "0.2.0", note = "Use `client_info()` instead.")]
+    fn get_client_info(&self) -> &InitializeRequestParams {
+        self.client_info()
+    }
+
+    #[deprecated(since = "0.2.0", note = "Use `server_info()` instead.")]
+    fn get_server_info(&self) -> Option<InitializeResult> {
+        self.server_info()
+    }
+
     /// Checks whether the server has been initialized with client
     fn is_initialized(&self) -> bool {
         self.server_info().is_some()
@@ -47,9 +57,20 @@ pub trait McpClient: Sync + Send {
             .map(|server_details| server_details.server_info)
     }
 
+    #[deprecated(since = "0.2.0", note = "Use `server_version()` instead.")]
+    fn get_server_version(&self) -> Option<Implementation> {
+        self.server_info()
+            .map(|server_details| server_details.server_info)
+    }
+
     /// Returns the server's capabilities.
     /// After initialization has completed, this will be populated with the server's reported capabilities.
     fn server_capabilities(&self) -> Option<ServerCapabilities> {
+        self.server_info().map(|item| item.capabilities)
+    }
+
+    #[deprecated(since = "0.2.0", note = "Use `server_capabilities()` instead.")]
+    fn get_server_capabilities(&self) -> Option<ServerCapabilities> {
         self.server_info().map(|item| item.capabilities)
     }
 
@@ -135,6 +156,10 @@ pub trait McpClient: Sync + Send {
         self.server_info()
             .map(|server_details| server_details.capabilities.logging.is_some())
     }
+    #[deprecated(since = "0.2.0", note = "Use `instructions()` instead.")]
+    fn get_instructions(&self) -> Option<String> {
+        self.server_info()?.instructions
+    }
 
     fn instructions(&self) -> Option<String> {
         self.server_info()?.instructions
@@ -150,14 +175,26 @@ pub trait McpClient: Sync + Send {
         request: RequestFromClient,
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromServer> {
-        let response = self
-            .send(MessageFromClient::RequestFromClient(request), None, timeout)
+        let sender = self.sender();
+        let sender = sender.read().await;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let request_id = sender.next_request_id();
+
+        let mcp_message =
+            ClientMessage::from_message(MessageFromClient::from(request), Some(request_id))?;
+        let response = sender
+            .send_message(ClientMessages::Single(mcp_message), timeout)
             .await?;
 
         let server_message = response.ok_or_else(|| {
             RpcError::internal_error()
-                .with_message("An empty response was received from the client.".to_string())
+                .with_message("An empty response was received from the server.".to_string())
         })?;
+
+        let server_message = server_message.as_single()?;
 
         if server_message.is_error() {
             return Err(server_message.as_error()?.error.into());
@@ -168,10 +205,27 @@ pub trait McpClient: Sync + Send {
 
     async fn send(
         &self,
-        message: MessageFromClient,
-        request_id: Option<RequestId>,
+        message: ClientMessage,
         timeout: Option<Duration>,
-    ) -> SdkResult<Option<ServerMessage>>;
+    ) -> SdkResult<Option<ServerMessage>> {
+        let sender = self.sender();
+        let sender = sender.read().await;
+        let sender = sender
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+
+        let response = sender
+            .send_message(ClientMessages::Single(message), timeout)
+            .await?;
+
+        match response {
+            Some(res) => {
+                let server_results = res.as_single()?;
+                Ok(Some(server_results))
+            }
+            None => Ok(None),
+        }
+    }
 
     async fn send_batch(
         &self,

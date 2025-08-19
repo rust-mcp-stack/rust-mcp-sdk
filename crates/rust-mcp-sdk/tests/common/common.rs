@@ -128,10 +128,8 @@ use futures::stream::Stream;
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
 pub async fn read_sse_event_from_stream(
     stream: &mut (impl Stream<Item = Result<hyper::body::Bytes, reqwest::Error>> + Unpin),
-    event_count: usize,
-) -> Option<Vec<String>> {
+) -> Option<String> {
     let mut buffer = String::new();
-    let mut events = vec![];
 
     while let Some(item) = stream.next().await {
         match item {
@@ -160,10 +158,7 @@ pub async fn read_sse_event_from_stream(
 
                     // Return if data was found
                     if let Some(data) = data {
-                        events.push(data);
-                        if events.len().eq(&event_count) {
-                            return Some(events);
-                        }
+                        return Some(data);
                     }
                 }
             }
@@ -176,9 +171,9 @@ pub async fn read_sse_event_from_stream(
     None
 }
 
-pub async fn read_sse_event(response: Response, event_count: usize) -> Option<Vec<String>> {
+pub async fn read_sse_event(response: Response) -> Option<String> {
     let mut stream = response.bytes_stream();
-    read_sse_event_from_stream(&mut stream, event_count).await
+    read_sse_event_from_stream(&mut stream).await
 }
 
 pub fn test_client_info() -> InitializeRequestParams {
