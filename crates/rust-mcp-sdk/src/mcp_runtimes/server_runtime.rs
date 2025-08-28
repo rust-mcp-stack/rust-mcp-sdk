@@ -197,6 +197,11 @@ impl McpServer for ServerRuntime {
         }
         Ok(())
     }
+
+    #[cfg(feature = "hyper-server")]
+    fn session_id(&self) -> Option<SessionId> {
+        self.session_id.to_owned()
+    }
 }
 
 impl ServerRuntime {
@@ -433,11 +438,6 @@ impl ServerRuntime {
                 }
             }
         }
-    }
-
-    #[cfg(feature = "hyper-server")]
-    pub(crate) async fn session_id(&self) -> Option<SessionId> {
-        self.session_id.to_owned()
     }
 
     #[cfg(feature = "hyper-server")]

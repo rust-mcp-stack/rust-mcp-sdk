@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::schema::{
     schema_utils::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
@@ -16,6 +14,8 @@ use crate::schema::{
     SetLevelRequest, ToolListChangedNotification, ToolListChangedNotificationParams,
 };
 use async_trait::async_trait;
+use rust_mcp_transport::SessionId;
+use std::time::Duration;
 
 use crate::{error::SdkResult, utils::format_assertion_message};
 
@@ -405,4 +405,7 @@ pub trait McpServer: Sync + Send {
         }
         Ok(())
     }
+
+    #[cfg(feature = "hyper-server")]
+    fn session_id(&self) -> Option<SessionId>;
 }
