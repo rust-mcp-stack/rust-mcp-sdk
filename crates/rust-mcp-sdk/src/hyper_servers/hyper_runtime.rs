@@ -70,6 +70,12 @@ impl HyperRuntime {
         result.map_err(|err| err.into())
     }
 
+    /// Returns a list of active session IDs from the session store.
+    pub async fn sessions(&self) -> Vec<String> {
+        self.state.session_store.keys().await
+    }
+
+    /// Retrieves the runtime associated with the given session ID from the session store.
     pub async fn runtime_by_session(
         &self,
         session_id: &SessionId,

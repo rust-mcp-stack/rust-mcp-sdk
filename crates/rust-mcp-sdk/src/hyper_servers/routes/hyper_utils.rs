@@ -172,10 +172,7 @@ pub async fn start_new_session(
         session_id.to_owned(),
     ));
 
-    tracing::info!(
-        "a new client joined : {}",
-        runtime.session_id().await.unwrap_or_default().to_owned()
-    );
+    tracing::info!("a new client joined : {}", &session_id);
 
     let response = create_sse_stream(
         runtime.clone(),
