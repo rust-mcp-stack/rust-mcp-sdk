@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.0...rust-mcp-sdk-v0.6.1) (2025-08-28)
+
+
+### 🐛 Bug Fixes
+
+* Session ID access in handlers and add helper for listing active ([#90](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/90)) ([f2f0afb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/f2f0afb542f6ff036a28cf01e102b27ce940665b))
+
 ## [0.6.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.5.3...rust-mcp-sdk-v0.6.0) (2025-08-19)
 
 
