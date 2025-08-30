@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.1...rust-mcp-sdk-v0.6.2) (2025-08-30)
+
+
+### 🐛 Bug Fixes
+
+* Tool-box macro panic on invalid requests ([#92](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/92)) ([54cc8ed](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/54cc8edb55c41455dd9211f296560e7a792a7b9c))
+
 ## [0.6.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.0...rust-mcp-sdk-v0.6.1) (2025-08-28)
 
 
