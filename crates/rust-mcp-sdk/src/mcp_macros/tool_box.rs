@@ -67,8 +67,20 @@ macro_rules! tool_box {
 
             /// Attempts to convert a tool request into the appropriate tool variant
             fn try_from(value: rust_mcp_sdk::schema::CallToolRequestParams) -> Result<Self, Self::Error> {
-                let v = serde_json::to_value(value.arguments.unwrap())
-                .map_err(rust_mcp_sdk::schema::schema_utils::CallToolError::new)?;
+                let arguments = value
+                    .arguments
+                    .ok_or(rust_mcp_sdk::schema::schema_utils::CallToolError::invalid_arguments(
+                        &value.name,
+                        Some("Missing 'arguments' field in the request".to_string())
+                    ))?;
+
+                    let v = serde_json::to_value(arguments).map_err(|err| {
+                        rust_mcp_sdk::schema::schema_utils::CallToolError::invalid_arguments(
+                            &value.name,
+                            Some(format!("{err}")),
+                        )
+                    })?;
+
                     match value.name {
                         $(
                             name if name == $tool::tool_name().as_str() => {
