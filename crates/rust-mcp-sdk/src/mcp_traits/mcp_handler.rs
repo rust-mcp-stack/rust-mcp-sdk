@@ -18,7 +18,6 @@ use super::mcp_server::McpServer;
 #[cfg(feature = "server")]
 #[async_trait]
 pub trait McpServerHandler: Send + Sync {
-    async fn on_server_started(&self, runtime: Arc<dyn McpServer>);
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,

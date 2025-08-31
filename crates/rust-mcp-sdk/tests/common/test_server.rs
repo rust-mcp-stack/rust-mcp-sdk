@@ -71,12 +71,6 @@ pub mod test_server_common {
 
     #[async_trait]
     impl ServerHandler for TestServerHandler {
-        async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
-            let _ = runtime
-                .stderr_message("Server started successfully".into())
-                .await;
-        }
-
         async fn handle_list_tools_request(
             &self,
             request: ListToolsRequest,

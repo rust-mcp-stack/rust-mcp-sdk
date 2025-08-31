@@ -109,7 +109,4 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
             .await?;
         Ok(())
     }
-    async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
-        self.handler.on_server_started(runtime).await;
-    }
 }

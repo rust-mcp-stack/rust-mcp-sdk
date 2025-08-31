@@ -47,6 +47,4 @@ impl ServerHandler for MyServerHandler {
             GreetingTools::SayGoodbyeTool(say_goodbye_tool) => say_goodbye_tool.call_tool(),
         }
     }
-
-    async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {}
 }

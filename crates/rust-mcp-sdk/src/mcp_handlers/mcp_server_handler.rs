@@ -325,14 +325,4 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
-
-    /// Called when the server has successfully started.
-    ///
-    /// Sends a "Server started successfully" message to stderr.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
-        let _ = runtime
-            .stderr_message("Server started successfully".into())
-            .await;
-    }
 }

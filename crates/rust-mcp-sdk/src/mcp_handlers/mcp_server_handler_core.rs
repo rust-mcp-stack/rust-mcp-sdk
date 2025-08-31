@@ -48,9 +48,4 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
         error: &RpcError,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError>;
-    async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
-        let _ = runtime
-            .stderr_message("Server started successfully".into())
-            .await;
-    }
 }

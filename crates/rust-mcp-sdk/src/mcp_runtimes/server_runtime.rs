@@ -55,8 +55,6 @@ pub struct ServerRuntime {
 impl McpServer for ServerRuntime {
     /// Set the client details, storing them in client_details
     async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
-        // self.handler.on_server_started(self).await;
-
         self.client_details_tx
             .send(Some(client_details))
             .map_err(|_| {
