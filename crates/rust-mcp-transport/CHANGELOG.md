@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.5.0...rust-mcp-transport-v0.5.1) (2025-08-31)
+
+
+### 🐛 Bug Fixes
+
+* Correct pending_requests instance ([#94](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/94)) ([9d8c1fb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9d8c1fbdf3ddb7c67ce1fb7dcb8e50b8ba2e1202))
+
 ## [0.5.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.4.1...rust-mcp-transport-v0.5.0) (2025-08-19)
 
 
