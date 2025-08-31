@@ -237,13 +237,11 @@ where
 
             Ok(stream)
         } else {
-            let pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<M>>>> =
-                Arc::new(Mutex::new(HashMap::new()));
             let (stream, sender, error_stream) = MCPStream::create(
                 Box::pin(tokio::io::stdin()),
                 Mutex::new(Box::pin(tokio::io::stdout())),
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
-                pending_requests,
+                self.pending_requests.clone(),
                 self.options.timeout,
                 cancellation_token,
             );
