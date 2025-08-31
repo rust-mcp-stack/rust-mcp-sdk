@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
 use rust_mcp_sdk::schema::{
@@ -22,7 +24,7 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_request(
         &self,
         request: RequestFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         let method_name = &request.method().to_owned();
         match request {
@@ -90,7 +92,7 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_notification(
         &self,
         notification: NotificationFromClient,
-        _: &dyn McpServer,
+        _: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
@@ -99,7 +101,7 @@ impl ServerHandlerCore for MyServerHandler {
     async fn handle_error(
         &self,
         error: &RpcError,
-        _: &dyn McpServer,
+        _: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())
     }

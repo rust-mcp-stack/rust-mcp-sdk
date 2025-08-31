@@ -17,7 +17,7 @@ pub mod test_server_common {
         mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
         McpServer, SessionId,
     };
-    use std::sync::RwLock;
+    use std::sync::{Arc, RwLock};
     use std::time::Duration;
     use tokio::time::timeout;
 
@@ -71,7 +71,7 @@ pub mod test_server_common {
 
     #[async_trait]
     impl ServerHandler for TestServerHandler {
-        async fn on_server_started(&self, runtime: &dyn McpServer) {
+        async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
             let _ = runtime
                 .stderr_message("Server started successfully".into())
                 .await;
@@ -80,7 +80,7 @@ pub mod test_server_common {
         async fn handle_list_tools_request(
             &self,
             request: ListToolsRequest,
-            runtime: &dyn McpServer,
+            runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<ListToolsResult, RpcError> {
             runtime.assert_server_request_capabilities(request.method())?;
 
@@ -94,7 +94,7 @@ pub mod test_server_common {
         async fn handle_call_tool_request(
             &self,
             request: CallToolRequest,
-            runtime: &dyn McpServer,
+            runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<CallToolResult, CallToolError> {
             runtime
                 .assert_server_request_capabilities(request.method())

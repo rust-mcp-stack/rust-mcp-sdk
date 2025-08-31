@@ -1,6 +1,8 @@
 mod handler;
 mod tools;
 
+use std::sync::Arc;
+
 use handler::MyServerHandler;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
@@ -40,7 +42,8 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     // STEP 4: create a MCP server
-    let server: ServerRuntime = server_runtime::create_server(server_details, transport, handler);
+    let server: Arc<ServerRuntime> =
+        server_runtime::create_server(server_details, transport, handler);
 
     // STEP 5: Start the server
     if let Err(start_error) = server.start().await {

@@ -4,6 +4,7 @@ use rust_mcp_sdk::schema::{
     ListToolsResult, RpcError,
 };
 use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
+use std::sync::Arc;
 
 use crate::tools::GreetingTools;
 
@@ -20,7 +21,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_list_tools_request(
         &self,
         request: ListToolsRequest,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             meta: None,
@@ -33,7 +34,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request(
         &self,
         request: CallToolRequest,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =

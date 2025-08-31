@@ -55,7 +55,7 @@ pub struct ServerRuntime {
 impl McpServer for ServerRuntime {
     /// Set the client details, storing them in client_details
     async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
-        self.handler.on_server_started(self).await;
+        // self.handler.on_server_started(self).await;
 
         self.client_details_tx
             .send(Some(client_details))
@@ -132,7 +132,7 @@ impl McpServer for ServerRuntime {
     }
 
     /// Main runtime loop, processes incoming messages and handles requests
-    async fn start(&self) -> SdkResult<()> {
+    async fn start(self: Arc<Self>) -> SdkResult<()> {
         let transport_map = self.transport_map.read().await;
 
         let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
@@ -223,7 +223,7 @@ impl ServerRuntime {
     }
 
     pub(crate) async fn handle_message(
-        &self,
+        self: &Arc<Self>,
         message: ClientMessage,
         transport: &Arc<
             dyn TransportDispatcher<
@@ -240,7 +240,7 @@ impl ServerRuntime {
             ClientMessage::Request(client_jsonrpc_request) => {
                 let result = self
                     .handler
-                    .handle_request(client_jsonrpc_request.request, self)
+                    .handle_request(client_jsonrpc_request.request, self.clone())
                     .await;
                 // create a response to send back to the client
                 let response: MessageFromServer = match result {
@@ -262,13 +262,13 @@ impl ServerRuntime {
             }
             ClientMessage::Notification(client_jsonrpc_notification) => {
                 self.handler
-                    .handle_notification(client_jsonrpc_notification.notification, self)
+                    .handle_notification(client_jsonrpc_notification.notification, self.clone())
                     .await?;
                 None
             }
             ClientMessage::Error(jsonrpc_error) => {
                 self.handler
-                    .handle_error(&jsonrpc_error.error, self)
+                    .handle_error(&jsonrpc_error.error, self.clone())
                     .await?;
                 if let Some(tx_response) = transport.pending_request_tx(&jsonrpc_error.id).await {
                     tx_response
@@ -282,7 +282,6 @@ impl ServerRuntime {
                 }
                 None
             }
-            // The response is the result of a request, it is processed at the transport level.
             ClientMessage::Response(response) => {
                 if let Some(tx_response) = transport.pending_request_tx(&response.id).await {
                     tx_response
@@ -445,10 +444,10 @@ impl ServerRuntime {
         server_details: Arc<InitializeResult>,
         handler: Arc<dyn McpServerHandler>,
         session_id: SessionId,
-    ) -> Self {
+    ) -> Arc<Self> {
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
-        Self {
+        Arc::new(Self {
             server_details,
             handler,
             session_id: Some(session_id),
@@ -456,7 +455,7 @@ impl ServerRuntime {
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
-        }
+        })
     }
 
     pub(crate) fn new(
@@ -469,12 +468,12 @@ impl ServerRuntime {
             ServerMessage,
         >,
         handler: Arc<dyn McpServerHandler>,
-    ) -> Self {
+    ) -> Arc<Self> {
         let mut map: HashMap<String, TransportType> = HashMap::new();
         map.insert(DEFAULT_STREAM_ID.to_string(), Arc::new(transport));
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
-        Self {
+        Arc::new(Self {
             server_details: Arc::new(server_details),
             handler,
             #[cfg(feature = "hyper-server")]
@@ -483,6 +482,6 @@ impl ServerRuntime {
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
-        }
+        })
     }
 }

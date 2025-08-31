@@ -1,8 +1,8 @@
+use crate::mcp_traits::mcp_server::McpServer;
 use crate::schema::schema_utils::*;
 use crate::schema::*;
 use async_trait::async_trait;
-
-use crate::mcp_traits::mcp_server::McpServer;
+use std::sync::Arc;
 
 /// Defines the `ServerHandlerCore` trait for handling Model Context Protocol (MCP) server operations.
 /// Unlike `ServerHandler`, this trait offers no default implementations, providing full control over MCP message handling
@@ -14,7 +14,7 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
     /// The `runtime` parameter provides access to the server's runtime environment, allowing
     /// interaction with the server's capabilities.
     /// The default implementation does nothing.
-    async fn on_initialized(&self, _runtime: &dyn McpServer) {}
+    async fn on_initialized(&self, _runtime: Arc<dyn McpServer>) {}
 
     /// Asynchronously handles an incoming request from the client.
     ///
@@ -26,7 +26,7 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
     async fn handle_request(
         &self,
         request: RequestFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError>;
 
     /// Asynchronously handles an incoming notification from the client.
@@ -36,7 +36,7 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
     async fn handle_notification(
         &self,
         notification: NotificationFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError>;
 
     /// Asynchronously handles an error received from the client.
@@ -46,9 +46,9 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
     async fn handle_error(
         &self,
         error: &RpcError,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError>;
-    async fn on_server_started(&self, runtime: &dyn McpServer) {
+    async fn on_server_started(&self, runtime: Arc<dyn McpServer>) {
         let _ = runtime
             .stderr_message("Server started successfully".into())
             .await;

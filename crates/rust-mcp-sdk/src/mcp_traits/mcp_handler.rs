@@ -6,9 +6,9 @@ use crate::schema::schema_utils::{NotificationFromClient, RequestFromClient, Res
 #[cfg(feature = "client")]
 use crate::schema::schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient};
 
-use crate::schema::RpcError;
-
 use crate::error::SdkResult;
+use crate::schema::RpcError;
+use std::sync::Arc;
 
 #[cfg(feature = "client")]
 use super::mcp_client::McpClient;
@@ -18,21 +18,21 @@ use super::mcp_server::McpServer;
 #[cfg(feature = "server")]
 #[async_trait]
 pub trait McpServerHandler: Send + Sync {
-    async fn on_server_started(&self, runtime: &dyn McpServer);
+    async fn on_server_started(&self, runtime: Arc<dyn McpServer>);
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError>;
     async fn handle_error(
         &self,
         jsonrpc_error: &RpcError,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()>;
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()>;
 }
 

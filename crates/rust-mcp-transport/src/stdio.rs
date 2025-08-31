@@ -210,13 +210,12 @@ where
                 .take()
                 .ok_or_else(|| TransportError::FromString("Unable to retrieve stderr.".into()))?;
 
-            let pending_requests_clone1 = self.pending_requests.clone();
-            let pending_requests_clone2 = self.pending_requests.clone();
+            let pending_requests_clone = self.pending_requests.clone();
 
             tokio::spawn(async move {
                 let _ = process.wait().await;
                 // clean up pending requests to cancel waiting tasks
-                let mut pending_requests = pending_requests_clone1.lock().await;
+                let mut pending_requests = pending_requests_clone.lock().await;
                 pending_requests.clear();
             });
 
@@ -224,7 +223,7 @@ where
                 Box::pin(stdout),
                 Mutex::new(Box::pin(stdin)),
                 IoStream::Readable(Box::pin(stderr)),
-                pending_requests_clone2,
+                self.pending_requests.clone(),
                 self.options.timeout,
                 cancellation_token,
             );
