@@ -13,16 +13,15 @@ use crate::schema::{
     ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
     SetLevelRequest, ToolListChangedNotification, ToolListChangedNotificationParams,
 };
+use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
 use rust_mcp_transport::SessionId;
-use std::time::Duration;
-
-use crate::{error::SdkResult, utils::format_assertion_message};
+use std::{sync::Arc, time::Duration};
 
 //TODO: support options , such as enforceStrictCapabilities
 #[async_trait]
 pub trait McpServer: Sync + Send {
-    async fn start(&self) -> SdkResult<()>;
+    async fn start(self: Arc<Self>) -> SdkResult<()>;
     async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()>;
     fn server_info(&self) -> &InitializeResult;
     fn client_info(&self) -> Option<InitializeRequestParams>;

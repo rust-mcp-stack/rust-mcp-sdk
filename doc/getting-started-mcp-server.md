@@ -160,7 +160,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_list_tools_request(
         &self,
         _request: ListToolsRequest,
-        _runtime: &dyn McpServer,
+        _runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             meta: None,
@@ -173,7 +173,7 @@ impl ServerHandler for MyServerHandler {
     async fn handle_call_tool_request(
         &self,
         request: CallToolRequest,
-        _runtime: &dyn McpServer,
+        _runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =

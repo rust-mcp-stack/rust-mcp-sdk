@@ -99,11 +99,11 @@ pub async fn handle_sse(
     .unwrap();
     let h: Arc<dyn McpServerHandler> = state.handler.clone();
     // create a new server instance with unique session_id and
-    let server: Arc<ServerRuntime> = Arc::new(server_runtime::create_server_instance(
+    let server: Arc<ServerRuntime> = server_runtime::create_server_instance(
         Arc::clone(&state.server_details),
         h,
         session_id.to_owned(),
-    ));
+    );
 
     state
         .session_store

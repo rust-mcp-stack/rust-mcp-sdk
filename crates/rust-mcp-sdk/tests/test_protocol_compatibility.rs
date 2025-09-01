@@ -30,7 +30,7 @@ mod protocol_compatibility_on_server {
         );
 
         handler
-            .handle_initialize_request(InitializeRequest::new(initialize_request), &runtime)
+            .handle_initialize_request(InitializeRequest::new(initialize_request), runtime)
             .await
     }
 
