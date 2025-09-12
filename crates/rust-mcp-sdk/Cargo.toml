@@ -67,6 +67,7 @@ hyper-server = [
     "rust-mcp-transport/sse",
 ]
 ssl = ["axum-server/tls-rustls"]
+tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 macros = ["rust-mcp-macros/sdk"]
 
 # enables mcp protocol version 2025_06_18
