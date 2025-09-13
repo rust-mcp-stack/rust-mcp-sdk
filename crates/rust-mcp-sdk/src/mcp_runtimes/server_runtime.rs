@@ -150,12 +150,12 @@ impl McpServer for ServerRuntime {
             match mcp_messages {
                 ClientMessages::Single(client_message) => {
                     let transport = transport.clone();
-                    let self_clone = self.clone();
+                    let self = self.clone();
                     let tx = tx.clone();
 
                     // Handle incoming messages in a separate task to avoid blocking the stream.
                     tokio::spawn(async move {
-                        let result = self_clone.handle_message(client_message, &transport).await;
+                        let result = self.handle_message(client_message, &transport).await;
 
                         let send_result: SdkResult<_> = match result {
                             Ok(result) => {
@@ -423,7 +423,8 @@ impl ServerRuntime {
 
         self.store_transport(stream_id, Arc::new(transport)).await?;
 
-        let transport = self.transport_by_stream(stream_id).await?;
+        let self_clone = self.clone();
+        let transport = self_clone.transport_by_stream(stream_id).await?;
 
         let (disconnect_tx, mut disconnect_rx) = oneshot::channel::<()>();
         let abort_alive_task = transport
@@ -441,40 +442,98 @@ impl ServerRuntime {
             transport.consume_string_payload(&payload).await?;
         }
 
+        // Create a channel to collect results from spawned tasks
+        let (tx, mut rx) = mpsc::channel(TASK_CHANNEL_CAPACITY);
+
         loop {
             tokio::select! {
                 Some(mcp_messages) = stream.next() =>{
 
                     match mcp_messages {
                         ClientMessages::Single(client_message) => {
-                            let result = self.handle_message(client_message, &transport).await?;
-                            if let Some(result) = result {
-                                transport.send_message(ServerMessages::Single(result), None).await?;
-                            }
+                            let transport = transport.clone();
+                            let self_clone = self.clone();
+                            let tx = tx.clone();
+                            tokio::spawn(async move {
+
+                                let result = self_clone.handle_message(client_message, &transport).await;
+
+                                let send_result: SdkResult<_> = match result {
+                                    Ok(result) => {
+                                        if let Some(result) = result {
+                                            transport
+                                                .send_message(ServerMessages::Single(result), None)
+                                                .map_err(|e| e.into())
+                                                .await
+                                        } else {
+                                            Ok(None)
+                                        }
+                                    }
+                                    Err(error) => {
+                                        tracing::error!("Error handling message : {}", error);
+                                        Ok(None)
+                                    }
+                                };
+                                if let Err(error) = tx.send(send_result).await {
+                                    tracing::error!("Failed to send batch result to channel: {}", error);
+                                }
+                            });
                         }
                         ClientMessages::Batch(client_messages) => {
 
-                            let handling_tasks: Vec<_> = client_messages
-                                .into_iter()
-                                .map(|client_message| self.handle_message(client_message, &transport))
-                                .collect();
+                            let transport = transport.clone();
+                            let self_clone = self_clone.clone();
+                            let tx = tx.clone();
 
-                            let results: Vec<_> = try_join_all(handling_tasks).await?;
+                            tokio::spawn(async move {
+                                let handling_tasks: Vec<_> = client_messages
+                                    .into_iter()
+                                    .map(|client_message| self_clone.handle_message(client_message, &transport))
+                                    .collect();
 
-                            let results: Vec<_> = results.into_iter().flatten().collect();
-
-
-                            if !results.is_empty() {
-                                transport.send_message(ServerMessages::Batch(results), None).await?;
-                            }
+                                    let send_result = match try_join_all(handling_tasks).await {
+                                         Ok(results) => {
+                                             let results: Vec<_> = results.into_iter().flatten().collect();
+                                             if !results.is_empty() {
+                                                 transport.send_message(ServerMessages::Batch(results), None)
+                                                 .map_err(|e| e.into())
+                                                 .await
+                                             }else {
+                                                 Ok(None)
+                                             }
+                                         },
+                                        Err(error) => Err(error),
+                                    };
+                                    if let Err(error) = tx.send(send_result).await {
+                                        tracing::error!("Failed to send batch result to channel: {}", error);
+                                    }
+                            });
                         }
                     }
+
+                    // Check for results from spawned tasks to propagate errors
+                    while let Ok(result) = rx.try_recv() {
+                        result?; // Propagate errors
+                    }
+
                     // close the stream after all messages are sent, unless it is a standalone stream
                     if !stream_id.eq(DEFAULT_STREAM_ID){
+                        // Drop tx to close the channel and collect remaining results
+                        drop(tx);
+                        while let Some(result) = rx.recv().await {
+                            println!(">>> 3000 {:?} ", result);
+
+                            result?; // Propagate errors
+                        }
                         return  Ok(());
                     }
                 }
                 _ = &mut disconnect_rx => {
+                    // Drop tx to close the channel and collect remaining results
+                    drop(tx);
+                    while let Some(result) = rx.recv().await {
+                        result?; // Propagate errors
+                    }
                                 self.remove_transport(stream_id).await?;
                                 // Disconnection detected by keep-alive task
                                 return Err(SdkError::connection_closed().into());
