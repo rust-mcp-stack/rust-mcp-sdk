@@ -521,8 +521,6 @@ impl ServerRuntime {
                         // Drop tx to close the channel and collect remaining results
                         drop(tx);
                         while let Some(result) = rx.recv().await {
-                            println!(">>> 3000 {:?} ", result);
-
                             result?; // Propagate errors
                         }
                         return  Ok(());
