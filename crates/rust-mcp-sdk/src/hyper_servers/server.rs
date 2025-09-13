@@ -1,6 +1,8 @@
 use crate::{
-    error::SdkResult, mcp_server::hyper_runtime::HyperRuntime,
-    mcp_traits::mcp_handler::McpServerHandler,
+    error::SdkResult,
+    id_generator::{FastIdGenerator, UuidGenerator},
+    mcp_server::hyper_runtime::HyperRuntime,
+    mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
 };
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
@@ -17,11 +19,11 @@ use super::{
     app_state::AppState,
     error::{TransportServerError, TransportServerResult},
     routes::app_routes,
-    IdGenerator, InMemorySessionStore, UuidGenerator,
+    InMemorySessionStore,
 };
 use crate::schema::InitializeResult;
 use axum::Router;
-use rust_mcp_transport::TransportOptions;
+use rust_mcp_transport::{SessionId, TransportOptions};
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
@@ -43,7 +45,7 @@ pub struct HyperServerOptions {
     pub port: u16,
 
     /// Optional thread-safe session id generator to generate unique session IDs.
-    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
+    pub session_id_generator: Option<Arc<dyn IdGenerator<SessionId>>>,
 
     /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
     pub custom_streamable_http_endpoint: Option<String>,
@@ -258,6 +260,7 @@ impl HyperServer {
                 .session_id_generator
                 .take()
                 .map_or(Arc::new(UuidGenerator {}), |g| Arc::clone(&g)),
+            stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,

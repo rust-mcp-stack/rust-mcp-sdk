@@ -1,14 +1,11 @@
-use std::{pin::Pin, sync::Arc, time::Duration};
-
-use crate::schema::RequestId;
+use crate::{error::TransportResult, message_dispatcher::MessageDispatcher};
+use crate::{schema::RequestId, SessionId};
 use async_trait::async_trait;
-
+use std::{pin::Pin, sync::Arc, time::Duration};
 use tokio::{
     sync::oneshot::{self, Sender},
     task::JoinHandle,
 };
-
-use crate::{error::TransportResult, message_dispatcher::MessageDispatcher};
 
 /// Default Timeout in milliseconds
 const DEFAULT_TIMEOUT_MSEC: u64 = 60_000;
@@ -125,6 +122,9 @@ where
         interval: Duration,
         disconnect_tx: oneshot::Sender<()>,
     ) -> TransportResult<JoinHandle<()>>;
+    async fn session_id(&self) -> Option<SessionId> {
+        None
+    }
 }
 
 /// A composite trait that combines both transport and dispatch capabilities for the MCP protocol.
@@ -160,3 +160,26 @@ where
     OM: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
 }
+
+// pub trait IntoClientTransport {
+//     type TransportType: Transport<
+//         ServerMessages,
+//         MessageFromClient,
+//         ServerMessage,
+//         ClientMessages,
+//         ClientMessage,
+//     >;
+
+//     fn into_transport(self, session_id: Option<SessionId>) -> TransportResult<Self::TransportType>;
+// }
+
+// impl<T> IntoClientTransport for T
+// where
+//     T: Transport<ServerMessages, MessageFromClient, ServerMessage, ClientMessages, ClientMessage>,
+// {
+//     type TransportType = T;
+
+//     fn into_transport(self, _: Option<SessionId>) -> TransportResult<Self::TransportType> {
+//         Ok(self)
+//     }
+// }

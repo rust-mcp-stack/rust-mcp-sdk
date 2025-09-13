@@ -6,7 +6,7 @@ use crate::{
     },
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
-    mcp_traits::mcp_handler::McpServerHandler,
+    mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
     utils::validate_mcp_protocol_version,
 };
 
@@ -22,12 +22,11 @@ use axum::{
 };
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
-use rust_mcp_transport::{SessionId, SseTransport};
+use rust_mcp_transport::{
+    SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+};
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
-
-pub const MCP_SESSION_ID_HEADER: &str = "Mcp-Session-Id";
-pub const MCP_PROTOCOL_VERSION_HEADER: &str = "Mcp-Protocol-Version";
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
@@ -41,11 +40,11 @@ async fn create_sse_stream(
     let payload_string = payload.map(|p| p.to_string());
 
     // TODO: this logic should be moved out after refactoing the mcp_stream.rs
-    let result = payload_string
+    let payload_contains_request = payload_string
         .as_ref()
         .map(|json_str| contains_request(json_str))
         .unwrap_or(Ok(false));
-    let Ok(payload_contains_request) = result else {
+    let Ok(payload_contains_request) = payload_contains_request else {
         return Ok((StatusCode::BAD_REQUEST, Json(SdkError::parse_error())).into_response());
     };
 
@@ -54,18 +53,20 @@ async fn create_sse_stream(
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    let transport = SseTransport::<ClientMessage>::new(
-        read_rx,
-        write_tx,
-        read_tx,
-        Arc::clone(&state.transport_options),
-    )
-    .map_err(|err| TransportServerError::TransportError(err.to_string()))?;
+    let transport = Arc::new(
+        SseTransport::<ClientMessage>::new(
+            read_rx,
+            write_tx,
+            read_tx,
+            Arc::clone(&state.transport_options),
+        )
+        .map_err(|err| TransportServerError::TransportError(err.to_string()))?,
+    );
 
-    let stream_id = if standalone {
+    let stream_id: StreamId = if standalone {
         DEFAULT_STREAM_ID.to_string()
     } else {
-        state.id_generator.generate()
+        state.stream_id_gen.generate()
     };
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
@@ -85,6 +86,7 @@ async fn create_sse_stream(
     // Construct SSE stream
     let reader = BufReader::new(write_rx);
 
+    // outgoing messages from server to the client
     let message_stream = stream::unfold(reader, |mut reader| async move {
         let mut line = String::new();
 
@@ -117,14 +119,27 @@ async fn create_sse_stream(
 
 // TODO: this function will be removed after refactoring the readable stream of the transports
 // so we would deserialize the string syncronousely and have more control over the flow
-// this function could potentially add a 20-250 ns overhead which could be avoided
+// this function may incur a slight runtime cost which could be avoided after refactoring
 fn contains_request(json_str: &str) -> Result<bool, serde_json::Error> {
     let value: serde_json::Value = serde_json::from_str(json_str)?;
     match value {
         serde_json::Value::Object(obj) => Ok(obj.contains_key("id") && obj.contains_key("method")),
-        serde_json::Value::Array(arr) => Ok(arr.iter().all(|item| {
+        serde_json::Value::Array(arr) => Ok(arr.iter().any(|item| {
             item.as_object()
                 .map(|obj| obj.contains_key("id") && obj.contains_key("method"))
+                .unwrap_or(false)
+        })),
+        _ => Ok(false),
+    }
+}
+
+fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(json_str)?;
+    match value {
+        serde_json::Value::Object(obj) => Ok(obj.contains_key("result")),
+        serde_json::Value::Array(arr) => Ok(arr.iter().all(|item| {
+            item.as_object()
+                .map(|obj| obj.contains_key("result"))
                 .unwrap_or(false)
         })),
         _ => Ok(false),
@@ -166,11 +181,11 @@ pub async fn start_new_session(
 
     let h: Arc<dyn McpServerHandler> = state.handler.clone();
     // create a new server instance with unique session_id and
-    let runtime: Arc<ServerRuntime> = Arc::new(server_runtime::create_server_instance(
+    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
         Arc::clone(&state.server_details),
         h,
         session_id.to_owned(),
-    ));
+    );
 
     tracing::info!("a new client joined : {}", &session_id);
 
@@ -224,7 +239,12 @@ async fn single_shot_stream(
 
     tokio::spawn(async move {
         match runtime_clone
-            .start_stream(transport, &stream_id, ping_interval, payload_string)
+            .start_stream(
+                Arc::new(transport),
+                &stream_id,
+                ping_interval,
+                payload_string,
+            )
             .await
         {
             Ok(_) => tracing::info!("stream {} exited gracefully.", &stream_id),
@@ -233,7 +253,6 @@ async fn single_shot_stream(
         let _ = runtime.remove_transport(&stream_id).await;
     });
 
-    // Construct SSE stream
     let mut reader = BufReader::new(write_rx);
     let mut line = String::new();
     let response = match reader.read_line(&mut line).await {
@@ -310,15 +329,34 @@ pub async fn process_incoming_message(
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
             let runtime = runtime.lock().await.to_owned();
+            // when receiving a result in a streamable_http server, that means it was sent by the standalone sse transport
+            // it should be processed by the same transport , therefore no need to call create_sse_stream
+            let Ok(is_result) = is_result(payload) else {
+                return Ok((StatusCode::BAD_REQUEST, Json(SdkError::parse_error())).into_response());
+            };
 
-            create_sse_stream(
-                runtime.clone(),
-                session_id.clone(),
-                state.clone(),
-                Some(payload),
-                false,
-            )
-            .await
+            if is_result {
+                match runtime
+                    .consume_payload_string(DEFAULT_STREAM_ID, payload)
+                    .await
+                {
+                    Ok(()) => Ok((StatusCode::ACCEPTED, Json(())).into_response()),
+                    Err(err) => Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(SdkError::internal_error().with_message(err.to_string().as_ref())),
+                    )
+                        .into_response()),
+                }
+            } else {
+                create_sse_stream(
+                    runtime.clone(),
+                    session_id.clone(),
+                    state.clone(),
+                    Some(payload),
+                    false,
+                )
+                .await
+            }
         }
         None => {
             let error = SdkError::session_not_found();

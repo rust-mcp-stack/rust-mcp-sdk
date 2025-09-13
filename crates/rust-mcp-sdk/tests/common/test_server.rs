@@ -1,30 +1,30 @@
 #[cfg(feature = "hyper-server")]
 pub mod test_server_common {
+    use crate::common::sample_tools::SayHelloTool;
     use async_trait::async_trait;
     use rust_mcp_schema::schema_utils::CallToolError;
     use rust_mcp_schema::{
         CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, ProtocolVersion,
         RpcError,
     };
+    use rust_mcp_sdk::id_generator::IdGenerator;
     use rust_mcp_sdk::mcp_server::hyper_runtime::HyperRuntime;
-    use tokio_stream::StreamExt;
-
     use rust_mcp_sdk::schema::{
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
         InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
     use rust_mcp_sdk::{
-        mcp_server::{hyper_server, HyperServer, HyperServerOptions, IdGenerator, ServerHandler},
+        mcp_server::{hyper_server, HyperServer, HyperServerOptions, ServerHandler},
         McpServer, SessionId,
     };
-    use std::sync::RwLock;
+    use std::sync::{Arc, RwLock};
     use std::time::Duration;
     use tokio::time::timeout;
-
-    use crate::common::sample_tools::SayHelloTool;
+    use tokio_stream::StreamExt;
 
     pub const INITIALIZE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"reqwest-test","version":"0.1.0"}}}"#;
     pub const PING_REQUEST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+    pub const INITIALIZE_RESPONSE: &str = r#"{"result":{"protocolVersion":"2025-06-18","capabilities":{"prompts":{},"resources":{"subscribe":true},"tools":{},"logging":{}},"serverInfo":{"name":"example-servers/everything","version":"1.0.0"}},"jsonrpc":"2.0","id":0}"#;
 
     pub struct LaunchedServer {
         pub hyper_runtime: HyperRuntime,
@@ -71,16 +71,10 @@ pub mod test_server_common {
 
     #[async_trait]
     impl ServerHandler for TestServerHandler {
-        async fn on_server_started(&self, runtime: &dyn McpServer) {
-            let _ = runtime
-                .stderr_message("Server started successfully".into())
-                .await;
-        }
-
         async fn handle_list_tools_request(
             &self,
             request: ListToolsRequest,
-            runtime: &dyn McpServer,
+            runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<ListToolsResult, RpcError> {
             runtime.assert_server_request_capabilities(request.method())?;
 
@@ -94,7 +88,7 @@ pub mod test_server_common {
         async fn handle_call_tool_request(
             &self,
             request: CallToolRequest,
-            runtime: &dyn McpServer,
+            runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<CallToolResult, CallToolError> {
             runtime
                 .assert_server_request_capabilities(request.method())
@@ -156,14 +150,17 @@ pub mod test_server_common {
         }
     }
 
-    impl IdGenerator for TestIdGenerator {
-        fn generate(&self) -> SessionId {
+    impl<T> IdGenerator<T> for TestIdGenerator
+    where
+        T: From<String>,
+    {
+        fn generate(&self) -> T {
             let mut lock = self.generated.write().unwrap();
             *lock += 1;
             if *lock > self.constant_ids.len() {
                 *lock = 1;
             }
-            self.constant_ids[*lock - 1].to_owned()
+            T::from(self.constant_ids[*lock - 1].to_owned())
         }
     }
 

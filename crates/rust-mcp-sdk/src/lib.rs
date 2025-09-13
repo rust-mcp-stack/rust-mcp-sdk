@@ -21,7 +21,7 @@ pub mod mcp_client {
     //!   responding to ping requests, so you only need to override and customize the handler
     //!   functions relevant to your specific needs.
     //!
-    //! Refer to [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) for an example.
+    //! Refer to [examples/simple-mcp-client-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio) for an example.
     //!
     //!
     //! - **client_runtime_core**: If you need more control over MCP messages, consider using
@@ -30,7 +30,7 @@ pub mod mcp_client {
     //!   While still providing type-safe objects in these methods, it allows you to determine how to
     //!   handle each message based on its type and parameters.
     //!
-    //! Refer to [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core) for an example.
+    //! Refer to [examples/simple-mcp-client-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio-core) for an example.
     pub use super::mcp_handlers::mcp_client_handler::ClientHandler;
     pub use super::mcp_handlers::mcp_client_handler_core::ClientHandlerCore;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
@@ -53,7 +53,7 @@ pub mod mcp_server {
     //!   responding to ping requests, so you only need to override and customize the handler
     //!   functions relevant to your specific needs.
     //!
-    //! Refer to [examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) for an example.
+    //! Refer to [examples/hello-world-mcp-server-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio) for an example.
     //!
     //!
     //! - **server_runtime_core**: If you need more control over MCP messages, consider using
@@ -62,7 +62,7 @@ pub mod mcp_server {
     //!   While still providing type-safe objects in these methods, it allows you to determine how to
     //!   handle each message based on its type and parameters.
     //!
-    //! Refer to [examples/hello-world-mcp-server-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core) for an example.
+    //! Refer to [examples/hello-world-mcp-server-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core) for an example.
     pub use super::mcp_handlers::mcp_server_handler::ServerHandler;
     pub use super::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 
@@ -93,4 +93,5 @@ pub mod macros {
     pub use rust_mcp_macros::*;
 }
 
+pub mod id_generator;
 pub mod schema;

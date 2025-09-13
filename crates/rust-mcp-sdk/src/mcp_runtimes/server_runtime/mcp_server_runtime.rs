@@ -38,7 +38,7 @@ use crate::{
 /// # Examples
 /// You can find a detailed example of how to use this function in the repository:
 ///
-/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)
+/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio)
 pub fn create_server(
     server_details: InitializeResult,
     transport: impl TransportDispatcher<
@@ -49,7 +49,7 @@ pub fn create_server(
         ServerMessage,
     >,
     handler: impl ServerHandler,
-) -> ServerRuntime {
+) -> Arc<ServerRuntime> {
     ServerRuntime::new(
         server_details,
         transport,
@@ -62,7 +62,7 @@ pub(crate) fn create_server_instance(
     server_details: Arc<InitializeResult>,
     handler: Arc<dyn McpServerHandler>,
     session_id: SessionId,
-) -> ServerRuntime {
+) -> Arc<ServerRuntime> {
     ServerRuntime::new_instance(server_details, handler, session_id)
 }
 
@@ -80,7 +80,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         match client_jsonrpc_request {
             schema_utils::RequestFromClient::ClientRequest(client_request) => {
@@ -178,7 +178,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_error(
         &self,
         jsonrpc_error: &RpcError,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -187,7 +187,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         match client_jsonrpc_notification {
             schema_utils::NotificationFromClient::ClientNotification(client_notification) => {
@@ -199,7 +199,10 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                     }
                     ClientNotification::InitializedNotification(initialized_notification) => {
                         self.handler
-                            .handle_initialized_notification(initialized_notification, runtime)
+                            .handle_initialized_notification(
+                                initialized_notification,
+                                runtime.clone(),
+                            )
                             .await?;
                         self.handler.on_initialized(runtime).await;
                     }
@@ -225,9 +228,5 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
             }
         }
         Ok(())
-    }
-
-    async fn on_server_started(&self, runtime: &dyn McpServer) {
-        self.handler.on_server_started(runtime).await;
     }
 }

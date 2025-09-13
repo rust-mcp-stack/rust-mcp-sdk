@@ -32,7 +32,7 @@ use std::sync::Arc;
 /// # Examples
 /// You can find a detailed example of how to use this function in the repository:
 ///
-/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core)
+/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core)
 pub fn create_server(
     server_details: InitializeResult,
     transport: impl TransportDispatcher<
@@ -43,7 +43,7 @@ pub fn create_server(
         ServerMessage,
     >,
     handler: impl ServerHandlerCore,
-) -> ServerRuntime {
+) -> Arc<ServerRuntime> {
     ServerRuntime::new(
         server_details,
         transport,
@@ -66,7 +66,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     async fn handle_request(
         &self,
         client_jsonrpc_request: RequestFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         // store the client details if the request is a client initialization request
         if let schema_utils::RequestFromClient::ClientRequest(ClientRequest::InitializeRequest(
@@ -88,7 +88,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     async fn handle_error(
         &self,
         jsonrpc_error: &RpcError,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         self.handler.handle_error(jsonrpc_error, runtime).await?;
         Ok(())
@@ -96,11 +96,11 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     async fn handle_notification(
         &self,
         client_jsonrpc_notification: NotificationFromClient,
-        runtime: &dyn McpServer,
+        runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         // Trigger the `on_initialized()` callback if an `initialized_notification` is received from the client.
         if client_jsonrpc_notification.is_initialized_notification() {
-            self.handler.on_initialized(runtime).await;
+            self.handler.on_initialized(runtime.clone()).await;
         }
 
         // handle notification
@@ -108,8 +108,5 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
             .handle_notification(client_jsonrpc_notification, runtime)
             .await?;
         Ok(())
-    }
-    async fn on_server_started(&self, runtime: &dyn McpServer) {
-        self.handler.on_server_started(runtime).await;
     }
 }

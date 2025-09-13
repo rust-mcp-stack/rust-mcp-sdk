@@ -1,11 +1,14 @@
 use crate::schema::{schema_utils::SdkError, RpcError};
-use thiserror::Error;
-
 use crate::utils::CancellationError;
 use core::fmt;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use reqwest::Error as ReqwestError;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use reqwest::StatusCode;
 use std::any::Any;
+use std::io::Error as IoError;
+use thiserror::Error;
 use tokio::sync::{broadcast, mpsc};
-
 /// A wrapper around a broadcast send error. This structure allows for generic error handling
 /// by boxing the underlying error into a type-erased form.
 #[derive(Debug)]
@@ -80,31 +83,53 @@ pub type TransportResult<T> = core::result::Result<T, TransportError>;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
-    #[error("{0}")]
-    InvalidOptions(String),
+    #[error("Session expired or not found")]
+    SessionExpired,
+
+    #[error("Failed to open SSE stream: {0}")]
+    FailedToOpenSSEStream(String),
+
+    #[error("Unexpected content type: '{0}'")]
+    UnexpectedContentType(String),
+
+    #[error("Failed to send message: {0}")]
+    SendFailure(String),
+
+    #[error("I/O error: {0}")]
+    Io(#[from] IoError),
+
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
+    #[error("HTTP connection error: {0}")]
+    HttpConnection(#[from] ReqwestError),
+
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
+    #[error("HTTP error: {0}")]
+    Http(StatusCode),
+
+    #[error("SDK error: {0}")]
+    Sdk(#[from] SdkError),
+
+    #[error("Operation cancelled: {0}")]
+    Cancelled(#[from] CancellationError),
+
+    #[error("Channel closed: {0}")]
+    ChannelClosed(#[from] tokio::sync::oneshot::error::RecvError),
+
+    #[error("Configuration error: {message}")]
+    Configuration { message: String },
+
     #[error("{0}")]
     SendError(#[from] GenericSendError),
-    #[error("{0}")]
-    WatchSendError(#[from] GenericWatchSendError),
-    #[error("Send Error: {0}")]
-    StdioError(#[from] std::io::Error),
+
     #[error("{0}")]
     JsonrpcError(#[from] RpcError),
-    #[error("{0}")]
-    SdkError(#[from] SdkError),
-    #[error("Process error{0}")]
+
+    #[error("Process error: {0}")]
     ProcessError(String),
-    #[error("{0}")]
-    FromString(String),
-    #[error("{0}")]
-    OneshotRecvError(#[from] tokio::sync::oneshot::error::RecvError),
-    #[cfg(feature = "sse")]
-    #[error("{0}")]
-    SendMessageError(#[from] reqwest::Error),
-    #[error("Http Error: {0}")]
-    HttpError(u16),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+
     #[error("Shutdown timed out")]
     ShutdownTimeout,
-    #[error("Cancellation error : {0}")]
-    CancellationError(#[from] CancellationError),
 }

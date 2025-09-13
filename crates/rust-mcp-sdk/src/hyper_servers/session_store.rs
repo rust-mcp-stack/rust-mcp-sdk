@@ -5,7 +5,6 @@ use async_trait::async_trait;
 pub use in_memory::*;
 use rust_mcp_transport::SessionId;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 use crate::mcp_server::ServerRuntime;
 
@@ -45,27 +44,4 @@ pub trait SessionStore: Send + Sync {
     async fn values(&self) -> Vec<Arc<Mutex<TxServer>>>;
 
     async fn has(&self, session: &SessionId) -> bool;
-}
-
-/// Trait for generating session identifiers
-///
-/// Implementors must be Send and Sync to support concurrent access.
-pub trait IdGenerator: Send + Sync {
-    fn generate(&self) -> SessionId;
-}
-
-/// Struct implementing the IdGenerator trait using UUID v4
-///
-/// This is a simple wrapper around the uuid crate's Uuid::new_v4 function
-/// to generate unique session identifiers.
-pub struct UuidGenerator {}
-
-impl IdGenerator for UuidGenerator {
-    /// Generates a new UUID v4-based session identifier
-    ///
-    /// # Returns
-    /// * `SessionId` - A new UUID-based session identifier as a String
-    fn generate(&self) -> SessionId {
-        Uuid::new_v4().to_string()
-    }
 }

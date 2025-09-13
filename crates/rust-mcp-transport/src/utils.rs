@@ -1,21 +1,29 @@
 mod cancellation_token;
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod http_utils;
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod readable_channel;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+mod sse_parser;
 #[cfg(feature = "sse")]
 mod sse_stream;
-#[cfg(feature = "sse")]
+#[cfg(feature = "streamable-http")]
+mod streamable_http_stream;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod writable_channel;
 
 pub(crate) use cancellation_token::*;
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) use http_utils::*;
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) use readable_channel::*;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub(crate) use sse_parser::*;
 #[cfg(feature = "sse")]
 pub(crate) use sse_stream::*;
-#[cfg(feature = "sse")]
+#[cfg(feature = "streamable-http")]
+pub(crate) use streamable_http_stream::*;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) use writable_channel::*;
 
 use crate::schema::schema_utils::SdkError;
@@ -23,16 +31,16 @@ use tokio::time::{timeout, Duration};
 
 use crate::error::{TransportError, TransportResult};
 
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::SessionId;
 
 pub async fn await_timeout<F, T, E>(operation: F, timeout_duration: Duration) -> TransportResult<T>
 where
     F: std::future::Future<Output = Result<T, E>>, // The operation returns a Result
-    E: Into<TransportError>, // The error type must be convertible to TransportError
+    E: Into<TransportError>,
 {
     match timeout(timeout_duration, operation).await {
-        Ok(result) => result.map_err(|err| err.into()), // Convert the error type into TransportError
+        Ok(result) => result.map_err(|err| err.into()),
         Err(_) => Err(SdkError::request_timeout(timeout_duration.as_millis()).into()), // Timeout error
     }
 }
@@ -46,7 +54,7 @@ where
 /// # Returns
 /// A String containing the endpoint with the session ID added as a query parameter
 ///
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) fn endpoint_with_session_id(endpoint: &str, session_id: &SessionId) -> String {
     // Handle empty endpoint
     let base = if endpoint.is_empty() { "/" } else { endpoint };

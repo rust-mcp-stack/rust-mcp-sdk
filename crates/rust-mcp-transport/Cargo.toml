@@ -42,10 +42,12 @@ workspace = true
 
 ### FEATURES #################################################################
 [features]
-default = ["stdio", "sse", "2025_06_18"] # Default features
+default = ["stdio", "sse", "streamable-http", "2025_06_18"] # Default features
 
 stdio = []
 sse = ["reqwest"]
+streamable-http = ["reqwest"]
+
 
 # enabled mcp protocol version 2025_06_18
 2025_06_18 = ["rust-mcp-schema/2025_06_18", "rust-mcp-schema/schema_utils"]

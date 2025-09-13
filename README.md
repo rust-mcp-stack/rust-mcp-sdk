@@ -9,7 +9,7 @@
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/ci.yml?style=for-the-badge" height="22">
 ](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/ci.yml)
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
-](examples/hello-world-mcp-server)
+](examples/hello-world-mcp-server-stdio)
 
 A high-performance, asynchronous toolkit for building MCP servers and clients.
 Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
@@ -41,6 +41,17 @@ This project supports following transports:
 - ⬜ Streamable HTTP Support for MCP Clients
 - ⬜ Resumability
 - ⬜ Authentication / Oauth
+
+
+
+**MCP Streamable HTTP Support**
+- [x] Streamable HTTP Support for MCP Servers
+- [x] DNS Rebinding Protection
+- [x] Batch Messages
+- [x] Streaming & non-streaming JSON response
+- [ ] Streamable HTTP Support for MCP Clients
+- [ ] Resumability
+- [ ] Authentication / Oauth
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
@@ -110,7 +121,7 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
-See hello-world-mcp-server example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
+See hello-world-mcp-server-stdio example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
 ![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
 
@@ -180,7 +191,7 @@ pub struct MyServerHandler;
 #[async_trait]
 impl ServerHandler for MyServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
-    async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: &dyn McpServer) -> Result<ListToolsResult, RpcError> {
+    async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: Arc<dyn McpServer>) -> Result<ListToolsResult, RpcError> {
 
         Ok(ListToolsResult {
             tools: vec![SayHelloTool::tool()],
@@ -191,7 +202,7 @@ impl ServerHandler for MyServerHandler {
     }
 
     /// Handles requests to call a specific tool.
-    async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: &dyn McpServer, ) -> Result<CallToolResult, CallToolError> {
+    async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer>, ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
             Ok( CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())]  ))
@@ -205,7 +216,7 @@ impl ServerHandler for MyServerHandler {
 
 ---
 
-👉 For a more detailed example of a [Hello World MCP](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) Server that supports multiple tools and provides more type-safe handling of `CallToolRequest`, check out: **[examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)**
+👉 For a more detailed example of a [Hello World MCP](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio) Server that supports multiple tools and provides more type-safe handling of `CallToolRequest`, check out: **[examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)**
 
 See hello-world-server-streamable-http example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
@@ -477,10 +488,10 @@ Learn when to use the  `mcp_*_handler` traits versus the lower-level `mcp_*_hand
 [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) provides two type of handler traits that you can chose from:
 
 - **ServerHandler**: This is the recommended trait for your MCP project, offering a default implementation for all types of MCP messages. It includes predefined implementations within the trait, such as handling initialization or responding to ping requests, so you only need to override and customize the handler functions relevant to your specific needs.
-  Refer to [examples/hello-world-mcp-server/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server/src/handler.rs) for an example.
+  Refer to [examples/hello-world-mcp-server-stdio/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio/src/handler.rs) for an example.
 
 - **ServerHandlerCore**: If you need more control over MCP messages, consider using `ServerHandlerCore`. It offers three primary methods to manage the three MCP message types: `request`, `notification`, and `error`. While still providing type-safe objects in these methods, it allows you to determine how to handle each message based on its type and parameters.
-  Refer to [examples/hello-world-mcp-server-core/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-core/src/handler.rs) for an example.
+  Refer to [examples/hello-world-mcp-server-stdio-core/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core/src/handler.rs) for an example.
 
 ---
 
@@ -509,7 +520,7 @@ Both functions create an MCP client instance.
 
 
 
-Check out the corresponding examples at: [examples/simple-mcp-client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) and [examples/simple-mcp-client-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core).
+Check out the corresponding examples at: [examples/simple-mcp-client-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio) and [examples/simple-mcp-client-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio-core).
 
 
 ## Projects using Rust MCP SDK

@@ -14,7 +14,7 @@ let transport = StdioTransport::new(TransportOptions { timeout: 60_000 })?;
 
 ```
 
-Refer to the [Hello World MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server) example for a complete demonstration.
+Refer to the [Hello World MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio) example for a complete demonstration.
 
 ### For MCP Client
 
@@ -51,7 +51,7 @@ let transport = StdioTransport::create_with_server_launch(
 )?;
 ```
 
-Refer to the [Simple MCP Client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client) example for a complete demonstration.
+Refer to the [Simple MCP Client](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio) example for a complete demonstration.
 
 ---
 

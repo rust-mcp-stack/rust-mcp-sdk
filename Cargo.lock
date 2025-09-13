@@ -257,10 +257,11 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cc"
-version = "1.2.34"
+version = "1.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42bc4aea80032b7bf409b0bc7ccad88853858911b7713a8062fdc0623867bedc"
+checksum = "590f9024a68a8c40351881787f1934dc11afd69090f5edb6831464694d836ea3"
 dependencies = [
+ "find-msvc-tools",
  "jobserver",
  "libc",
  "shlex",
@@ -381,9 +382,9 @@ checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
 name = "deranged"
-version = "0.4.0"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9e6a11ca8224451684bc0d7d5a7adbf8f2fd6887261a1cfc3c0432f9d4068e"
+checksum = "d630bccd429a5bb5a64b5e94f693bfc48c9f8566418fda4c494cc94f911f87cc"
 dependencies = [
  "powerfmt",
 ]
@@ -450,6 +451,12 @@ checksum = "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
 dependencies = [
  "instant",
 ]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e178e4fba8a2726903f6ba98a6d221e76f9c12c650d5dc0e6afdc50677b49650"
 
 [[package]]
 name = "fnv"
@@ -687,8 +694,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 
 [[package]]
-name = "hello-world-mcp-server"
-version = "0.1.31"
+name = "hello-world-mcp-server-stdio"
+version = "0.1.28"
 dependencies = [
  "async-trait",
  "futures",
@@ -701,8 +708,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello-world-mcp-server-core"
-version = "0.1.22"
+name = "hello-world-mcp-server-stdio-core"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "futures",
@@ -710,25 +717,25 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "hello-world-server-core-streamable-http"
-version = "0.1.22"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
 name = "hello-world-server-streamable-http"
 version = "0.1.31"
+dependencies = [
+ "async-trait",
+ "futures",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "hello-world-server-streamable-http-core"
+version = "0.1.19"
 dependencies = [
  "async-trait",
  "futures",
@@ -1684,6 +1691,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
+ "base64 0.22.1",
  "futures",
  "hyper 1.7.0",
  "reqwest",
@@ -1698,6 +1706,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -1903,35 +1912,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple-mcp-client"
-version = "0.1.31"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.16",
- "tokio",
-]
-
-[[package]]
-name = "simple-mcp-client-core"
-version = "0.1.31"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.16",
- "tokio",
-]
-
-[[package]]
-name = "simple-mcp-client-core-sse"
+name = "simple-mcp-client-sse"
 version = "0.1.22"
 dependencies = [
  "async-trait",
@@ -1947,8 +1928,68 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple-mcp-client-sse"
-version = "0.1.22"
+name = "simple-mcp-client-sse-core"
+version = "0.1.19"
+dependencies = [
+ "async-trait",
+ "colored",
+ "futures",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "simple-mcp-client-stdio"
+version = "0.1.28"
+dependencies = [
+ "async-trait",
+ "colored",
+ "futures",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "tokio",
+]
+
+[[package]]
+name = "simple-mcp-client-stdio-core"
+version = "0.1.28"
+dependencies = [
+ "async-trait",
+ "colored",
+ "futures",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "tokio",
+]
+
+[[package]]
+name = "simple-mcp-client-streamable-http"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "colored",
+ "futures",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "simple-mcp-client-streamable-http-core"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "colored",
@@ -2088,12 +2129,11 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.41"
+version = "0.3.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7619e19bc266e0f9c5e6686659d394bc57973859340060a69221e57dbc0c40"
+checksum = "8ca967379f9d8eb8058d86ed467d81d03e81acd45757e4ca341c24affbe8e8e3"
 dependencies = [
  "deranged",
- "itoa",
  "num-conv",
  "powerfmt",
  "serde",
@@ -2103,15 +2143,15 @@ dependencies = [
 
 [[package]]
 name = "time-core"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9e9a38711f559d9e3ce1cdb06dd7c5b8ea546bc90052da6d06bb76da74bb07c"
+checksum = "a9108bb380861b07264b950ded55a44a14a4adc68b9f5efd85aafc3aa4d40a68"
 
 [[package]]
 name = "time-macros"
-version = "0.2.22"
+version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3526739392ec93fd8b359c8e98514cb3e8e021beb4e5f597b00a0221f8ed8a49"
+checksum = "7182799245a7264ce590b349d90338f1c1affad93d2639aed5f8f69c090b334c"
 dependencies = [
  "num-conv",
  "time-core",

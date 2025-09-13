@@ -5,7 +5,7 @@ use crate::transport::Transport;
 use crate::utils::{
     extract_origin, http_post, CancellationTokenSource, ReadableChannel, SseStream, WritableChannel,
 };
-use crate::{IoStream, McpDispatch, TransportOptions};
+use crate::{IoStream, McpDispatch, TransportDispatcher, TransportOptions};
 use async_trait::async_trait;
 use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -13,8 +13,13 @@ use reqwest::Client;
 use tokio::sync::oneshot::Sender;
 use tokio::task::JoinHandle;
 
-use crate::schema::schema_utils::McpMessage;
-use crate::schema::RequestId;
+use crate::schema::{
+    schema_utils::{
+        ClientMessage, ClientMessages, McpMessage, MessageFromClient, SdkError, ServerMessage,
+        ServerMessages,
+    },
+    RequestId,
+};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -25,7 +30,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 
 const DEFAULT_CHANNEL_CAPACITY: usize = 64;
 const DEFAULT_MAX_RETRY: usize = 5;
-const DEFAULT_RETRY_TIME_SECONDS: u64 = 3;
+const DEFAULT_RETRY_TIME_SECONDS: u64 = 1;
 const SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
 
 /// Configuration options for the Client SSE Transport
@@ -102,10 +107,9 @@ where
         let base_url = match extract_origin(server_url) {
             Some(url) => url,
             None => {
-                let error_message =
-                    format!("Failed to extract origin from server URL: {server_url}");
-                tracing::error!(error_message);
-                return Err(TransportError::InvalidOptions(error_message));
+                let message = format!("Failed to extract origin from server URL: {server_url}");
+                tracing::error!(message);
+                return Err(TransportError::Configuration { message });
             }
         };
 
@@ -145,12 +149,15 @@ where
         let mut header_map = HeaderMap::new();
 
         for (key, value) in headers {
-            let header_name = key
-                .parse::<HeaderName>()
-                .map_err(|e| TransportError::InvalidOptions(format!("Invalid header name: {e}")))?;
-            let header_value = HeaderValue::from_str(value).map_err(|e| {
-                TransportError::InvalidOptions(format!("Invalid header value: {e}"))
-            })?;
+            let header_name =
+                key.parse::<HeaderName>()
+                    .map_err(|e| TransportError::Configuration {
+                        message: format!("Invalid header name: {e}"),
+                    })?;
+            let header_value =
+                HeaderValue::from_str(value).map_err(|e| TransportError::Configuration {
+                    message: format!("Invalid header value: {e}"),
+                })?;
             header_map.insert(header_name, header_value);
         }
 
@@ -172,10 +179,12 @@ where
         }
         if let Some(endpoint_origin) = extract_origin(&endpoint) {
             if endpoint_origin.cmp(&self.base_url) != Ordering::Equal {
-                return Err(TransportError::InvalidOptions(format!(
+                return Err(TransportError::Configuration {
+                    message: format!(
                     "Endpoint origin does not match connection origin. expected: {} , received: {}",
                     self.base_url, endpoint_origin
-                )));
+                ),
+                });
             }
             return Ok(endpoint);
         }
@@ -284,8 +293,8 @@ where
                       Some(data) => {
                         // trim the trailing \n before making a request
                         let body = String::from_utf8_lossy(&data).trim().to_string();
-                          if let Err(e) = http_post(&client_clone, &post_url, body, &custom_headers).await {
-                            tracing::error!("Failed to POST message: {e:?}");
+                          if let Err(e) = http_post(&client_clone, &post_url, body,None, custom_headers.as_ref()).await {
+                            tracing::error!("Failed to POST message: {e}");
                       }
                     },
                     None => break, // Exit if channel is closed
@@ -335,7 +344,7 @@ where
     }
 
     async fn consume_string_payload(&self, _payload: &str) -> TransportResult<()> {
-        Err(TransportError::FromString(
+        Err(TransportError::Internal(
             "Invalid invocation of consume_string_payload() function for ClientSseTransport"
                 .to_string(),
         ))
@@ -346,7 +355,7 @@ where
         _: Duration,
         _: oneshot::Sender<()>,
     ) -> TransportResult<JoinHandle<()>> {
-        Err(TransportError::FromString(
+        Err(TransportError::Internal(
             "Invalid invocation of keep_alive() function for ClientSseTransport".to_string(),
         ))
     }
@@ -412,4 +421,56 @@ where
         let mut pending_requests = self.pending_requests.lock().await;
         pending_requests.remove(request_id)
     }
+}
+
+#[async_trait]
+impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
+    for ClientSseTransport<ServerMessage>
+{
+    async fn send_message(
+        &self,
+        message: ClientMessages,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ServerMessages>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send_message(message, request_timeout).await
+    }
+
+    async fn send(
+        &self,
+        message: ClientMessage,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ServerMessage>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send(message, request_timeout).await
+    }
+
+    async fn send_batch(
+        &self,
+        message: Vec<ClientMessage>,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<Vec<ServerMessage>>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send_batch(message, request_timeout).await
+    }
+
+    async fn write_str(&self, payload: &str) -> TransportResult<()> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.write_str(payload).await
+    }
+}
+
+impl
+    TransportDispatcher<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    > for ClientSseTransport<ServerMessage>
+{
 }

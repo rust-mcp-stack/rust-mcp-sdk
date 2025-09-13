@@ -24,15 +24,17 @@ futures = { workspace = true }
 thiserror = { workspace = true }
 
 axum = { workspace = true, optional = true }
-uuid = { workspace = true, features = ["v4"], optional = true }
+uuid = { workspace = true, features = ["v4"] }
 tokio-stream = { workspace = true, optional = true }
 axum-server = { version = "0.7", features = [], optional = true }
 tracing.workspace = true
+base64.workspace = true
 
 # rustls = { workspace = true, optional = true }
 hyper = { version = "1.6.0", optional = true }
 
 [dev-dependencies]
+wiremock = "0.5"
 reqwest = { workspace = true, default-features = false, features = [
     "stream",
     "rustls-tls",
@@ -51,47 +53,54 @@ default = [
     "client",
     "server",
     "macros",
+    "stdio",
+    "sse",
+    "streamable-http",
     "hyper-server",
     "ssl",
     "2025_06_18",
 ] # All features enabled by default
-server = ["rust-mcp-transport/stdio"] # Server feature
-client = ["rust-mcp-transport/stdio", "rust-mcp-transport/sse"] # Client feature
-hyper-server = [
-    "axum",
-    "axum-server",
-    "hyper",
-    "server",
-    "uuid",
-    "tokio-stream",
-    "rust-mcp-transport/sse",
-]
+
+sse = ["rust-mcp-transport/sse"]
+streamable-http = ["rust-mcp-transport/streamable-http"]
+stdio = ["rust-mcp-transport/stdio"]
+
+server = []                                                               # Server feature
+client = []                                                               # Client feature
+hyper-server = ["axum", "axum-server", "hyper", "server", "tokio-stream"]
 ssl = ["axum-server/tls-rustls"]
 macros = ["rust-mcp-macros/sdk"]
 
-# enables mcp protocol version 2025_06_18
-2025_06_18 = [
+# enables mcp protocol version 2025-06-18
+2025-06-18 = [
     "rust-mcp-schema/2025_06_18",
     "rust-mcp-macros/2025_06_18",
     "rust-mcp-transport/2025_06_18",
     "rust-mcp-schema/schema_utils",
 ]
+# Alias: allow users to use underscores instead of hyphens
+2025_06_18 = ["2025-06-18"]
 
 # enables mcp protocol version 2025_03_26
-2025_03_26 = [
+2025-03-26 = [
     "rust-mcp-schema/2025_03_26",
     "rust-mcp-macros/2025_03_26",
     "rust-mcp-transport/2025_03_26",
     "rust-mcp-schema/schema_utils",
 ]
+# Alias: allow users to use underscores instead of hyphens
+2025_03_26 = ["2025-03-26"]
+
 
 # enables mcp protocol version 2024_11_05
-2024_11_05 = [
+2024-11-05 = [
     "rust-mcp-schema/2024_11_05",
     "rust-mcp-macros/2024_11_05",
     "rust-mcp-transport/2024_11_05",
     "rust-mcp-schema/schema_utils",
 ]
+# Alias: allow users to use underscores instead of hyphens
+2024_11_05 = ["2024-11-05"]
 
 [lints]
 workspace = true

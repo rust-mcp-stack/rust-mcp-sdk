@@ -1,6 +1,6 @@
 use crate::schema::schema_utils::{ClientMessages, SdkError};
 
-use crate::error::{McpSdkError, SdkResult};
+use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
 use crate::schema::ProtocolVersion;
 use std::cmp::Ordering;
 
@@ -71,20 +71,20 @@ pub fn format_assertion_message(entity: &str, capability: &str, method_name: &st
 /// let result = ensure_server_protocole_compatibility("2024_11_05", "2024_11_05");
 /// assert!(result.is_ok());
 ///
-/// // Incompatible versions (client < server)
+/// // Incompatible versions (requested < current)
 /// let result = ensure_server_protocole_compatibility("2024_11_05", "2025_03_26");
 /// assert!(matches!(
 ///     result,
-///     Err(McpSdkError::IncompatibleProtocolVersion(client, server))
-///     if client == "2024_11_05" && server == "2025_03_26"
+///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
+///     if requested == "2024_11_05" && current == "2025_03_26"
 /// ));
 ///
-/// // Incompatible versions (client > server)
+/// // Incompatible versions (requested > current)
 /// let result = ensure_server_protocole_compatibility("2025_03_26", "2024_11_05");
 /// assert!(matches!(
 ///     result,
-///     Err(McpSdkError::IncompatibleProtocolVersion(client, server))
-///     if client == "2025_03_26" && server == "2024_11_05"
+///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
+///     if requested == "2025_03_26" && current == "2024_11_05"
 /// ));
 /// ```
 #[allow(unused)]
@@ -93,10 +93,12 @@ pub fn ensure_server_protocole_compatibility(
     server_protocol_version: &str,
 ) -> SdkResult<()> {
     match client_protocol_version.cmp(server_protocol_version) {
-        Ordering::Less | Ordering::Greater => Err(McpSdkError::IncompatibleProtocolVersion(
-            client_protocol_version.to_string(),
-            server_protocol_version.to_string(),
-        )),
+        Ordering::Less | Ordering::Greater => Err(McpSdkError::Protocol {
+            kind: ProtocolErrorKind::IncompatibleVersion {
+                requested: client_protocol_version.to_string(),
+                current: server_protocol_version.to_string(),
+            },
+        }),
         Ordering::Equal => Ok(()),
     }
 }
@@ -140,8 +142,8 @@ pub fn ensure_server_protocole_compatibility(
 /// let result = enforce_compatible_protocol_version("2025_03_26", "2024_11_05");
 /// assert!(matches!(
 ///     result,
-///     Err(McpSdkError::IncompatibleProtocolVersion(client, server))
-///     if client == "2025_03_26" && server == "2024_11_05"
+///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
+///     if requested == "2025_03_26" && current == "2024_11_05"
 /// ));
 /// ```
 #[allow(unused)]
@@ -151,10 +153,12 @@ pub fn enforce_compatible_protocol_version(
 ) -> SdkResult<Option<String>> {
     match client_protocol_version.cmp(server_protocol_version) {
         // if client protocol version is higher
-        Ordering::Greater => Err(McpSdkError::IncompatibleProtocolVersion(
-            client_protocol_version.to_string(),
-            server_protocol_version.to_string(),
-        )),
+        Ordering::Greater => Err(McpSdkError::Protocol {
+            kind: ProtocolErrorKind::IncompatibleVersion {
+                requested: client_protocol_version.to_string(),
+                current: server_protocol_version.to_string(),
+            },
+        }),
         Ordering::Equal => Ok(None),
         Ordering::Less => {
             // return the same version that was received from the client
@@ -164,7 +168,10 @@ pub fn enforce_compatible_protocol_version(
 }
 
 pub fn validate_mcp_protocol_version(mcp_protocol_version: &str) -> SdkResult<()> {
-    let _mcp_protocol_version = ProtocolVersion::try_from(mcp_protocol_version)?;
+    let _mcp_protocol_version =
+        ProtocolVersion::try_from(mcp_protocol_version).map_err(|err| McpSdkError::Protocol {
+            kind: ProtocolErrorKind::ParseError(err),
+        })?;
     Ok(())
 }
 

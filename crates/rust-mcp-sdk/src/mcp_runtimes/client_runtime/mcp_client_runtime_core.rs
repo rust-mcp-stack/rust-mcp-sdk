@@ -1,5 +1,4 @@
-use std::sync::Arc;
-
+use super::ClientRuntime;
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
@@ -7,17 +6,16 @@ use crate::schema::{
     },
     InitializeRequestParams, RpcError,
 };
-use async_trait::async_trait;
-
-use rust_mcp_transport::Transport;
-
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_client_handler_core::ClientHandlerCore,
     mcp_traits::{mcp_client::McpClient, mcp_handler::McpClientHandler},
 };
-
-use super::ClientRuntime;
+use async_trait::async_trait;
+#[cfg(feature = "streamable-http")]
+use rust_mcp_transport::StreamableTransportOptions;
+use rust_mcp_transport::TransportDispatcher;
+use std::sync::Arc;
 
 /// Creates a new MCP client runtime with the specified configuration.
 ///
@@ -39,10 +37,10 @@ use super::ClientRuntime;
 /// # Examples
 /// You can find a detailed example of how to use this function in the repository:
 ///
-/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-core)
+/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio-core)
 pub fn create_client(
     client_details: InitializeRequestParams,
-    transport: impl Transport<
+    transport: impl TransportDispatcher<
         ServerMessages,
         MessageFromClient,
         ServerMessage,
@@ -53,7 +51,20 @@ pub fn create_client(
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new(
         client_details,
-        transport,
+        Arc::new(transport),
+        Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
+    ))
+}
+
+#[cfg(feature = "streamable-http")]
+pub fn with_transport_options(
+    client_details: InitializeRequestParams,
+    transport_options: StreamableTransportOptions,
+    handler: impl ClientHandlerCore,
+) -> Arc<ClientRuntime> {
+    Arc::new(ClientRuntime::new_instance(
+        client_details,
+        transport_options,
         Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
     ))
 }

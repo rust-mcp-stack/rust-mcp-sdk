@@ -1,11 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::schema::InitializeResult;
-use rust_mcp_transport::TransportOptions;
-
+use super::session_store::SessionStore;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
-
-use super::{session_store::SessionStore, IdGenerator};
+use crate::{id_generator::FastIdGenerator, mcp_traits::IdGenerator, schema::InitializeResult};
+use rust_mcp_transport::{SessionId, TransportOptions};
 
 /// Application state struct for the Hyper server
 ///
@@ -14,7 +12,8 @@ use super::{session_store::SessionStore, IdGenerator};
 #[derive(Clone)]
 pub struct AppState {
     pub session_store: Arc<dyn SessionStore>,
-    pub id_generator: Arc<dyn IdGenerator>,
+    pub id_generator: Arc<dyn IdGenerator<SessionId>>,
+    pub stream_id_gen: Arc<FastIdGenerator>,
     pub server_details: Arc<InitializeResult>,
     pub handler: Arc<dyn McpServerHandler>,
     pub ping_interval: Duration,

@@ -8,7 +8,10 @@ use crate::schema::{
     InitializeRequestParams, RpcError, ServerNotification, ServerRequest,
 };
 use async_trait::async_trait;
-use rust_mcp_transport::Transport;
+
+#[cfg(feature = "streamable-http")]
+use rust_mcp_transport::StreamableTransportOptions;
+use rust_mcp_transport::TransportDispatcher;
 
 use crate::{
     error::SdkResult, mcp_client::ClientHandler, mcp_traits::mcp_handler::McpClientHandler,
@@ -37,10 +40,10 @@ use super::ClientRuntime;
 /// # Examples
 /// You can find a detailed example of how to use this function in the repository:
 ///
-/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client)
+/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio)
 pub fn create_client(
     client_details: InitializeRequestParams,
-    transport: impl Transport<
+    transport: impl TransportDispatcher<
         ServerMessages,
         MessageFromClient,
         ServerMessage,
@@ -51,7 +54,20 @@ pub fn create_client(
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new(
         client_details,
-        transport,
+        Arc::new(transport),
+        Box::new(ClientInternalHandler::new(Box::new(handler))),
+    ))
+}
+
+#[cfg(feature = "streamable-http")]
+pub fn with_transport_options(
+    client_details: InitializeRequestParams,
+    transport_options: StreamableTransportOptions,
+    handler: impl ClientHandler,
+) -> Arc<ClientRuntime> {
+    Arc::new(ClientRuntime::new_instance(
+        client_details,
+        transport_options,
         Box::new(ClientInternalHandler::new(Box::new(handler))),
     ))
 }
