@@ -130,7 +130,7 @@ impl StreamableHttpStream {
                     match chunk {
                         Some(chunk) => chunk,
                         None => {
-                            // stream ended, unline SSE, so no retry attempt here needed to reconnect
+                            // stream ended, unlike SSE, so no retry attempt here needed to reconnect
                             return Err(TransportError::Internal("Stream has ended.".to_string()));
                         }
                     }
@@ -315,7 +315,7 @@ impl StreamableHttpStream {
                         match chunk {
                             Some(chunk) => chunk,
                             None => {
-                                // stream ended, unline SSE, so no retry attempt here needed to reconnect
+                                // stream ended, unlike SSE, so no retry attempt here needed to reconnect
                                 return Err(TransportError::Internal("Stream has ended.".to_string()));
                             }
                         }

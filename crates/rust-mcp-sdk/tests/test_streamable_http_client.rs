@@ -39,7 +39,7 @@ async fn should_send_json_rpc_messages_via_post() {
     // Start a mock server
     let mock_server = MockServer::start().await;
 
-    // intialize response
+    // initialize response
     let response = create_sse_response(INITIALIZE_RESPONSE);
 
     // initialize request and response
@@ -137,7 +137,7 @@ async fn should_store_session_id_received_during_initialization() {
     // Start a mock server
     let mock_server = MockServer::start().await;
 
-    // intialize response
+    // initialize response
     let response =
         create_sse_response(INITIALIZE_RESPONSE).append_header("mcp-session-id", "test-session-id");
 
@@ -283,7 +283,7 @@ async fn should_handle_successful_initial_get_connection_for_sse() {
     // Start a mock server
     let mock_server = MockServer::start().await;
 
-    // intialize response
+    // initialize response
     let response = create_sse_response(INITIALIZE_RESPONSE);
 
     // initialize request and response
@@ -394,7 +394,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     // Start a mock server
     let mock_server = MockServer::start().await;
 
-    // intialize response
+    // initialize response
     let response = create_sse_response(INITIALIZE_RESPONSE);
 
     // initialize request and response
@@ -445,7 +445,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
 
     assert!(get_request.is_some());
 
-    // send a batch message, runtime should work as expected with no isse
+    // send a batch message, runtime should work as expected with no issue
 
     let response = create_sse_response(
         r#"[{"id":"id1","jsonrpc":"2.0", "result":{}},{"id":"id2","jsonrpc":"2.0", "result":{}}]"#,
@@ -616,7 +616,7 @@ async fn should_reconnect_a_get_initiated_notification_stream_that_fails() {
     // Start a mock server
     let mock_server = MockServer::start().await;
 
-    // intialize response
+    // initialize response
     let response = create_sse_response(INITIALIZE_RESPONSE);
 
     // initialize request and response
@@ -726,7 +726,7 @@ async fn should_pass_last_event_id_when_reconnecting() {
     assert!(get_requests.len() > 1);
 
     let Some(last_get_request) = get_requests.last() else {
-        panic!("Unable to find last GET reuest!");
+        panic!("Unable to find last GET request!");
     };
 
     let last_event_id = last_get_request

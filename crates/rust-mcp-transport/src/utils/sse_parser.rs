@@ -62,7 +62,7 @@ impl fmt::Debug for SseEvent {
 }
 
 /// A parser for Server-Sent Events (SSE) that processes incoming byte chunks into `SseEvent`s.
-/// This Parser is specificly designed for MCP messages and with no multi-line data support
+/// This Parser is specifically designed for MCP messages and with no multi-line data support
 ///
 /// This struct maintains a buffer to accumulate incoming data and parses it into SSE events
 /// based on the SSE protocol. It handles fields like `event`, `data`, and `id` as defined

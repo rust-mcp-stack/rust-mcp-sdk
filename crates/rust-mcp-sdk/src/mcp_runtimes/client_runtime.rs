@@ -454,9 +454,9 @@ impl ClientRuntime {
             let result = transport.send_message(messages, timeout).await?;
 
             if no_session_id {
-                if let Some(resquest_id) = transport.session_id().await.clone() {
+                if let Some(request_id) = transport.session_id().await.clone() {
                     let mut guard = self.session_id.write().await;
-                    *guard = Some(resquest_id)
+                    *guard = Some(request_id)
                 }
             }
 
@@ -515,7 +515,7 @@ impl ClientRuntime {
         // Run both tasks with cancellation logic
         let (send_res, _) = tokio::select! {
             res = &mut send_task => {
-                // cancel the receive_task task, to cover the case where sned_task returns with error
+                // cancel the receive_task task, to cover the case where send_task returns with error
                 abort_recv_handle.abort();
                 (res, receive_task.await) // Wait for receive_task to finish (it should exit due to cancellation)
             }

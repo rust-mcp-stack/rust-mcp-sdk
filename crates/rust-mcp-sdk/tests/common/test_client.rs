@@ -89,7 +89,7 @@ pub mod test_client_common {
     ) -> InitializedClient {
         let mock_server = MockServer::start().await;
 
-        // intialize response
+        // initialize response
         let mut response = create_sse_response(INITIALIZE_RESPONSE);
 
         if let Some(session_id) = session_id {
