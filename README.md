@@ -32,26 +32,14 @@ This project supports following transports:
 🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `Streamable HTTP` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
 
-
 **MCP Streamable HTTP Support**
 - ✅ Streamable HTTP Support for MCP Servers
 - ✅ DNS Rebinding Protection
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
-- ⬜ Streamable HTTP Support for MCP Clients
+- ✅ Streamable HTTP Support for MCP Clients
 - ⬜ Resumability
 - ⬜ Authentication / Oauth
-
-
-
-**MCP Streamable HTTP Support**
-- [x] Streamable HTTP Support for MCP Servers
-- [x] DNS Rebinding Protection
-- [x] Batch Messages
-- [x] Streaming & non-streaming JSON response
-- [ ] Streamable HTTP Support for MCP Clients
-- [ ] Resumability
-- [ ] Authentication / Oauth
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
@@ -60,6 +48,7 @@ This project supports following transports:
   - [MCP Server (stdio)](#mcp-server-stdio)
   - [MCP Server (Streamable HTTP)](#mcp-server-streamable-http)
   - [MCP Client (stdio)](#mcp-client-stdio)
+  - [MCP Client (Streamable HTTP)](#mcp-client_streamable-http))
   - [MCP Client (sse)](#mcp-client-sse)
 - [Getting Started](#getting-started)
 - [HyperServerOptions](#hyperserveroptions)
@@ -202,7 +191,7 @@ impl ServerHandler for MyServerHandler {
     }
 
     /// Handles requests to call a specific tool.
-    async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer>, ) -> Result<CallToolResult, CallToolError> {
+    async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer> ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
             Ok( CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())]  ))
@@ -294,6 +283,8 @@ async fn main() -> SdkResult<()> {
 
     println!("{}",result.content.first().unwrap().as_text_content()?.text);
 
+    client.shut_down().await?;
+
     Ok(())
 }
 
@@ -305,8 +296,82 @@ Here is the output :
 
 > your results may vary slightly depending on the version of the MCP Server in use when you run it.
 
+### MCP Client (Streamable HTTP)
+```rs
+
+// STEP 1: Custom Handler to handle incoming MCP Messages
+pub struct MyClientHandler;
+
+#[async_trait]
+impl ClientHandler for MyClientHandler {
+    // To check out a list of all the methods in the trait that you can override, take a look at https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_client_handler.rs
+}
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+
+    // Step2 : Define client details and capabilities
+    let client_details: InitializeRequestParams = InitializeRequestParams {
+        capabilities: ClientCapabilities::default(),
+        client_info: Implementation {
+            name: "simple-rust-mcp-client-sse".to_string(),
+            version: "0.1.0".to_string(),
+            title: Some("Simple Rust MCP Client (SSE)".to_string()),
+        },
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
+    };
+
+    // Step 3: Create transport options to connect to an MCP server via Streamable HTTP.
+    let transport_options = StreamableTransportOptions {
+        mcp_url: MCP_SERVER_URL.to_string(),
+        request_options: RequestOptions {
+            ..RequestOptions::default()
+        },
+    };
+
+    // STEP 4: instantiate the custom handler that is responsible for handling MCP messages
+    let handler = MyClientHandler {};
+
+    // STEP 5: create the client with transport options and the handler
+    let client = client_runtime::with_transport_options(client_details, transport_options, handler);
+
+    // STEP 6: start the MCP client
+    client.clone().start().await?;
+
+    // STEP 7: use client methods to communicate with the MCP Server as you wish
+
+    // Retrieve and display the list of tools available on the server
+    let server_version = client.server_version().unwrap();
+    let tools = client.list_tools(None).await?.tools;
+    println!("List of tools for {}@{}", server_version.name, server_version.version);
+
+    tools.iter().enumerate().for_each(|(tool_index, tool)| {
+        println!("  {}. {} : {}",
+            tool_index + 1,
+            tool.name,
+            tool.description.clone().unwrap_or_default()
+        );
+    });
+
+    println!("Call \"add\" tool with 100 and 28 ...");
+    // Create a `Map<String, Value>` to represent the tool parameters
+    let params = json!({"a": 100,"b": 28}).as_object().unwrap().clone();
+    let request = CallToolRequestParams { name: "add".to_string(),arguments: Some(params)};
+
+    // invoke the tool
+    let result = client.call_tool(request).await?;
+
+    println!("{}",result.content.first().unwrap().as_text_content()?.text);
+
+    client.shut_down().await?;
+
+    Ok(())
+```
+👉 see [examples/simple-mcp-client-streamable-http](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-streamable-http) for a complete working example.
+
+
 ### MCP Client (sse)
-Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost identical, with one exception at `step 3`. Instead of creating a `StdioTransport`, you simply create a `ClientSseTransport`. The rest of the code remains the same:
+Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost identical to the [stdio example](#mcp-client-stdio) , with one exception at `step 3`. Instead of creating a `StdioTransport`, you simply create a `ClientSseTransport`. The rest of the code remains the same:
 
 ```diff
 - let transport = StdioTransport::create_with_server_launch(
@@ -316,6 +381,8 @@ Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost
 -)?;
 + let transport = ClientSseTransport::new(MCP_SERVER_URL, ClientSseTransportOptions::default())?;
 ```
+
+👉 see [examples/simple-mcp-client-sse](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-sse) for a complete working example.
 
 
 ## Getting Started
@@ -355,8 +422,14 @@ pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "8080")
     pub port: u16,
 
+    /// Optional thread-safe session id generator to generate unique session IDs.
+    pub session_id_generator: Option<Arc<dyn IdGenerator<SessionId>>>,
+
     /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
     pub custom_streamable_http_endpoint: Option<String>,
+
+    /// Shared transport configuration used by the server
+    pub transport_options: Arc<TransportOptions>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
@@ -366,12 +439,6 @@ pub struct HyperServerOptions {
 
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
-
-    /// Shared transport configuration used by the server
-    pub transport_options: Arc<TransportOptions>,
-
-    /// Optional thread-safe session id generator to generate unique session IDs.
-    pub session_id_generator: Option<Arc<dyn IdGenerator>>,
 
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
@@ -384,17 +451,6 @@ pub struct HyperServerOptions {
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
 
-    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
-    pub sse_support: bool,
-
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
-    /// Applicable only if sse_support is true
-    pub custom_sse_endpoint: Option<String>,
-
-    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
-    /// Applicable only if sse_support is true
-    pub custom_messages_endpoint: Option<String>,
-
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
@@ -406,6 +462,17 @@ pub struct HyperServerOptions {
     /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
     /// Default is false for backwards compatibility.
     pub dns_rebinding_protection: bool,
+
+    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
+    pub sse_support: bool,
+
+    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
+    /// Applicable only if sse_support is true
+    pub custom_sse_endpoint: Option<String>,
+
+    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
+    /// Applicable only if sse_support is true
+    pub custom_messages_endpoint: Option<String>,
 }
 
 ```
@@ -427,9 +494,13 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 
 - `server`: Activates MCP server capabilities in `rust-mcp-sdk`, providing modules and APIs for building and managing MCP servers.
 - `client`: Activates MCP client capabilities, offering modules and APIs for client development and communicating with MCP servers.
-- `hyper-server`:  This feature enables the **sse** transport for MCP servers, supporting multiple simultaneous client connections out of the box.
-- `ssl`: This feature enables TLS/SSL support for the **sse** transport when used with the `hyper-server`.
+- `hyper-server`: This feature is necessary to enable `Streamable HTTP` or `Server-Sent Events (SSE)` transports for MCP servers. It must be used alongside the server feature to support the required server functionalities.
+- `ssl`: This feature enables TLS/SSL support for the `Streamable HTTP` or `Server-Sent Events (SSE)` transport when used with the `hyper-server`.
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
+- `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
+- `streamable-http`: Enables support for the `Streamable HTTP` transport.
+- `stdio`: Enables support for the `standard input/output (stdio)` transport..
+
 
 #### MCP Protocol Versions with Corresponding Features
 
@@ -460,9 +531,9 @@ If you only need the MCP Server functionality, you can disable the default featu
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros"] }
+rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros","stdio"] }
 ```
-Optionally add `hyper-server` for **sse** transport, and `ssl` feature for tls/ssl support of the `hyper-server`
+Optionally add `hyper-server` and `streamable-http` for **Streamable HTTP** transport, and `ssl` feature for tls/ssl support of the `hyper-server`
 
 <!-- x-release-please-end -->
 
@@ -475,7 +546,7 @@ Add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client","2024_11_05"] }
+rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client","2024_11_05","stdio"] }
 ```
 
 <!-- x-release-please-end -->
