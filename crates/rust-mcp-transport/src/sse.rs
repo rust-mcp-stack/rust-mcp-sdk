@@ -239,7 +239,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
                 interval.tick().await;
                 let sender = sender.read().await;
                 if let Some(sender) = sender.as_ref() {
-                    match sender.write_str(":\n").await {
+                    match sender.write_str("\n").await {
                         Ok(_) => {}
                         Err(TransportError::Io(error)) => {
                             if error.kind() == std::io::ErrorKind::BrokenPipe {

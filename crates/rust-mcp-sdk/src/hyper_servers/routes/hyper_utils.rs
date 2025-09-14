@@ -23,8 +23,7 @@ use axum::{
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
-    event_store::EventStore, EventId, SessionId, SseTransport, StreamId,
-    MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+    EventId, SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
@@ -37,6 +36,7 @@ async fn create_sse_stream(
     state: Arc<AppState>,
     payload: Option<&str>,
     standalone: bool,
+    last_event_id: Option<EventId>,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let payload_string = payload.map(|p| p.to_string());
 
@@ -87,8 +87,6 @@ async fn create_sse_stream(
         let _ = runtime.remove_transport(&stream_id_clone).await;
     });
 
-    // let event_store = state.event_store.;
-
     // Construct SSE stream
     let reader = BufReader::new(write_rx);
     let session_id_clone = session_id.clone();
@@ -107,9 +105,15 @@ async fn create_sse_stream(
                 Ok(_) => {
                     let trimmed_line = line.trim_end_matches('\n').to_owned();
 
+                    // empty sse comment to keep-alive
+                    if is_empty_sse_message(&trimmed_line) {
+                        return Some((Ok(Event::default()), reader));
+                    }
+
+                    let mut event_id: Option<EventId> = None;
                     // store the event for resumption if it is supported
                     if let Some(event_store) = event_store {
-                        if !is_empty_sse_message(&trimmed_line) {
+                        event_id = Some(
                             event_store
                                 .store_event(
                                     (*session_id).clone(),
@@ -117,11 +121,16 @@ async fn create_sse_stream(
                                     current_timestamp(),
                                     trimmed_line.clone(),
                                 )
-                                .await;
-                        }
+                                .await,
+                        );
                     }
 
-                    Some((Ok(Event::default().data(trimmed_line)), reader))
+                    let event = match event_id {
+                        Some(id) => Event::default().data(trimmed_line).id(id),
+                        None => Event::default().data(trimmed_line),
+                    };
+
+                    Some((Ok(event), reader))
                 }
                 Err(e) => Some((Err(e), reader)),
             }
@@ -176,6 +185,7 @@ fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
 
 pub async fn create_standalone_stream(
     session_id: SessionId,
+    last_event_id: Option<EventId>,
     state: Arc<AppState>,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let runtime = state.session_store.get(&session_id).await.ok_or(
@@ -195,6 +205,7 @@ pub async fn create_standalone_stream(
         state.clone(),
         None,
         true,
+        last_event_id,
     )
     .await?;
     *response.status_mut() = StatusCode::OK;
@@ -223,6 +234,7 @@ pub async fn start_new_session(
         state.clone(),
         Some(payload),
         false,
+        None,
     )
     .await;
 
@@ -382,6 +394,7 @@ pub async fn process_incoming_message(
                     state.clone(),
                     Some(payload),
                     false,
+                    None,
                 )
                 .await
             }
