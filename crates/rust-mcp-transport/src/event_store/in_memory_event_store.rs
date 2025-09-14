@@ -16,7 +16,7 @@ const ID_SEPERATOR: &str = "-.-";
 struct EventEntry {
     pub stream_id: StreamId,
     pub time_stamp: u128,
-    pub message: ServerMessages,
+    pub message: String,
 }
 
 #[derive(Debug)]
@@ -138,7 +138,7 @@ impl EventStore for InMemoryEventStore {
         session_id: SessionId,
         stream_id: StreamId,
         time_stamp: u128,
-        message: ServerMessages,
+        message: String,
     ) -> EventId {
         let event_id = self.generate_event_id(&session_id, &stream_id, time_stamp);
 
@@ -246,5 +246,10 @@ impl EventStore for InMemoryEventStore {
             stream_id: stream_id.to_string(),
             messages: events,
         })
+    }
+
+    async fn clear(&self) {
+        let mut storage_map = self.storage_map.write().await;
+        storage_map.clear();
     }
 }

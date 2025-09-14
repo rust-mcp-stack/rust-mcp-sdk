@@ -31,7 +31,8 @@ pub struct AppState {
     /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
     /// Default is false for backwards compatibility.
     pub dns_rebinding_protection: bool,
-
+    /// Event store for resumability support
+    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
     pub event_store: Option<Arc<dyn EventStore>>,
 }
 

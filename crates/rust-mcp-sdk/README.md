@@ -415,6 +415,7 @@ server.start().await?;
 
 Here is a list of available options with descriptions for configuring the HyperServer:
 ```rs
+
 pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "127.0.0.1")
     pub host: String,
@@ -430,6 +431,10 @@ pub struct HyperServerOptions {
 
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
+
+    /// Event store for resumability support
+    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
+    pub event_store: Option<Arc<dyn EventStore>>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.

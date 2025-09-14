@@ -7,7 +7,7 @@ use crate::{
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
-    utils::validate_mcp_protocol_version,
+    utils::{current_timestamp, validate_mcp_protocol_version},
 };
 
 use crate::schema::schema_utils::{ClientMessage, SdkError};
@@ -23,12 +23,22 @@ use axum::{
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
-    SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+    event_store::EventStore, EventId, SessionId, SseTransport, StreamId,
+    MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
+
+async fn store_event(
+    event_store: Arc<dyn EventStore>,
+    session_id: SessionId,
+    stream_id: StreamId,
+    message_payload: &str,
+) -> Option<EventId> {
+    None
+}
 
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
@@ -63,40 +73,65 @@ async fn create_sse_stream(
         .map_err(|err| TransportServerError::TransportError(err.to_string()))?,
     );
 
-    let stream_id: StreamId = if standalone {
-        DEFAULT_STREAM_ID.to_string()
+    let session_id = Arc::new(session_id);
+    let stream_id: Arc<StreamId> = if standalone {
+        Arc::new(DEFAULT_STREAM_ID.to_string())
     } else {
-        state.stream_id_gen.generate()
+        Arc::new(state.stream_id_gen.generate())
     };
+
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
+    let stream_id_clone = stream_id.clone();
 
     //Start the server runtime
     tokio::spawn(async move {
         match runtime_clone
-            .start_stream(transport, &stream_id, ping_interval, payload_string)
+            .start_stream(transport, &stream_id_clone, ping_interval, payload_string)
             .await
         {
-            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id),
-            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id, err),
+            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id_clone),
+            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id_clone, err),
         }
-        let _ = runtime.remove_transport(&stream_id).await;
+        let _ = runtime.remove_transport(&stream_id_clone).await;
     });
+
+    // let event_store = state.event_store.;
 
     // Construct SSE stream
     let reader = BufReader::new(write_rx);
+    let session_id_clone = session_id.clone();
+    let event_store = state.event_store.as_ref().map(Arc::clone);
 
-    // outgoing messages from server to the client
-    let message_stream = stream::unfold(reader, |mut reader| async move {
-        let mut line = String::new();
+    // send outgoing messages from server to the client over the sse stream
+    let message_stream = stream::unfold(reader, move |mut reader| {
+        let session_id = session_id_clone.clone();
+        let stream_id = stream_id.clone();
+        let event_store = event_store.clone();
+        async move {
+            let mut line = String::new();
 
-        match reader.read_line(&mut line).await {
-            Ok(0) => None, // EOF
-            Ok(_) => {
-                let trimmed_line = line.trim_end_matches('\n').to_owned();
-                Some((Ok(Event::default().data(trimmed_line)), reader))
+            match reader.read_line(&mut line).await {
+                Ok(0) => None, // EOF
+                Ok(_) => {
+                    let trimmed_line = line.trim_end_matches('\n').to_owned();
+
+                    // store the event for resumption if it is supported
+                    if let Some(event_store) = event_store {
+                        event_store
+                            .store_event(
+                                (*session_id).clone(),
+                                (*stream_id).clone(),
+                                current_timestamp(),
+                                trimmed_line.clone(),
+                            )
+                            .await;
+                    }
+
+                    Some((Ok(Event::default().data(trimmed_line)), reader))
+                }
+                Err(e) => Some((Err(e), reader)),
             }
-            Err(e) => Some((Err(e), reader)),
         }
     });
 

@@ -3,6 +3,7 @@ use crate::schema::schema_utils::{ClientMessages, SdkError};
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
 use crate::schema::ProtocolVersion;
 use std::cmp::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A guard type that automatically aborts a Tokio task when dropped.
 ///
@@ -232,6 +233,13 @@ pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
     };
 
     Ok(())
+}
+
+pub fn current_timestamp() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Invalid time")
+        .as_nanos() // or `.as_millis()` or `.as_nanos()` if you want higher precision
 }
 
 #[cfg(test)]
