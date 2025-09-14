@@ -1,7 +1,10 @@
 mod handler;
 mod tools;
 
+use std::sync::Arc;
+
 use handler::MyServerHandler;
+use rust_mcp_sdk::event_store::InMemoryEventStore;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
@@ -48,6 +51,7 @@ async fn main() -> SdkResult<()> {
         handler,
         HyperServerOptions {
             sse_support: true,
+            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             ..Default::default()
         },
     );

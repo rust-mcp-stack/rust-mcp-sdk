@@ -153,6 +153,7 @@ let server = hyper_server::create_server(
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
         sse_support: false,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
         ..Default::default()
     },
 );

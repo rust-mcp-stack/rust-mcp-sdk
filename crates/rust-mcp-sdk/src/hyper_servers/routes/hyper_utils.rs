@@ -31,15 +31,6 @@ use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
-async fn store_event(
-    event_store: Arc<dyn EventStore>,
-    session_id: SessionId,
-    stream_id: StreamId,
-    message_payload: &str,
-) -> Option<EventId> {
-    None
-}
-
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
     session_id: SessionId,
@@ -118,14 +109,16 @@ async fn create_sse_stream(
 
                     // store the event for resumption if it is supported
                     if let Some(event_store) = event_store {
-                        event_store
-                            .store_event(
-                                (*session_id).clone(),
-                                (*stream_id).clone(),
-                                current_timestamp(),
-                                trimmed_line.clone(),
-                            )
-                            .await;
+                        if !is_empty_sse_message(&trimmed_line) {
+                            event_store
+                                .store_event(
+                                    (*session_id).clone(),
+                                    (*stream_id).clone(),
+                                    current_timestamp(),
+                                    trimmed_line.clone(),
+                                )
+                                .await;
+                        }
                     }
 
                     Some((Ok(Event::default().data(trimmed_line)), reader))
@@ -398,6 +391,10 @@ pub async fn process_incoming_message(
             Ok((StatusCode::NOT_FOUND, Json(error)).into_response())
         }
     }
+}
+
+pub fn is_empty_sse_message(sse_payload: &str) -> bool {
+    sse_payload.is_empty() || sse_payload.trim() == ":"
 }
 
 pub async fn delete_session(

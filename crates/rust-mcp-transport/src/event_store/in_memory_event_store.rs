@@ -10,7 +10,7 @@ use crate::{
     EventId, SessionId, StreamId,
 };
 
-const MAX_EVENTS_PER_SESSION: usize = 32;
+const MAX_EVENTS_PER_SESSION: usize = 64;
 const ID_SEPERATOR: &str = "-.-";
 
 #[derive(Debug, Clone)]
@@ -24,6 +24,15 @@ struct EventEntry {
 pub struct InMemoryEventStore {
     max_events_per_session: usize,
     storage_map: RwLock<HashMap<SessionId, VecDeque<EventEntry>>>,
+}
+
+impl Default for InMemoryEventStore {
+    fn default() -> Self {
+        Self {
+            max_events_per_session: MAX_EVENTS_PER_SESSION,
+            storage_map: Default::default(),
+        }
+    }
 }
 
 /// In-memory implementation of the `EventStore` trait for MCP's Streamable HTTP transport.
@@ -146,7 +155,7 @@ impl EventStore for InMemoryEventStore {
         let mut storage_map = self.storage_map.write().await;
 
         tracing::trace!(
-            "Storing event for session: {session_id}\nstream_id: {stream_id}\nmessage: {message} ",
+            "Storing event for session: {session_id}, stream_id: {stream_id}, message: {message} ",
         );
 
         let session_map = storage_map
