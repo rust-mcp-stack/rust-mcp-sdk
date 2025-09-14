@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use reqwest::header::Entry;
 use rust_mcp_schema::schema_utils::ServerMessages;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -144,6 +145,10 @@ impl EventStore for InMemoryEventStore {
 
         let mut storage_map = self.storage_map.write().await;
 
+        tracing::trace!(
+            "Storing event for session: {session_id}\nstream_id: {stream_id}\nmessage: {message} ",
+        );
+
         let session_map = storage_map
             .entry(session_id)
             .or_insert_with(|| VecDeque::with_capacity(self.max_events_per_session));
@@ -152,11 +157,13 @@ impl EventStore for InMemoryEventStore {
             session_map.pop_front(); // remove the oldest if full
         }
 
-        session_map.push_back(EventEntry {
+        let entry = EventEntry {
             stream_id,
             time_stamp,
             message,
-        });
+        };
+
+        session_map.push_back(entry);
 
         event_id
     }
@@ -240,6 +247,8 @@ impl EventStore for InMemoryEventStore {
             }
             _ => vec![],
         };
+
+        tracing::trace!("{} messages after '{last_event_id}'", events.len());
 
         Some(EventStoreMessages {
             session_id: session_id.to_string(),
