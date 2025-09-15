@@ -161,8 +161,10 @@ async fn create_sse_stream(
             if let Some(event_store) = state.event_store.as_ref() {
                 if let Some(events) = event_store.events_after(last_event_id).await {
                     for message_payload in events.messages {
-                        let err = transport.write_str(&message_payload).await;
-                        tracing::trace!("Error replaying message...")
+                        let error = transport.write_str(&message_payload).await;
+                        if let Err(error) = error {
+                            tracing::trace!("Error replaying message: {error}")
+                        }
                     }
                 }
             }

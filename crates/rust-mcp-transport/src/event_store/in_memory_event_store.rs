@@ -1,6 +1,4 @@
 use async_trait::async_trait;
-use reqwest::header::Entry;
-use rust_mcp_schema::schema_utils::ServerMessages;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use tokio::sync::RwLock;
