@@ -435,6 +435,7 @@ impl ServerRuntime {
         };
 
         // in case there is a payload, we consume it by transport to get processed
+        // payload would be message payload coming from the client
         if let Some(payload) = payload {
             if let Err(err) = transport.consume_string_payload(&payload).await {
                 let _ = self.remove_transport(stream_id).await;

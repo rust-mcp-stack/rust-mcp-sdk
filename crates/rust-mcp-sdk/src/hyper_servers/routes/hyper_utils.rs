@@ -23,7 +23,8 @@ use axum::{
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
-    EventId, SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+    EventId, McpDispatch, SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER,
+    MCP_SESSION_ID_HEADER,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
@@ -74,11 +75,17 @@ async fn create_sse_stream(
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
     let stream_id_clone = stream_id.clone();
+    let transport_clone = transport.clone();
 
     //Start the server runtime
     tokio::spawn(async move {
         match runtime_clone
-            .start_stream(transport, &stream_id_clone, ping_interval, payload_string)
+            .start_stream(
+                transport_clone,
+                &stream_id_clone,
+                ping_interval,
+                payload_string,
+            )
             .await
         {
             Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id_clone),
@@ -148,6 +155,20 @@ async fn create_sse_stream(
         HeaderValue::from_str(&session_id).unwrap(),
     );
 
+    // if last_event_id exists we replay messages from the event-store
+    tokio::spawn(async move {
+        if let Some(last_event_id) = last_event_id {
+            if let Some(event_store) = state.event_store.as_ref() {
+                if let Some(events) = event_store.events_after(last_event_id).await {
+                    for message_payload in events.messages {
+                        let err = transport.write_str(&message_payload).await;
+                        tracing::trace!("Error replaying message...")
+                    }
+                }
+            }
+        }
+    });
+
     if !payload_contains_request {
         *response.status_mut() = StatusCode::ACCEPTED;
     }
@@ -197,6 +218,13 @@ pub async fn create_standalone_stream(
         let error =
             SdkError::bad_request().with_message("Only one SSE stream is allowed per session");
         return Ok((StatusCode::CONFLICT, Json(error)).into_response());
+    }
+
+    if let Some(last_event_id) = last_event_id.as_ref() {
+        tracing::trace!(
+            "SSE stream rec-connected with last-event-id: {}",
+            last_event_id
+        );
     }
 
     let mut response = create_sse_stream(

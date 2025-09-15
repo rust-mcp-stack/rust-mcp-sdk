@@ -110,7 +110,7 @@ impl InMemoryEventStore {
         }
 
         // Split into exactly three parts
-        let parts: Vec<&'a str> = event_id.split('.').collect();
+        let parts: Vec<&'a str> = event_id.split(ID_SEPERATOR).collect();
         if parts.len() != 3 {
             return None;
         }
@@ -155,7 +155,7 @@ impl EventStore for InMemoryEventStore {
         let mut storage_map = self.storage_map.write().await;
 
         tracing::trace!(
-            "Storing event for session: {session_id}, stream_id: {stream_id}, message: {message} ",
+            "Storing event for session: {session_id}, stream_id: {stream_id}, message: {message}, {time_stamp} ",
         );
 
         let session_map = storage_map
@@ -227,15 +227,18 @@ impl EventStore for InMemoryEventStore {
     /// or `None` if no events are found or the input is invalid.
     async fn events_after(&self, last_event_id: EventId) -> Option<EventStoreMessages> {
         let Some((session_id, stream_id, time_stamp)) = self.parse_event_id(&last_event_id) else {
+            tracing::warn!("error parsing last event id: '{last_event_id}'");
             return None;
         };
 
         let storage_map = self.storage_map.read().await;
         let Some(events) = storage_map.get(session_id) else {
+            tracing::warn!("could not find the session_id in the store : '{session_id}'");
             return None;
         };
 
         let Ok(time_stamp) = time_stamp.parse::<u128>() else {
+            tracing::warn!("could not parse the timestamp: '{time_stamp}'");
             return None;
         };
 

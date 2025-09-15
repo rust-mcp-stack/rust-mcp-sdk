@@ -280,9 +280,16 @@ pub fn random_port_old() -> u16 {
 }
 
 pub mod sample_tools {
+    use std::{sync::Arc, time::Duration};
+
+    use rust_mcp_schema::{LoggingMessageNotificationParams, TextContent};
     #[cfg(feature = "2025_06_18")]
     use rust_mcp_sdk::macros::{mcp_tool, JsonSchema};
-    use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult};
+    use rust_mcp_sdk::{
+        schema::{schema_utils::CallToolError, CallToolResult},
+        McpServer,
+    };
+    use serde_json::json;
 
     //****************//
     //  SayHelloTool  //
@@ -340,6 +347,43 @@ pub mod sample_tools {
             ]));
             #[cfg(not(feature = "2025_06_18"))]
             return Ok(CallToolResult::text_content(goodbye_message, None));
+        }
+    }
+
+    //****************************//
+    //  StartNotificationStream   //
+    //****************************//
+    #[mcp_tool(
+        name = "start-notification-stream",
+        description = "Accepts a person's name and says a personalized \"Goodbye\" to that person."
+    )]
+    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
+    pub struct StartNotificationStream {
+        /// Interval in milliseconds between notifications
+        interval: u64,
+        /// Number of notifications to send (0 for 100)
+        count: u32,
+    }
+    impl StartNotificationStream {
+        pub async fn call_tool(
+            &self,
+            runtime: Arc<dyn McpServer>,
+        ) -> Result<CallToolResult, CallToolError> {
+            for i in 0..self.count {
+                let _ = runtime
+                    .send_logging_message(LoggingMessageNotificationParams {
+                        data: json!({"id":format!("message {} of {}",i,self.count)}),
+                        level: rust_mcp_sdk::schema::LoggingLevel::Emergency,
+                        logger: None,
+                    })
+                    .await;
+                tokio::time::sleep(Duration::from_millis(self.interval)).await;
+            }
+
+            let message = format!("so many messages sent");
+            Ok(CallToolResult::text_content(vec![TextContent::from(
+                message,
+            )]))
         }
     }
 }
