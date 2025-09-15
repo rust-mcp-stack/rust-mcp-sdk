@@ -7,6 +7,7 @@ pub mod test_server_common {
         CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, ProtocolVersion,
         RpcError,
     };
+    use rust_mcp_sdk::event_store::EventStore;
     use rust_mcp_sdk::id_generator::IdGenerator;
     use rust_mcp_sdk::mcp_server::hyper_runtime::HyperRuntime;
     use rust_mcp_sdk::schema::{
@@ -31,6 +32,7 @@ pub mod test_server_common {
         pub streamable_url: String,
         pub sse_url: String,
         pub sse_message_url: String,
+        pub event_store: Option<Arc<dyn EventStore>>,
     }
 
     pub fn initialize_request() -> InitializeRequest {
@@ -120,6 +122,7 @@ pub mod test_server_common {
         let sse_url = options.sse_url();
         let sse_message_url = options.sse_message_url();
 
+        let event_store_clone = options.event_store.clone();
         let server =
             hyper_server::create_server(test_server_details(), TestServerHandler {}, options);
 
@@ -132,6 +135,7 @@ pub mod test_server_common {
             streamable_url,
             sse_url,
             sse_message_url,
+            event_store: event_store_clone,
         }
     }
 

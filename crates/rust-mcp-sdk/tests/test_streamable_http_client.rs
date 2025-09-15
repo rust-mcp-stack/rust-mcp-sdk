@@ -350,6 +350,7 @@ async fn should_receive_server_initiated_messaged() {
         streamable_url,
         sse_url,
         sse_message_url,
+        event_store,
     } = create_start_server(server_options).await;
 
     let (client, message_history) = create_client(&streamable_url, None).await;

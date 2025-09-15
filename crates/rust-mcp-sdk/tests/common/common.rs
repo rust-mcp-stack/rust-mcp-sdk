@@ -132,10 +132,11 @@ pub async fn send_get_request(
 use futures::stream::Stream;
 
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
+/// reads sse events and return them as (id, event, data) tuple
 pub async fn read_sse_event_from_stream(
     stream: &mut (impl Stream<Item = Result<hyper::body::Bytes, reqwest::Error>> + Unpin),
     event_count: usize,
-) -> Option<Vec<String>> {
+) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut buffer = String::new();
     let mut events = vec![];
 
@@ -146,27 +147,28 @@ pub async fn read_sse_event_from_stream(
                 buffer.push_str(chunk_str);
 
                 while let Some(pos) = buffer.find("\n\n") {
-                    let data = {
-                        // Scope to limit borrows
-                        let (event_str, rest) = buffer.split_at(pos);
-                        let mut data = None;
+                    let (event_str, rest) = buffer.split_at(pos);
+                    let mut id = None;
+                    let mut event = None;
+                    let mut data = None;
 
-                        // Process the event string
-                        for line in event_str.lines() {
-                            if line.starts_with("data:") {
-                                data = Some(line.trim_start_matches("data:").trim().to_string());
-                                break; // Exit loop after finding data
-                            }
+                    // Process the event string
+                    for line in event_str.lines() {
+                        if line.starts_with("id:") {
+                            id = Some(line.trim_start_matches("id:").trim().to_string());
+                        } else if line.starts_with("event:") {
+                            event = Some(line.trim_start_matches("event:").trim().to_string());
+                        } else if line.starts_with("data:") {
+                            data = Some(line.trim_start_matches("data:").trim().to_string());
                         }
+                    }
 
-                        // Update buffer after processing
-                        buffer = rest[2..].to_string(); // Skip "\n\n"
-                        data
-                    };
+                    // Update buffer after processing
+                    buffer = rest[2..].to_string(); // Skip "\n\n"
 
-                    // Return if data was found
+                    // Only include events with data
                     if let Some(data) = data {
-                        events.push(data);
+                        events.push((id, event, data));
                         if events.len().eq(&event_count) {
                             return Some(events);
                         }
@@ -174,15 +176,22 @@ pub async fn read_sse_event_from_stream(
                 }
             }
             Err(_e) => {
-                // return Err(TransportServerError::HyperError(e));
                 return None;
             }
         }
     }
-    None
+    if !events.is_empty() {
+        Some(events)
+    } else {
+        None
+    }
 }
 
-pub async fn read_sse_event(response: Response, event_count: usize) -> Option<Vec<String>> {
+// return sse event as (id, event, data) tuple
+pub async fn read_sse_event(
+    response: Response,
+    event_count: usize,
+) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut stream = response.bytes_stream();
     read_sse_event_from_stream(&mut stream, event_count).await
 }

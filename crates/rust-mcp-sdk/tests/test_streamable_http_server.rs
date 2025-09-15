@@ -12,7 +12,7 @@ use rust_mcp_schema::{
     LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
     ServerRequest, ServerResult,
 };
-use rust_mcp_sdk::mcp_server::HyperServerOptions;
+use rust_mcp_sdk::{event_store::InMemoryEventStore, mcp_server::HyperServerOptions};
 use serde_json::{json, Map, Value};
 
 use crate::common::{
@@ -40,6 +40,7 @@ async fn initialize_server(
             "AAA-BBB-CCC".to_string()
         ]))),
         enable_json_response,
+        event_store: Some(Arc::new(InMemoryEventStore::default())),
         ..Default::default()
     };
 
@@ -169,7 +170,7 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let events = read_sse_event(response, 1).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0].2).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -220,7 +221,7 @@ async fn should_call_a_tool_and_return_the_result() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let events = read_sse_event(response, 1).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0].2).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -345,7 +346,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
         .unwrap();
 
     let events = read_sse_event(response, 1).await.unwrap();
-    let message: ServerJsonrpcNotification = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerJsonrpcNotification = serde_json::from_str(&events[0].2).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
         notification,
@@ -429,14 +430,14 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
     // read two events from the sse stream
     let events = read_sse_event(response, 2).await.unwrap();
 
-    let message1: ServerJsonrpcRequest = serde_json::from_str(&events[0]).unwrap();
+    let message1: ServerJsonrpcRequest = serde_json::from_str(&events[0].2).unwrap();
 
     let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
     else {
         panic!("invalid message received!");
     };
 
-    let message2: ServerJsonrpcRequest = serde_json::from_str(&events[1]).unwrap();
+    let message2: ServerJsonrpcRequest = serde_json::from_str(&events[1].2).unwrap();
 
     let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
     else {
@@ -472,7 +473,7 @@ async fn should_not_close_get_sse_stream() {
 
     let mut stream = response.bytes_stream();
     let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
-    let message: ServerJsonrpcNotification = serde_json::from_str(&event).unwrap();
+    let message: ServerJsonrpcNotification = serde_json::from_str(&event.2).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
         notification,
@@ -501,7 +502,7 @@ async fn should_not_close_get_sse_stream() {
         .unwrap();
 
     let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
-    let message: ServerJsonrpcNotification = serde_json::from_str(&event).unwrap();
+    let message: ServerJsonrpcNotification = serde_json::from_str(&event.2).unwrap();
 
     let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
         notification_2,
@@ -713,7 +714,7 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
     assert_eq!(response_2.status(), StatusCode::OK);
 
     let events = read_sse_event(response_2, 1).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0].2).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -729,7 +730,7 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
     );
 
     let events = read_sse_event(response_1, 1).await.unwrap();
-    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0].2).unwrap();
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
@@ -1080,7 +1081,7 @@ async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
     );
 
     let events = read_sse_event(response, 1).await.unwrap();
-    let message: ServerMessages = serde_json::from_str(&events[0]).unwrap();
+    let message: ServerMessages = serde_json::from_str(&events[0].2).unwrap();
 
     let ServerMessages::Batch(mut messages) = message else {
         panic!("Invalid message type");
@@ -1358,5 +1359,108 @@ async fn should_skip_all_validations_when_false() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-//TODO:
-// should return 400 error for invalid JSON-RPC messages
+#[tokio::test]
+async fn should_store_and_include_event_ids_in_server_sse_messages() {
+    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let _ = server
+        .hyper_runtime
+        .send_logging_message(
+            &session_id,
+            LoggingMessageNotificationParams {
+                data: json!("notification1"),
+                level: LoggingLevel::Info,
+                logger: None,
+            },
+        )
+        .await;
+
+    let _ = server
+        .hyper_runtime
+        .send_logging_message(
+            &session_id,
+            LoggingMessageNotificationParams {
+                data: json!("notification2"),
+                level: LoggingLevel::Info,
+                logger: None,
+            },
+        )
+        .await;
+
+    // read two events
+    let events = read_sse_event(response, 2).await.unwrap();
+    assert_eq!(events.len(), 2);
+    // verify we got the notification with an event ID
+    let (first_id, _, data) = events[0].clone();
+    let (second_id, _, _) = events[0].clone();
+
+    let message: ServerJsonrpcNotification = serde_json::from_str(&data).unwrap();
+
+    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
+        notification1,
+    )) = message.notification
+    else {
+        panic!("invalid message received!");
+    };
+
+    assert_eq!(notification1.params.data.as_str().unwrap(), "notification1");
+
+    let first_id = first_id.unwrap();
+    let second_id = second_id.unwrap();
+
+    //messages should be stored and accessible
+    let events = server
+        .event_store
+        .unwrap()
+        .events_after(first_id)
+        .await
+        .unwrap();
+    assert_eq!(events.messages.len(), 1);
+
+    // deserialize the message returned by event_store
+    let message: ServerJsonrpcNotification = serde_json::from_str(&events.messages[0]).unwrap();
+    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
+        notification2,
+    )) = message.notification
+    else {
+        panic!("invalid message in store!");
+    };
+    assert_eq!(notification2.params.data.as_str().unwrap(), "notification2");
+}
+
+// TODO: should return 400 error for invalid JSON-RPC messages
+
+// should store and include event IDs in server SSE messages
+// should store and replay MCP server tool notifications
+//
+// should keep stream open after sending server notifications
+
+// NA: should reject second initialization request
+// NA: should pass request info to tool callback
+// NA: should reject second SSE stream even in stateless mode
+
+// should reject requests to uninitialized server
+// should accept requests with matching protocol version
+// should accept when protocol version differs from negotiated version
+// should call a tool with authInfo
+// should calls tool without authInfo when it is optional
+// should accept pre-parsed request body
+// should handle pre-parsed batch messages
+// should prefer pre-parsed body over request body
+
+// should operate without session ID validation
+// should handle POST requests with various session IDs in stateless mode
+// should call onsessionclosed callback when session is closed via DELETE
+// should not call onsessionclosed callback when not provided
+// should not call onsessionclosed callback for invalid session DELETE
+// should call onsessionclosed callback with correct session ID when multiple sessions exist
+// should support async onsessioninitialized callback
+// should support sync onsessioninitialized callback (backwards compatibility)
+// should support async onsessionclosed callback
+// should propagate errors from async onsessioninitialized callback
+// should propagate errors from async onsessionclosed callback
+// should handle both async callbacks together
+// should validate both host and origin when both are configured
