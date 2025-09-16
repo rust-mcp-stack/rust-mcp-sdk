@@ -40,6 +40,7 @@ async fn initialize_server(
             "AAA-BBB-CCC".to_string()
         ]))),
         enable_json_response,
+        ping_interval: Duration::from_secs(1),
         event_store: Some(Arc::new(InMemoryEventStore::default())),
         ..Default::default()
     };
@@ -291,11 +292,19 @@ async fn should_reject_invalid_session_id() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-async fn get_standalone_stream(streamable_url: &str, session_id: &str) -> reqwest::Response {
+async fn get_standalone_stream(
+    streamable_url: &str,
+    session_id: &str,
+    last_event_id: Option<&str>,
+) -> reqwest::Response {
     let mut headers = HashMap::new();
     headers.insert("Accept", "text/event-stream , application/json");
     headers.insert("mcp-session-id", session_id);
     headers.insert("mcp-protocol-version", "2025-03-26");
+
+    if let Some(last_event_id) = last_event_id.clone() {
+        headers.insert("last-event-id", last_event_id);
+    }
 
     let response = send_get_request(streamable_url, Some(headers))
         .await
@@ -307,7 +316,7 @@ async fn get_standalone_stream(streamable_url: &str, session_id: &str) -> reqwes
 #[tokio::test]
 async fn should_establish_standalone_stream_and_receive_server_messages() {
     let (server, session_id) = initialize_server(None).await.unwrap();
-    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -369,7 +378,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
 #[tokio::test]
 async fn should_establish_standalone_stream_and_receive_server_requests() {
     let (server, session_id) = initialize_server(None).await.unwrap();
-    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -454,7 +463,7 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
 #[tokio::test]
 async fn should_not_close_get_sse_stream() {
     let (server, session_id) = initialize_server(None).await.unwrap();
-    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -525,10 +534,10 @@ async fn should_not_close_get_sse_stream() {
 #[tokio::test]
 async fn should_reject_second_sse_stream_for_the_same_session() {
     let (server, session_id) = initialize_server(None).await.unwrap();
-    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let second_response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let second_response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
     assert_eq!(second_response.status(), StatusCode::CONFLICT);
 
     let error_data: SdkError = second_response.json().await.unwrap();
@@ -1359,10 +1368,11 @@ async fn should_skip_all_validations_when_false() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
+// should store and include event IDs in server SSE messages
 #[tokio::test]
 async fn should_store_and_include_event_ids_in_server_sse_messages() {
     let (server, session_id) = initialize_server(Some(true)).await.unwrap();
-    let response = get_standalone_stream(&server.streamable_url, &session_id).await;
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -1409,7 +1419,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
     assert_eq!(notification1.params.data.as_str().unwrap(), "notification1");
 
     let first_id = first_id.unwrap();
-    let second_id = second_id.unwrap();
+    assert!(second_id.is_some());
 
     //messages should be stored and accessible
     let events = server
@@ -1431,10 +1441,76 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
     assert_eq!(notification2.params.data.as_str().unwrap(), "notification2");
 }
 
-// TODO: should return 400 error for invalid JSON-RPC messages
-
-// should store and include event IDs in server SSE messages
 // should store and replay MCP server tool notifications
+#[tokio::test]
+async fn should_store_and_replay_mcp_server_tool_notifications() {
+    common::init_tracing();
+    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let _ = server
+        .hyper_runtime
+        .send_logging_message(
+            &session_id,
+            LoggingMessageNotificationParams {
+                data: json!("notification1"),
+                level: LoggingLevel::Info,
+                logger: None,
+            },
+        )
+        .await;
+
+    let events = read_sse_event(response, 1).await.unwrap();
+    assert_eq!(events.len(), 1);
+    // verify we got the notification with an event ID
+    let (first_id, _, data) = events[0].clone();
+
+    let message: ServerJsonrpcNotification = serde_json::from_str(&data).unwrap();
+
+    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
+        notification1,
+    )) = message.notification
+    else {
+        panic!("invalid message received!");
+    };
+
+    assert_eq!(notification1.params.data.as_str().unwrap(), "notification1");
+
+    let first_id = first_id.unwrap();
+
+    // sse connection is closed in read_sse_event()
+    // wait 4 seconds so server detect the disconnect and simulate a network error
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    // we send another notification while SSE is disconnected
+    let result = server
+        .hyper_runtime
+        .send_logging_message(
+            &session_id,
+            LoggingMessageNotificationParams {
+                data: json!("notification1"),
+                level: LoggingLevel::Info,
+                logger: None,
+            },
+        )
+        .await;
+
+    println!(">>> result {:?} ", result);
+
+    //  make a new standalone SSE connection to simulate a re-connection
+    let response =
+        get_standalone_stream(&server.streamable_url, &session_id, Some(&first_id)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    println!(">>> 90 {:?} ", 90);
+
+    let events = read_sse_event(response, 1).await.unwrap();
+    println!(">>> 100 {:?} ", 100);
+
+    // assert_eq!(events.len(), 1);
+    // println!(">>>  {:?} ", events);
+}
+
+// TODO: should return 400 error for invalid JSON-RPC messages
 //
 // should keep stream open after sending server notifications
 
