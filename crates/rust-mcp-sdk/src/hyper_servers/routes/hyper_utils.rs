@@ -7,7 +7,7 @@ use crate::{
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
-    utils::{current_timestamp, validate_mcp_protocol_version},
+    utils::validate_mcp_protocol_version,
 };
 
 use crate::schema::schema_utils::{ClientMessage, SdkError};
@@ -26,7 +26,7 @@ use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
     MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
-use std::{clone, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;

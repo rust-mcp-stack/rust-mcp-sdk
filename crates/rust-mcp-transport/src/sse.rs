@@ -4,7 +4,6 @@ use crate::schema::schema_utils::{
 };
 use crate::schema::RequestId;
 use async_trait::async_trait;
-use rust_mcp_schema::BooleanSchema;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::pin::Pin;
