@@ -5,8 +5,8 @@ mod utils;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse::Parse, parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Error, Expr,
-    ExprLit, Fields, Lit, Meta, Token,
+    parse::Parse, parse_macro_input, punctuated::Punctuated, token, Attribute, Data, DeriveInput,
+    Error, Expr, ExprLit, Fields, Lit, LitInt, LitStr, Meta, Path, PathArguments, Token, Type,
 };
 use utils::{is_option, renamed_field, type_to_json_schema};
 
@@ -473,7 +473,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 /// # Dependencies
 /// Relies on `serde_json` for `Map` and `Value` types.
 ///
-#[proc_macro_derive(JsonSchema)]
+#[proc_macro_derive(JsonSchema, attributes(json_schema))]
 pub fn derive_json_schema(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;

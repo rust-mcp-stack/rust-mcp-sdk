@@ -1,5 +1,5 @@
 use quote::quote;
-use syn::{punctuated::Punctuated, token, Attribute, Path, PathArguments, Type};
+use syn::{punctuated::Punctuated, token, Attribute, LitInt, LitStr, Path, PathArguments, Type};
 
 // Check if a type is an Option<T>
 pub fn is_option(ty: &Type) -> bool {
@@ -14,7 +14,6 @@ pub fn is_option(ty: &Type) -> bool {
 }
 
 // Check if a type is a Vec<T>
-#[allow(unused)]
 pub fn is_vec(ty: &Type) -> bool {
     if let Type::Path(type_path) = ty {
         if type_path.path.segments.len() == 1 {
@@ -27,7 +26,6 @@ pub fn is_vec(ty: &Type) -> bool {
 }
 
 // Extract the inner type from Vec<T> or Option<T>
-#[allow(unused)]
 pub fn inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         if type_path.path.segments.len() == 1 {
@@ -86,12 +84,46 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
     let number_types = [
         "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
     ];
-    let doc_comment = doc_comment(attrs);
-    let description = doc_comment.as_ref().map(|desc| {
+
+    // Parse custom json_schema attributes
+    let mut title: Option<String> = None;
+    let mut format: Option<String> = None;
+    let mut min_length: Option<u64> = None;
+    let mut max_length: Option<u64> = None;
+    let mut attr_description: Option<String> = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("json_schema") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("title") {
+                    title = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("description") {
+                    attr_description = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("format") {
+                    format = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("min_length") {
+                    min_length = Some(meta.value()?.parse::<LitInt>()?.base10_parse::<u64>()?);
+                } else if meta.path.is_ident("max_length") {
+                    max_length = Some(meta.value()?.parse::<LitInt>()?.base10_parse::<u64>()?);
+                }
+                Ok(())
+            });
+        }
+    }
+
+    let description = attr_description.or(doc_comment(attrs));
+    let description_quote = description.as_ref().map(|desc| {
         quote! {
             map.insert("description".to_string(), serde_json::Value::String(#desc.to_string()));
         }
     });
+
+    let title_quote = title.as_ref().map(|t| {
+        quote! {
+            map.insert("title".to_string(), serde_json::Value::String(#t.to_string()));
+        }
+    });
+
     match ty {
         Type::Path(type_path) => {
             if type_path.path.segments.len() == 1 {
@@ -104,15 +136,30 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         if args.args.len() == 1 {
                             if let syn::GenericArgument::Type(inner_ty) = &args.args[0] {
                                 let inner_schema = type_to_json_schema(inner_ty, attrs);
+                                let format_quote = format.as_ref().map(|f| {
+                                    quote! {
+                                        map.insert("format".to_string(), serde_json::Value::String(#f.to_string()));
+                                    }
+                                });
+                                let min_quote = min_length.as_ref().map(|min| {
+                                    quote! {
+                                        map.insert("minLength".to_string(), serde_json::Value::Number(serde_json::Number::from(#min)));
+                                    }
+                                });
+                                let max_quote = max_length.as_ref().map(|max| {
+                                    quote! {
+                                        map.insert("maxLength".to_string(), serde_json::Value::Number(serde_json::Number::from(#max)));
+                                    }
+                                });
                                 return quote! {
                                     {
-                                        let mut map = serde_json::Map::new();
-                                        let inner_map = #inner_schema;
-                                        for (k, v) in inner_map {
-                                            map.insert(k, v);
-                                        }
+                                        let mut map = #inner_schema;
                                         map.insert("nullable".to_string(), serde_json::Value::Bool(true));
-                                        #description
+                                        #description_quote
+                                        #title_quote
+                                        #format_quote
+                                        #min_quote
+                                        #max_quote
                                         map
                                     }
                                 };
@@ -125,13 +172,26 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if args.args.len() == 1 {
                             if let syn::GenericArgument::Type(inner_ty) = &args.args[0] {
-                                let inner_schema = type_to_json_schema(inner_ty, &[]);
+                                let inner_schema = type_to_json_schema(inner_ty, attrs);
+                                let min_quote = min_length.as_ref().map(|min| {
+                                    quote! {
+                                        map.insert("minItems".to_string(), serde_json::Value::Number(serde_json::Number::from(#min)));
+                                    }
+                                });
+                                let max_quote = max_length.as_ref().map(|max| {
+                                    quote! {
+                                        map.insert("maxItems".to_string(), serde_json::Value::Number(serde_json::Number::from(#max)));
+                                    }
+                                });
                                 return quote! {
                                     {
                                         let mut map = serde_json::Map::new();
                                         map.insert("type".to_string(), serde_json::Value::String("array".to_string()));
                                         map.insert("items".to_string(), serde_json::Value::Object(#inner_schema));
-                                        #description
+                                        #description_quote
+                                        #title_quote
+                                        #min_quote
+                                        #max_quote
                                         map
                                     }
                                 };
@@ -144,18 +204,39 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                     let path = &type_path.path;
                     return quote! {
                         {
-                            let inner_schema = #path::json_schema();
-                            inner_schema
+                            let mut map = #path::json_schema();
+                            #description_quote
+                            #title_quote
+                            map
                         }
                     };
                 }
                 // Handle basic types
                 else if ident == "String" {
+                    let format_quote = format.as_ref().map(|f| {
+                        quote! {
+                            map.insert("format".to_string(), serde_json::Value::String(#f.to_string()));
+                        }
+                    });
+                    let min_quote = min_length.as_ref().map(|min| {
+                        quote! {
+                            map.insert("minLength".to_string(), serde_json::Value::Number(serde_json::Number::from(#min)));
+                        }
+                    });
+                    let max_quote = max_length.as_ref().map(|max| {
+                        quote! {
+                            map.insert("maxLength".to_string(), serde_json::Value::Number(serde_json::Number::from(#max)));
+                        }
+                    });
                     return quote! {
                         {
                             let mut map = serde_json::Map::new();
                             map.insert("type".to_string(), serde_json::Value::String("string".to_string()));
-                            #description
+                            #description_quote
+                            #title_quote
+                            #format_quote
+                            #min_quote
+                            #max_quote
                             map
                         }
                     };
@@ -164,7 +245,8 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         {
                             let mut map = serde_json::Map::new();
                             map.insert("type".to_string(), serde_json::Value::String("number".to_string()));
-                            #description
+                            #description_quote
+                            #title_quote
                             map
                         }
                     };
@@ -173,7 +255,8 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         {
                             let mut map = serde_json::Map::new();
                             map.insert("type".to_string(), serde_json::Value::String("boolean".to_string()));
-                            #description
+                            #description_quote
+                            #title_quote
                             map
                         }
                     };
@@ -184,7 +267,8 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                 {
                     let mut map = serde_json::Map::new();
                     map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
-                    #description
+                    #description_quote
+                    #title_quote
                     map
                 }
             }
@@ -193,14 +277,14 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
             {
                 let mut map = serde_json::Map::new();
                 map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
-                #description
+                #description_quote
+                #title_quote
                 map
             }
         },
     }
 }
 
-#[allow(unused)]
 pub fn has_derive(attrs: &[Attribute], trait_name: &str) -> bool {
     attrs.iter().any(|attr| {
         if attr.path().is_ident("derive") {
