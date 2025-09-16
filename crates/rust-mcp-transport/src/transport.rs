@@ -82,7 +82,7 @@ where
     /// Writes a string payload to the underlying asynchronous writable stream,
     /// appending a newline character and flushing the stream afterward.
     ///
-    async fn write_str(&self, payload: &str) -> TransportResult<()>;
+    async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()>;
 }
 
 /// A trait representing the transport layer for the MCP (Message Communication Protocol).

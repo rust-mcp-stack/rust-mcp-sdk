@@ -1371,6 +1371,7 @@ async fn should_skip_all_validations_when_false() {
 // should store and include event IDs in server SSE messages
 #[tokio::test]
 async fn should_store_and_include_event_ids_in_server_sse_messages() {
+    common::init_tracing();
     let (server, session_id) = initialize_server(Some(true)).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
@@ -1480,44 +1481,46 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     let first_id = first_id.unwrap();
 
     // sse connection is closed in read_sse_event()
-    // wait 4 seconds so server detect the disconnect and simulate a network error
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // wait so server detect the disconnect and simulate a network error
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::task::yield_now().await;
     // we send another notification while SSE is disconnected
-    let result = server
+    let _result = server
         .hyper_runtime
         .send_logging_message(
             &session_id,
             LoggingMessageNotificationParams {
-                data: json!("notification1"),
+                data: json!("notification2"),
                 level: LoggingLevel::Info,
                 logger: None,
             },
         )
         .await;
 
-    println!(">>> result {:?} ", result);
-
     //  make a new standalone SSE connection to simulate a re-connection
     let response =
         get_standalone_stream(&server.streamable_url, &session_id, Some(&first_id)).await;
     assert_eq!(response.status(), StatusCode::OK);
-    println!(">>> 90 {:?} ", 90);
-
     let events = read_sse_event(response, 1).await.unwrap();
-    println!(">>> 100 {:?} ", 100);
 
-    // assert_eq!(events.len(), 1);
-    // println!(">>>  {:?} ", events);
+    assert_eq!(events.len(), 1);
+    let message: ServerJsonrpcNotification = serde_json::from_str(&events[0].2).unwrap();
+
+    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
+        notification1,
+    )) = message.notification
+    else {
+        panic!("invalid message received!");
+    };
+
+    assert_eq!(notification1.params.data.as_str().unwrap(), "notification2");
 }
 
-// TODO: should return 400 error for invalid JSON-RPC messages
-//
+// should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
-
 // NA: should reject second initialization request
 // NA: should pass request info to tool callback
 // NA: should reject second SSE stream even in stateless mode
-
 // should reject requests to uninitialized server
 // should accept requests with matching protocol version
 // should accept when protocol version differs from negotiated version
@@ -1526,7 +1529,6 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
 // should accept pre-parsed request body
 // should handle pre-parsed batch messages
 // should prefer pre-parsed body over request body
-
 // should operate without session ID validation
 // should handle POST requests with various session IDs in stateless mode
 // should call onsessionclosed callback when session is closed via DELETE

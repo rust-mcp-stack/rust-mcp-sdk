@@ -153,7 +153,7 @@ impl EventStore for InMemoryEventStore {
         let mut storage_map = self.storage_map.write().await;
 
         tracing::trace!(
-            "Storing event for session: {session_id}, stream_id: {stream_id}, message: {message}, {time_stamp} ",
+            "Storing event for session: {session_id}, stream_id: {stream_id}, message: '{message}', {time_stamp} ",
         );
 
         let session_map = storage_map

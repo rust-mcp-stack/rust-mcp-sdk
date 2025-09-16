@@ -1,8 +1,10 @@
+use crate::event_store::EventStore;
 use crate::schema::schema_utils::{
     ClientMessage, ClientMessages, MessageFromServer, SdkError, ServerMessage, ServerMessages,
 };
 use crate::schema::RequestId;
 use async_trait::async_trait;
+use rust_mcp_schema::BooleanSchema;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -19,7 +21,7 @@ use crate::mcp_stream::MCPStream;
 use crate::message_dispatcher::MessageDispatcher;
 use crate::transport::Transport;
 use crate::utils::{endpoint_with_session_id, CancellationTokenSource};
-use crate::{IoStream, McpDispatch, SessionId, TransportDispatcher, TransportOptions};
+use crate::{IoStream, McpDispatch, SessionId, StreamId, TransportDispatcher, TransportOptions};
 
 pub struct SseTransport<R>
 where
@@ -33,6 +35,10 @@ where
     message_sender: Arc<tokio::sync::RwLock<Option<MessageDispatcher<R>>>>,
     error_stream: tokio::sync::RwLock<Option<IoStream>>,
     pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
+    // resumability support
+    session_id: Option<SessionId>,
+    stream_id: Option<StreamId>,
+    event_store: Option<Arc<dyn EventStore>>,
 }
 
 /// Server-Sent Events (SSE) transport implementation
@@ -67,6 +73,9 @@ where
             message_sender: Arc::new(tokio::sync::RwLock::new(None)),
             error_stream: tokio::sync::RwLock::new(None),
             pending_requests: Arc::new(Mutex::new(HashMap::new())),
+            session_id: None,
+            stream_id: None,
+            event_store: None,
         })
     }
 
@@ -85,6 +94,19 @@ where
     ) {
         let mut lock = self.error_stream.write().await;
         *lock = Some(IoStream::Writable(error_stream));
+    }
+
+    /// Supports resumability for streamable HTTP transports by setting the session ID,
+    /// stream ID, and event store.
+    pub fn make_resumable(
+        &mut self,
+        session_id: SessionId,
+        stream_id: StreamId,
+        event_store: Arc<dyn EventStore>,
+    ) {
+        self.session_id = Some(session_id);
+        self.stream_id = Some(stream_id);
+        self.event_store = Some(event_store);
     }
 }
 
@@ -123,10 +145,10 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
         sender.send_batch(message, request_timeout).await
     }
 
-    async fn write_str(&self, payload: &str) -> TransportResult<()> {
+    async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()> {
         let sender = self.message_sender.read().await;
         let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
-        sender.write_str(payload).await
+        sender.write_str(payload, skip_store).await
     }
 }
 
@@ -161,7 +183,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
             )
         })?;
 
-        let (stream, sender, error_stream) = MCPStream::create::<ClientMessages, ClientMessage>(
+        let (stream, mut sender, error_stream) = MCPStream::create::<ClientMessages, ClientMessage>(
             Box::pin(read_rx),
             Mutex::new(Box::pin(write_tx)),
             IoStream::Writable(Box::pin(tokio::io::stderr())),
@@ -169,6 +191,18 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
             self.options.timeout,
             cancellation_token,
         );
+
+        if let (Some(session_id), Some(stream_id), Some(event_store)) = (
+            self.session_id.as_ref(),
+            self.stream_id.as_ref(),
+            self.event_store.as_ref(),
+        ) {
+            sender.make_resumable(
+                session_id.to_owned(),
+                stream_id.to_owned(),
+                event_store.clone(),
+            );
+        }
 
         self.set_message_sender(sender).await;
 
@@ -239,7 +273,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
                 interval.tick().await;
                 let sender = sender.read().await;
                 if let Some(sender) = sender.as_ref() {
-                    match sender.write_str("\n").await {
+                    match sender.write_str("\n", true).await {
                         Ok(_) => {}
                         Err(TransportError::Io(error)) => {
                             if error.kind() == std::io::ErrorKind::BrokenPipe {

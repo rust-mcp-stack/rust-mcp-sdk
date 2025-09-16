@@ -23,10 +23,10 @@ use axum::{
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
-    EventId, McpDispatch, SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER,
-    MCP_SESSION_ID_HEADER,
+    EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
+    MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
-use std::{sync::Arc, time::Duration};
+use std::{clone, sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
@@ -55,22 +55,27 @@ async fn create_sse_stream(
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    let transport = Arc::new(
-        SseTransport::<ClientMessage>::new(
-            read_rx,
-            write_tx,
-            read_tx,
-            Arc::clone(&state.transport_options),
-        )
-        .map_err(|err| TransportServerError::TransportError(err.to_string()))?,
-    );
-
     let session_id = Arc::new(session_id);
     let stream_id: Arc<StreamId> = if standalone {
         Arc::new(DEFAULT_STREAM_ID.to_string())
     } else {
         Arc::new(state.stream_id_gen.generate())
     };
+
+    let event_store = state.event_store.as_ref().map(Arc::clone);
+    let resumability_enabled = event_store.is_some();
+
+    let mut transport = SseTransport::<ClientMessage>::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    )
+    .map_err(|err| TransportServerError::TransportError(err.to_string()))?;
+    if let Some(event_store) = event_store.clone() {
+        transport.make_resumable((*session_id).clone(), (*stream_id).clone(), event_store);
+    }
+    let transport = Arc::new(transport);
 
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
@@ -96,14 +101,9 @@ async fn create_sse_stream(
 
     // Construct SSE stream
     let reader = BufReader::new(write_rx);
-    let session_id_clone = session_id.clone();
-    let event_store = state.event_store.as_ref().map(Arc::clone);
 
     // send outgoing messages from server to the client over the sse stream
     let message_stream = stream::unfold(reader, move |mut reader| {
-        let session_id = session_id_clone.clone();
-        let stream_id = stream_id.clone();
-        let event_store = event_store.clone();
         async move {
             let mut line = String::new();
 
@@ -117,24 +117,17 @@ async fn create_sse_stream(
                         return Some((Ok(Event::default()), reader));
                     }
 
-                    let mut event_id: Option<EventId> = None;
-                    // store the event for resumption if it is supported
-                    if let Some(event_store) = event_store {
-                        event_id = Some(
-                            event_store
-                                .store_event(
-                                    (*session_id).clone(),
-                                    (*stream_id).clone(),
-                                    current_timestamp(),
-                                    trimmed_line.clone(),
-                                )
-                                .await,
-                        );
-                    }
+                    let (event_id, message) = match (
+                        resumability_enabled,
+                        trimmed_line.split_once(char::from(ID_SEPARATOR)),
+                    ) {
+                        (true, Some((id, msg))) => (Some(id.to_string()), msg.to_string()),
+                        _ => (None, trimmed_line),
+                    };
 
                     let event = match event_id {
-                        Some(id) => Event::default().data(trimmed_line).id(id),
-                        None => Event::default().data(trimmed_line),
+                        Some(id) => Event::default().data(message).id(id),
+                        None => Event::default().data(message),
                     };
 
                     Some((Ok(event), reader))
@@ -161,7 +154,8 @@ async fn create_sse_stream(
             if let Some(event_store) = state.event_store.as_ref() {
                 if let Some(events) = event_store.events_after(last_event_id).await {
                     for message_payload in events.messages {
-                        let error = transport.write_str(&message_payload).await;
+                        // skip storing replay messages
+                        let error = transport.write_str(&message_payload, true).await;
                         if let Err(error) = error {
                             tracing::trace!("Error replaying message: {error}")
                         }
@@ -224,7 +218,7 @@ pub async fn create_standalone_stream(
 
     if let Some(last_event_id) = last_event_id.as_ref() {
         tracing::trace!(
-            "SSE stream rec-connected with last-event-id: {}",
+            "SSE stream re-connected with last-event-id: {}",
             last_event_id
         );
     }
