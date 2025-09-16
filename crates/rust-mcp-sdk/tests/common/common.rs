@@ -11,9 +11,11 @@ use rust_mcp_sdk::mcp_client::ClientHandler;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
 use std::process;
+use std::sync::Once;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
+use tracing_subscriber::EnvFilter;
 use wiremock::{MockServer, Request, ResponseTemplate};
 
 pub use test_client::*;
@@ -23,7 +25,17 @@ pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything
 
 #[cfg(unix)]
 pub const UVX_SERVER_GIT: &str = "mcp-server-git";
+static INIT: Once = Once::new();
 
+pub fn init_tracing() {
+    INIT.call_once(|| {
+        let filter = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("tracing"))
+            .unwrap();
+
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    });
+}
 #[mcp_tool(
     name = "say_hello",
     description = "Accepts a person's name and says a personalized \"Hello\" to that person",
@@ -126,6 +138,7 @@ pub async fn send_get_request(
             );
         }
     }
+
     client.get(url).headers(headers).send().await
 }
 
@@ -193,7 +206,9 @@ pub async fn read_sse_event(
     event_count: usize,
 ) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut stream = response.bytes_stream();
-    read_sse_event_from_stream(&mut stream, event_count).await
+    let events = read_sse_event_from_stream(&mut stream, event_count).await;
+    // drop(stream);
+    events
 }
 
 pub fn test_client_info() -> InitializeRequestParams {
