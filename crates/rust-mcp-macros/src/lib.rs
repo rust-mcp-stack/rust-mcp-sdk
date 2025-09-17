@@ -6,7 +6,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse::Parse, parse_macro_input, punctuated::Punctuated, token, Attribute, Data, DeriveInput,
-    Error, Expr, ExprLit, Fields, Lit, LitInt, LitStr, Meta, Path, PathArguments, Token, Type,
+    Error, Expr, ExprLit, Fields, GenericArgument, Lit, LitInt, LitStr, Meta, Path, PathArguments,
+    Token, Type,
 };
 use utils::{is_option, renamed_field, type_to_json_schema};
 
@@ -44,6 +45,8 @@ struct McpToolMacroAttributes {
 }
 
 use syn::parse::ParseStream;
+
+use crate::utils::{generate_enum_parse, is_enum};
 
 struct ExprList {
     exprs: Punctuated<Expr, Token![,]>,
@@ -518,6 +521,182 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let macro_attributes = parse_macro_input!(attributes as McpElicitationAttributes);
     let message = macro_attributes.message.unwrap_or_default();
 
+    // Generate field assignments for from_content_map()
+    let field_assignments = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => {
+                let assignments = fields.named.iter().map(|field| {
+                      let field_attrs = &field.attrs;
+                      let field_ident = &field.ident;
+                      let renamed_field = renamed_field(field_attrs);
+                      let field_name = renamed_field.unwrap_or_else(|| field_ident.as_ref().unwrap().to_string());
+                      let field_type = &field.ty;
+
+                      let type_check = if is_option(field_type) {
+                          // Extract inner type for Option<T>
+                          let inner_type = match field_type {
+                              Type::Path(type_path) => {
+                                  let segment = type_path.path.segments.last().unwrap();
+                                  if segment.ident == "Option" {
+                                      match &segment.arguments {
+                                          PathArguments::AngleBracketed(args) => {
+                                              match args.args.first().unwrap() {
+                                                  GenericArgument::Type(ty) => ty,
+                                                  _ => panic!("Expected type argument in Option<T>"),
+                                              }
+                                          }
+                                          _ => panic!("Invalid Option type"),
+                                      }
+                                  } else {
+                                      panic!("Expected Option type");
+                                  }
+                              }
+                              _ => panic!("Expected Option type"),
+                          };
+                          // Determine the match arm based on the inner type at compile time
+                          let (inner_type_ident, match_pattern, conversion) = match inner_type {
+                              Type::Path(type_path) if type_path.path.is_ident("String") => (
+                                  quote! { String },
+                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
+                                  quote! { s.clone() }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
+                                  quote! { bool },
+                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
+                                  quote! { *b }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
+                                  quote! { i32 },
+                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
+                                  quote! {
+                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
+                                          "Invalid number for field '{}': value {} does not fit in i32",
+                                          #field_name, *i
+                                      )))?
+                                  }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
+                                  quote! { i64 },
+                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
+                                  quote! { *i }
+                              ),
+                              _ if is_enum(inner_type, &input) => {
+                                  let enum_parse = generate_enum_parse(inner_type, &field_name, &base_crate);
+                                  (
+                                      quote! { #inner_type },
+                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
+                                      quote! { #enum_parse }
+                                  )
+                              }
+                              _ => panic!("Unsupported inner type for Option field: {}", quote! { #inner_type }.to_string()),
+                          };
+                          let inner_type_str = quote! { stringify!(#inner_type_ident) };
+                          quote! {
+                              let #field_ident: Option<#inner_type_ident> = match content.as_ref().and_then(|map| map.get(#field_name)) {
+                                  Some(value) => {
+                                      match value {
+                                          #match_pattern => Some(#conversion),
+                                          _ => {
+                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
+                                                  "Type mismatch for field '{}': expected {}, found {}",
+                                                  #field_name, #inner_type_str,
+                                                  match value {
+                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
+                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
+                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
+                                                  }
+                                              )));
+                                          }
+                                      }
+                                  }
+                                  None => None,
+                              };
+                          }
+                      } else {
+                          // Determine the match arm based on the field type at compile time
+                          let (field_type_ident, match_pattern, conversion) = match field_type {
+                              Type::Path(type_path) if type_path.path.is_ident("String") => (
+                                  quote! { String },
+                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
+                                  quote! { s.clone() }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
+                                  quote! { bool },
+                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
+                                  quote! { *b }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
+                                  quote! { i32 },
+                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
+                                  quote! {
+                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
+                                          "Invalid number for field '{}': value {} does not fit in i32",
+                                          #field_name, *i
+                                      )))?
+                                  }
+                              ),
+                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
+                                  quote! { i64 },
+                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
+                                  quote! { *i }
+                              ),
+                              _ if is_enum(field_type, &input) => {
+                                  let enum_parse = generate_enum_parse(field_type, &field_name, &base_crate);
+                                  (
+                                      quote! { #field_type },
+                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
+                                      quote! { #enum_parse }
+                                  )
+                              }
+                              _ => panic!("Unsupported field type: {}", quote! { #field_type }.to_string()),
+                          };
+                          let type_str = quote! { stringify!(#field_type_ident) };
+                          quote! {
+                              let #field_ident: #field_type_ident = match content.as_ref().and_then(|map| map.get(#field_name)) {
+                                  Some(value) => {
+                                      match value {
+                                          #match_pattern => #conversion,
+                                          _ => {
+                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
+                                                  "Type mismatch for field '{}': expected {}, found {}",
+                                                  #field_name, #type_str,
+                                                  match value {
+                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
+                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
+                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
+                                                  }
+                                              )));
+                                          }
+                                      }
+                                  }
+                                  None => {
+                                      return Err(#base_crate::RpcError::parse_error().with_message(format!(
+                                          "Missing required field: {}",
+                                          #field_name
+                                      )));
+                                  }
+                              };
+                          }
+                      };
+
+                      type_check
+                  });
+
+                let field_idents = fields.named.iter().map(|field| &field.ident);
+
+                quote! {
+                    #(#assignments)*
+
+                    Ok(Self {
+                        #(#field_idents,)*
+                    })
+                }
+            }
+            _ => panic!("mcp_elicit macro only supports structs with named fields"),
+        },
+        _ => panic!("mcp_elicit macro only supports structs"),
+    };
+
     let output = quote! {
         impl #input_ident {
 
@@ -525,7 +704,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 #message.to_string()
             }
 
-            pub fn requested_schema() -> #base_crate::ElicitRequestParamsRequestedSchema {
+            pub fn requested_schema() -> #base_crate::ElicitRequestedSchema {
                 let json_schema = &#input_ident::json_schema();
 
                 let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
@@ -567,10 +746,14 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     .unwrap();
 
                 let properties =
-                    properties.expect("Was not able to create a ElicitRequestParamsRequestedSchema");
+                    properties.expect("Was not able to create a ElicitRequestedSchema");
 
-                let requested_schema = ElicitRequestParamsRequestedSchema::new(properties, required);
+                let requested_schema = ElicitRequestedSchema::new(properties, required);
                 requested_schema
+            }
+
+            pub fn from_content_map(content: ::std::option::Option<::std::collections::HashMap<::std::string::String, #base_crate::ElicitResultContentValue>>) -> Result<Self, #base_crate::RpcError> {
+                #field_assignments
             }
         }
         #input
@@ -578,6 +761,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
     TokenStream::from(output)
 }
+
 /// Derives a JSON Schema representation for a struct.
 ///
 /// This procedural macro generates a `json_schema()` method for the annotated struct, returning a

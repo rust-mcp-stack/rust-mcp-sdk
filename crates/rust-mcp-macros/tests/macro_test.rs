@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate rust_mcp_macros;
 
-use std::{panic, str::FromStr};
+use std::{collections::HashMap, panic, str::FromStr};
 
 use common::EditOperation;
 use rust_mcp_schema::{
-    BooleanSchema, ElicitRequestParamsRequestedSchema, ElicitRequestedSchema, EnumSchema,
-    NumberSchema, PrimitiveSchemaDefinition, StringSchema, StringSchemaFormat,
+    BooleanSchema, ElicitRequestedSchema, ElicitResultContentValue, EnumSchema, NumberSchema,
+    PrimitiveSchemaDefinition, StringSchema, StringSchemaFormat,
 };
 use serde_json::json;
 
@@ -154,7 +154,6 @@ fn test_elicit_macro() {
         /// Is user a student?
         #[json_schema(title = "Is student", default = true)]
         pub is_student: Option<bool>,
-
         #[json_schema(title = "Is married?")]
         pub is_married: Married,
     }
@@ -279,4 +278,61 @@ fn test_elicit_macro() {
     let properties = properties.expect("Was not able to create a ElicitRequestedSchema");
 
     ElicitRequestedSchema::new(properties, required);
+}
+
+#[test]
+fn test_from_content_map() {
+    #[derive(JsonSchema, Debug)]
+    enum Married {
+        #[json_schema(title = "This person is married")]
+        Yes,
+        #[json_schema(title = "This person is not married")]
+        No,
+    }
+
+    #[mcp_elicit(message = "Please enter user info")]
+    #[derive(JsonSchema, Debug)]
+    struct UserInfo {
+        #[json_schema(
+            title = "User Name",
+            description = "The user's full name (overrides doc)",
+            min_length = 1,
+            max_length = 100
+        )]
+        pub name: String,
+        #[json_schema(
+            title = "User Email",
+            format = "email",
+            min_length = 5,
+            max_length = 255
+        )]
+        pub email: Option<String>,
+        #[json_schema(title = "Age", description = "user age", minimum = 15, maximum = 125)]
+        pub age: i32,
+        /// Is user a student?
+        #[json_schema(title = "Is student", default = true)]
+        pub is_student: Option<bool>,
+        #[json_schema(title = "Is married?")]
+        pub is_married: Married,
+    }
+
+    let mut content: ::std::collections::HashMap<::std::string::String, ElicitResultContentValue> =
+        HashMap::new();
+
+    content.insert(
+        "name".to_string(),
+        ElicitResultContentValue::String("Ali".to_string()),
+    );
+    content.insert(
+        "is_married".to_string(),
+        ElicitResultContentValue::String("Yes".to_string()),
+    );
+    content.insert("age".to_string(), ElicitResultContentValue::Integer(15));
+    content.insert(
+        "is_student".to_string(),
+        ElicitResultContentValue::Boolean(false),
+    );
+
+    let u: UserInfo = UserInfo::from_content_map(Some(content)).unwrap();
+    assert!(matches!(u.is_married, Married::Yes));
 }

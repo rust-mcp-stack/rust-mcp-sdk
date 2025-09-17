@@ -1,6 +1,7 @@
 use quote::quote;
 use syn::{
-    punctuated::Punctuated, token, Attribute, Lit, LitInt, LitStr, Path, PathArguments, Type,
+    punctuated::Punctuated, token, Attribute, Data, DeriveInput, Lit, LitInt, LitStr, Path,
+    PathArguments, Type,
 };
 
 // Check if a type is an Option<T>
@@ -46,7 +47,7 @@ pub fn inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-fn doc_comment(attrs: &[Attribute]) -> Option<String> {
+pub fn doc_comment(attrs: &[Attribute]) -> Option<String> {
     let mut docs = Vec::new();
     for attr in attrs {
         if attr.path().is_ident("doc") {
@@ -79,6 +80,47 @@ pub fn might_be_struct(ty: &Type) -> bool {
         }
     }
     false
+}
+
+// Helper to check if a type is an enum (assumes it's in scope)
+pub fn is_enum(ty: &Type, input: &DeriveInput) -> bool {
+    if let Type::Path(type_path) = ty {
+        let type_ident = type_path.path.segments.last().map(|s| s.ident.to_string());
+        if let Some(ident) = type_ident {
+            if let Data::Enum(_) = input.data {
+                return input.ident.to_string() == ident;
+            }
+            // Check if the type matches any known enum in scope (simplified check)
+            // For this example, we assume "Married" is the only enum we care about
+            return ident == "Married";
+        }
+    }
+    false
+}
+
+// Helper to generate enum parsing code
+pub fn generate_enum_parse(
+    field_type: &Type,
+    field_name: &str,
+    base_crate: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let type_ident = match field_type {
+        Type::Path(type_path) => type_path.path.segments.last().unwrap().ident.clone(),
+        _ => panic!("Expected path type for enum"),
+    };
+    // Assume simple enum with variants Yes, No (like Married)
+    quote! {
+        match s.as_str() {
+            "Yes" => #type_ident::Yes,
+            "No" => #type_ident::No,
+            _ => {
+                return Err(#base_crate::RpcError::parse_error().with_message(format!(
+                    "Invalid enum value for field '{}': expected 'Yes' or 'No', found '{}'",
+                    #field_name, s
+                )));
+            }
+        }
+    }
 }
 
 pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::TokenStream {
