@@ -9,7 +9,7 @@ use crate::{
 };
 
 const MAX_EVENTS_PER_SESSION: usize = 64;
-const ID_SEPERATOR: &str = "-.-";
+const ID_SEPARATOR: &str = "-.-";
 
 #[derive(Debug, Clone)]
 struct EventEntry {
@@ -76,7 +76,7 @@ impl InMemoryEventStore {
         stream_id: &StreamId,
         time_stamp: u128,
     ) -> String {
-        format!("{session_id}{ID_SEPERATOR}{stream_id}{ID_SEPERATOR}{time_stamp}")
+        format!("{session_id}{ID_SEPARATOR}{stream_id}{ID_SEPARATOR}{time_stamp}")
     }
 
     /// Parses an event ID into its session, stream, and timestamp components.
@@ -108,7 +108,7 @@ impl InMemoryEventStore {
         }
 
         // Split into exactly three parts
-        let parts: Vec<&'a str> = event_id.split(ID_SEPERATOR).collect();
+        let parts: Vec<&'a str> = event_id.split(ID_SEPARATOR).collect();
         if parts.len() != 3 {
             return None;
         }
