@@ -4,7 +4,9 @@ extern crate rust_mcp_macros;
 use std::{panic, str::FromStr};
 
 use common::EditOperation;
-use rust_mcp_schema::{ElicitRequestParamsRequestedSchema, PrimitiveSchemaDefinition};
+use rust_mcp_schema::{
+    ElicitRequestParamsRequestedSchema, ElicitRequestedSchema, PrimitiveSchemaDefinition,
+};
 use serde_json::json;
 
 #[path = "common/common.rs"]
@@ -12,7 +14,7 @@ pub mod common;
 
 #[mcp_elicit(message = "Please enter user info")]
 #[derive(JsonSchema)]
-struct User {
+struct UserInfo {
     #[json_schema(
         title = "User Name",
         description = "The user's full name (overrides doc)",
@@ -27,12 +29,11 @@ struct User {
         max_length = 255
     )]
     pub email: Option<String>,
+    #[json_schema(title = "Age", description = "age", minimum = 15, maximum = 125)]
+    pub age: i32,
     /// Is user a student?
-    #[json_schema(
-        title = "Is student",
-        default:true
-    )]
-    pub cool: Option<bool>,
+    #[json_schema(title = "Is student", default = true)]
+    pub is_student: Option<bool>,
 }
 
 #[test]
@@ -146,11 +147,14 @@ fn test_attributes() {
 
 #[test]
 fn test_elicit_macro() {
-    assert_eq!(User::message(), "Please enter user info");
+    assert_eq!(UserInfo::message(), "Please enter user info");
 
-    let requested_schema: ElicitRequestParamsRequestedSchema = User::requested_schema();
+    let requested_schema: ElicitRequestedSchema = UserInfo::requested_schema();
 
-    let json_schema = &User::json_schema();
+    println!(">>> requested_schema {:?} ", requested_schema);
+
+    let json_schema = &UserInfo::json_schema();
+    println!(">>> requested_schema {:?} ", json_schema);
 
     let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
         Some(arr) => arr
@@ -190,8 +194,7 @@ fn test_elicit_macro() {
         .transpose()
         .unwrap();
 
-    let properties =
-        properties.expect("Was not able to create a ElicitRequestParamsRequestedSchema");
+    let properties = properties.expect("Was not able to create a ElicitRequestedSchema");
 
-    ElicitRequestParamsRequestedSchema::new(properties, required);
+    ElicitRequestedSchema::new(properties, required);
 }

@@ -4,10 +4,10 @@ use crate::schema::{
         ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
-    ElicitRequest, ElicitRequestParams, ElicitRequestParamsRequestedSchema, ElicitResult,
-    GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
-    ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest,
-    ListRootsRequestParams, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
+    ElicitRequest, ElicitRequestParams, ElicitRequestedSchema, ElicitResult, GetPromptRequest,
+    Implementation, InitializeRequestParams, InitializeResult, ListPromptsRequest,
+    ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListRootsRequestParams,
+    ListRootsResult, ListToolsRequest, LoggingMessageNotification,
     LoggingMessageNotificationParams, PingRequest, PromptListChangedNotification,
     PromptListChangedNotificationParams, ReadResourceRequest, RequestId,
     ResourceListChangedNotification, ResourceListChangedNotificationParams,
@@ -16,7 +16,6 @@ use crate::schema::{
 };
 use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
-use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
 
 //TODO: support options , such as enforceStrictCapabilities
@@ -66,7 +65,7 @@ pub trait McpServer: Sync + Send {
     async fn elicit_input(
         &self,
         message: String,
-        requested_schema: ElicitRequestParamsRequestedSchema,
+        requested_schema: ElicitRequestedSchema,
     ) -> SdkResult<ElicitResult> {
         let request: ElicitRequest = ElicitRequest::new(ElicitRequestParams {
             message,
