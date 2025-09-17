@@ -6,9 +6,11 @@ use std::{collections::HashMap, panic, str::FromStr};
 use common::EditOperation;
 use rust_mcp_schema::{
     BooleanSchema, ElicitRequestedSchema, ElicitResultContentValue, EnumSchema, NumberSchema,
-    PrimitiveSchemaDefinition, StringSchema, StringSchemaFormat,
+    PrimitiveSchemaDefinition, RpcError, StringSchema, StringSchemaFormat,
 };
 use serde_json::json;
+
+use crate::common::{Colors, UserInfo};
 
 #[path = "common/common.rs"]
 pub mod common;
@@ -124,44 +126,13 @@ fn test_attributes() {
 
 #[test]
 fn test_elicit_macro() {
-    #[derive(JsonSchema)]
-    enum Married {
-        #[json_schema(title = "This person is married")]
-        Yes,
-        #[json_schema(title = "This person is not married")]
-        No,
-    }
-
-    #[mcp_elicit(message = "Please enter user info")]
-    #[derive(JsonSchema)]
-    struct UserInfo {
-        #[json_schema(
-            title = "User Name",
-            description = "The user's full name (overrides doc)",
-            min_length = 1,
-            max_length = 100
-        )]
-        pub name: String,
-        #[json_schema(
-            title = "User Email",
-            format = "email",
-            min_length = 5,
-            max_length = 255
-        )]
-        pub email: Option<String>,
-        #[json_schema(title = "Age", description = "user age", minimum = 15, maximum = 125)]
-        pub age: i32,
-        /// Is user a student?
-        #[json_schema(title = "Is student", default = true)]
-        pub is_student: Option<bool>,
-        #[json_schema(title = "Is married?")]
-        pub is_married: Married,
-    }
-
-    assert_eq!(UserInfo::message(), "Please enter user info");
+    assert_eq!(UserInfo::message(), "Please enter your info");
 
     let requested_schema: ElicitRequestedSchema = UserInfo::requested_schema();
-    assert_eq!(requested_schema.required, vec!["name", "age", "is_married"]);
+    assert_eq!(
+        requested_schema.required,
+        vec!["name", "age", "favorate_color"]
+    );
 
     assert!(matches!(
         requested_schema.properties.get("is_student").unwrap(),
@@ -173,13 +144,13 @@ fn test_elicit_macro() {
         })
         if
         description.as_ref().unwrap() == "Is user a student?" &&
-        title.as_ref().unwrap() == "Is student" &&
+        title.as_ref().unwrap() == "Is student?" &&
         matches!(default, Some(true))
 
     ));
 
     assert!(matches!(
-        requested_schema.properties.get("is_married").unwrap(),
+        requested_schema.properties.get("favorate_color").unwrap(),
         PrimitiveSchemaDefinition::EnumSchema(EnumSchema {
             description,
             enum_,
@@ -187,9 +158,10 @@ fn test_elicit_macro() {
             title,
             ..
         })
-        if description.is_none() && title.as_ref().unwrap() == "Is married?" &&
-        enum_.len()==2 && enum_.iter().all(|s| ["Yes", "No"].contains(&s.as_str())) &&
-        enum_names.len()==2 && enum_names.iter().all(|s| ["This person is married", "This person is not married"].contains(&s.as_str()))
+        if description.as_ref().unwrap() == "User's favorite color" &&
+        title.is_none() &&
+        enum_.len()==2 && enum_.iter().all(|s| ["Green", "Red"].contains(&s.as_str())) &&
+        enum_names.len()==2 && enum_names.iter().all(|s| ["Green Color", "Red Color"].contains(&s.as_str()))
     ));
 
     assert!(matches!(
@@ -202,7 +174,7 @@ fn test_elicit_macro() {
             type_
         })
         if
-        description.as_ref().unwrap() == "user age" &&
+        description.as_ref().unwrap() == "The user's age in years" &&
         maximum.unwrap() == 125 && minimum.unwrap() == 15 && title.as_ref().unwrap() == "Age"
     ));
 
@@ -217,8 +189,8 @@ fn test_elicit_macro() {
             ..
         })
         if format.is_none() &&
-        description.as_ref().unwrap() == "The user's full name (overrides doc)" &&
-        max_length.unwrap() == 100 && min_length.unwrap() == 1 && title.as_ref().unwrap() == "User Name"
+        description.as_ref().unwrap() == "The user's full name" &&
+        max_length.unwrap() == 100 && min_length.unwrap() == 5 && title.as_ref().unwrap() == "Name"
     ));
 
     assert!(matches!(
@@ -231,8 +203,8 @@ fn test_elicit_macro() {
             title,
             ..
         }) if matches!(format.unwrap(), StringSchemaFormat::Email) &&
-        description.is_none() &&
-        max_length.unwrap() == 255 && min_length.unwrap() == 5 && title.as_ref().unwrap() == "User Email"
+        description.as_ref().unwrap() == "Email address of the user" &&
+        max_length.is_none() && min_length.is_none() && title.as_ref().unwrap() == "Email"
     ));
 
     let json_schema = &UserInfo::json_schema();
@@ -282,40 +254,6 @@ fn test_elicit_macro() {
 
 #[test]
 fn test_from_content_map() {
-    #[derive(JsonSchema, Debug)]
-    enum Married {
-        #[json_schema(title = "This person is married")]
-        Yes,
-        #[json_schema(title = "This person is not married")]
-        No,
-    }
-
-    #[mcp_elicit(message = "Please enter user info")]
-    #[derive(JsonSchema, Debug)]
-    struct UserInfo {
-        #[json_schema(
-            title = "User Name",
-            description = "The user's full name (overrides doc)",
-            min_length = 1,
-            max_length = 100
-        )]
-        pub name: String,
-        #[json_schema(
-            title = "User Email",
-            format = "email",
-            min_length = 5,
-            max_length = 255
-        )]
-        pub email: Option<String>,
-        #[json_schema(title = "Age", description = "user age", minimum = 15, maximum = 125)]
-        pub age: i32,
-        /// Is user a student?
-        #[json_schema(title = "Is student", default = true)]
-        pub is_student: Option<bool>,
-        #[json_schema(title = "Is married?")]
-        pub is_married: Married,
-    }
-
     let mut content: ::std::collections::HashMap<::std::string::String, ElicitResultContentValue> =
         HashMap::new();
 
@@ -325,8 +263,8 @@ fn test_from_content_map() {
             ElicitResultContentValue::String("Ali".to_string()),
         ),
         (
-            "is_married".to_string(),
-            ElicitResultContentValue::String("Yes".to_string()),
+            "favorate_color".to_string(),
+            ElicitResultContentValue::String("Green".to_string()),
         ),
         ("age".to_string(), ElicitResultContentValue::Integer(15)),
         (
@@ -336,5 +274,5 @@ fn test_from_content_map() {
     ]);
 
     let u: UserInfo = UserInfo::from_content_map(Some(content)).unwrap();
-    assert!(matches!(u.is_married, Married::Yes));
+    assert!(matches!(u.favorate_color, Colors::Green));
 }

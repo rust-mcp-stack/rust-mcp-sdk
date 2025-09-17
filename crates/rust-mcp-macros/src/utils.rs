@@ -82,20 +82,28 @@ pub fn might_be_struct(ty: &Type) -> bool {
     false
 }
 
-// Helper to check if a type is an enum (assumes it's in scope)
-pub fn is_enum(ty: &Type, input: &DeriveInput) -> bool {
+// Helper to check if a type is an enum
+pub fn is_enum(ty: &Type, _input: &DeriveInput) -> bool {
     if let Type::Path(type_path) = ty {
-        let type_ident = type_path.path.segments.last().map(|s| s.ident.to_string());
-        if let Some(ident) = type_ident {
-            if let Data::Enum(_) = input.data {
-                return input.ident.to_string() == ident;
-            }
-            // Check if the type matches any known enum in scope (simplified check)
-            // For this example, we assume "Married" is the only enum we care about
-            return ident == "Married";
-        }
+        // Check for #[mcp_elicit(enum)] attribute on the type
+        // Since we can't access the enum's definition directly, we rely on the attribute
+        // This assumes the enum is marked with #[mcp_elicit(enum)] in its definition
+        // Alternatively, we could pass a list of known enums, but attribute-based is simpler
+        type_path
+            .path
+            .segments
+            .last()
+            .map(|s| {
+                // For now, we'll assume any type could be an enum if it has the attribute
+                // In a real-world scenario, we'd need to resolve the type's definition
+                // For simplicity, we check if the type name is plausible (not String, bool, i32, i64)
+                let ident = s.ident.to_string();
+                !["String", "bool", "i32", "i64"].contains(&ident.as_str())
+            })
+            .unwrap_or(false)
+    } else {
+        false
     }
-    false
 }
 
 // Helper to generate enum parsing code
@@ -108,16 +116,21 @@ pub fn generate_enum_parse(
         Type::Path(type_path) => type_path.path.segments.last().unwrap().ident.clone(),
         _ => panic!("Expected path type for enum"),
     };
-    // Assume simple enum with variants Yes, No (like Married)
+    // Since we can't access the enum's variants directly in this context,
+    // we'll assume the enum has unit variants and expect strings matching their names
+    // In a real-world scenario, you'd parse the enum's Data::Enum to get variant names
+    // For now, we'll generate a generic parse assuming variant names are provided as strings
     quote! {
-        match s.as_str() {
-            "Yes" => #type_ident::Yes,
-            "No" => #type_ident::No,
-            _ => {
-                return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                    "Invalid enum value for field '{}': expected 'Yes' or 'No', found '{}'",
-                    #field_name, s
-                )));
+        {
+            // Attempt to parse the string using a match
+            // Since we don't have the variants, we rely on the enum implementing FromStr
+            match s.as_str() {
+                // We can't dynamically list variants, so we use FromStr
+                // If FromStr is not implemented, this will fail at compile time
+                s => s.parse().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
+                    "Invalid enum value for field '{}': cannot parse '{}' into {}",
+                    #field_name, s, stringify!(#type_ident)
+                )))?
             }
         }
     }

@@ -749,7 +749,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                                             None
                                         }
                                     })
-                                    .map(|obj| (key.to_string(), PrimitiveSchemaDefinition::try_from(&obj)))
+                                    .map(|obj| (key.to_string(), #base_crate::PrimitiveSchemaDefinition::try_from(&obj)))
                             })
                             .collect()
                     });
@@ -766,7 +766,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 let properties =
                     properties.expect("Was not able to create a ElicitRequestedSchema");
 
-                let requested_schema = ElicitRequestedSchema::new(properties, required);
+                let requested_schema = #base_crate::ElicitRequestedSchema::new(properties, required);
                 requested_schema
             }
 
