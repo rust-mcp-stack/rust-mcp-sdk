@@ -191,6 +191,7 @@ impl ServerHandler for MyServerHandler {
     }
 
     /// Handles requests to call a specific tool.
+
     async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer> ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
