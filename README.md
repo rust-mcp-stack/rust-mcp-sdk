@@ -419,6 +419,7 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `hyper-server`:  This feature enables the **sse** transport for MCP servers, supporting multiple simultaneous client connections out of the box.
 - `ssl`: This feature enables TLS/SSL support for the **sse** transport when used with the `hyper-server`.
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
+- `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
 
 #### MCP Protocol Versions with Corresponding Features
 
