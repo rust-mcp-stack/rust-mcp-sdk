@@ -81,7 +81,7 @@ fn test_attributes() {
         "type": "object",
         "properties": {
             "id": {
-                "type": "number",
+                "type": "integer",
                 "description": "This is a fallback description from doc comment."
             },
             "name": {
@@ -103,10 +103,6 @@ fn test_attributes() {
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "title": "Tags",
-                    "description": "List of tags",
-                    "maxLength": 10,
-                    "minLength": 0,
                 },
                 "title": "Tags",
                 "description": "List of tags",

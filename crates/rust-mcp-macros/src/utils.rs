@@ -734,12 +734,12 @@ mod tests {
     }
 
     #[test]
-    fn test_json_schema_number() {
+    fn test_json_schema_integer() {
         let ty: syn::Type = parse_quote!(i32);
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
         assert!(output
-            .contains("\"type\".to_string(),serde_json::Value::String(\"number\".to_string())"));
+            .contains("\"type\".to_string(),serde_json::Value::String(\"integer\".to_string())"));
     }
 
     #[test]
@@ -768,7 +768,7 @@ mod tests {
         let output = render(tokens);
         assert!(output.contains("\"nullable\".to_string(),serde_json::Value::Bool(true)"));
         assert!(output
-            .contains("\"type\".to_string(),serde_json::Value::String(\"number\".to_string())"));
+            .contains("\"type\".to_string(),serde_json::Value::String(\"integer\".to_string())"));
     }
 
     #[test]
