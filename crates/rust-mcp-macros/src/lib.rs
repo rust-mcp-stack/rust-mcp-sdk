@@ -613,66 +613,218 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
 ///
 #[proc_macro_derive(JsonSchema, attributes(json_schema))]
 pub fn derive_json_schema(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
+    let input = syn::parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
-    let fields = match &input.data {
+    let schema_body = match &input.data {
         Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => &fields.named,
-            _ => panic!("JsonSchema derive macro only supports named fields"),
+            Fields::Named(fields) => {
+                let field_entries = fields.named.iter().map(|field| {
+                    let field_attrs = &field.attrs;
+                    let renamed_field = renamed_field(field_attrs);
+                    let field_name =
+                        renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
+                    let field_type = &field.ty;
+
+                    let schema = type_to_json_schema(field_type, field_attrs);
+                    quote! {
+                        properties.insert(
+                            #field_name.to_string(),
+                            serde_json::Value::Object(#schema)
+                        );
+                    }
+                });
+
+                let required_fields = fields.named.iter().filter_map(|field| {
+                    let renamed_field = renamed_field(&field.attrs);
+                    let field_name =
+                        renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
+
+                    let field_type = &field.ty;
+                    if !is_option(field_type) {
+                        Some(quote! {
+                            required.push(#field_name.to_string());
+                        })
+                    } else {
+                        None
+                    }
+                });
+
+                quote! {
+                    let mut schema = serde_json::Map::new();
+                    let mut properties = serde_json::Map::new();
+                    let mut required = Vec::new();
+
+                    #(#field_entries)*
+
+                    #(#required_fields)*
+
+                    schema.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+                    schema.insert("properties".to_string(), serde_json::Value::Object(properties));
+                    if !required.is_empty() {
+                        schema.insert("required".to_string(), serde_json::Value::Array(
+                            required.into_iter().map(serde_json::Value::String).collect()
+                        ));
+                    }
+
+                    schema
+                }
+            }
+            _ => panic!("JsonSchema derive macro only supports named fields for structs"),
         },
-        _ => panic!("JsonSchema derive macro only supports structs"),
+        Data::Enum(data) => {
+            let variant_schemas = data.variants.iter().map(|variant| {
+                let variant_attrs = &variant.attrs;
+                let variant_name = variant.ident.to_string();
+                let renamed_variant = renamed_field(variant_attrs).unwrap_or(variant_name.clone());
+
+                // Parse variant-level json_schema attributes
+                let mut title: Option<String> = None;
+                let mut description: Option<String> = None;
+                for attr in variant_attrs {
+                    if attr.path().is_ident("json_schema") {
+                        let _ = attr.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("title") {
+                                title = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                            } else if meta.path.is_ident("description") {
+                                description = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                            }
+                            Ok(())
+                        });
+                    }
+                }
+
+                let title_quote = title.as_ref().map(|t| {
+                    quote! { map.insert("title".to_string(), serde_json::Value::String(#t.to_string())); }
+                });
+                let description_quote = description.as_ref().map(|desc| {
+                    quote! { map.insert("description".to_string(), serde_json::Value::String(#desc.to_string())); }
+                });
+
+                match &variant.fields {
+                    Fields::Unit => {
+                        // Unit variant: use "enum" with the variant name
+                        quote! {
+                            {
+                                let mut map = serde_json::Map::new();
+                                map.insert("enum".to_string(), serde_json::Value::Array(vec![
+                                    serde_json::Value::String(#renamed_variant.to_string())
+                                ]));
+                                #title_quote
+                                #description_quote
+                                serde_json::Value::Object(map)
+                            }
+                        }
+                    }
+                    Fields::Unnamed(fields) => {
+                        // Newtype or tuple variant
+                        if fields.unnamed.len() == 1 {
+                            // Newtype variant: use the inner type's schema
+                            let field = &fields.unnamed[0];
+                            let field_type = &field.ty;
+                            let field_attrs = &field.attrs;
+                            let schema = type_to_json_schema(field_type, field_attrs);
+                            quote! {
+                                {
+                                    let mut map = #schema;
+                                    #title_quote
+                                    #description_quote
+                                    serde_json::Value::Object(map)
+                                }
+                            }
+                        } else {
+                            // Tuple variant: array with items
+                            let field_schemas = fields.unnamed.iter().enumerate().map(|(i, field)| {
+                                let field_type = &field.ty;
+                                let field_attrs = &field.attrs;
+                                let schema = type_to_json_schema(field_type, field_attrs);
+                                quote! { serde_json::Value::Object(#schema) }
+                            });
+                            quote! {
+                                {
+                                    let mut map = serde_json::Map::new();
+                                    map.insert("type".to_string(), serde_json::Value::String("array".to_string()));
+                                    map.insert("items".to_string(), serde_json::Value::Array(vec![#(#field_schemas),*]));
+                                    map.insert("additionalItems".to_string(), serde_json::Value::Bool(false));
+                                    #title_quote
+                                    #description_quote
+                                    serde_json::Value::Object(map)
+                                }
+                            }
+                        }
+                    }
+                    Fields::Named(fields) => {
+                        // Struct variant: object with properties and required fields
+                        let field_entries = fields.named.iter().map(|field| {
+                            let field_attrs = &field.attrs;
+                            let renamed_field = renamed_field(field_attrs);
+                            let field_name = renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
+                            let field_type = &field.ty;
+
+                            let schema = type_to_json_schema(field_type, field_attrs);
+                            quote! {
+                                properties.insert(
+                                    #field_name.to_string(),
+                                    serde_json::Value::Object(#schema)
+                                );
+                            }
+                        });
+
+                        let required_fields = fields.named.iter().filter_map(|field| {
+                            let renamed_field = renamed_field(&field.attrs);
+                            let field_name = renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
+
+                            let field_type = &field.ty;
+                            if !is_option(field_type) {
+                                Some(quote! {
+                                    required.push(#field_name.to_string());
+                                })
+                            } else {
+                                None
+                            }
+                        });
+
+                        quote! {
+                            {
+                                let mut map = serde_json::Map::new();
+                                let mut properties = serde_json::Map::new();
+                                let mut required = Vec::new();
+
+                                #(#field_entries)*
+
+                                #(#required_fields)*
+
+                                map.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+                                map.insert("properties".to_string(), serde_json::Value::Object(properties));
+                                if !required.is_empty() {
+                                    map.insert("required".to_string(), serde_json::Value::Array(
+                                        required.into_iter().map(serde_json::Value::String).collect()
+                                    ));
+                                }
+                                #title_quote
+                                #description_quote
+                                serde_json::Value::Object(map)
+                            }
+                        }
+                    }
+                }
+            });
+
+            quote! {
+                let mut schema = serde_json::Map::new();
+                schema.insert("oneOf".to_string(), serde_json::Value::Array(vec![
+                    #(#variant_schemas),*
+                ]));
+                schema
+            }
+        }
+        _ => panic!("JsonSchema derive macro only supports structs and enums"),
     };
-
-    let field_entries = fields.iter().map(|field| {
-        let field_attrs = &field.attrs;
-        let renamed_field = renamed_field(field_attrs);
-        let field_name = renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
-        let field_type = &field.ty;
-
-        let schema = type_to_json_schema(field_type, field_attrs);
-        quote! {
-            properties.insert(
-                #field_name.to_string(),
-                serde_json::Value::Object(#schema)
-            );
-        }
-    });
-
-    let required_fields = fields.iter().filter_map(|field| {
-        let renamed_field = renamed_field(&field.attrs);
-        let field_name = renamed_field.unwrap_or(field.ident.as_ref().unwrap().to_string());
-
-        let field_type = &field.ty;
-        if !is_option(field_type) {
-            Some(quote! {
-                required.push(#field_name.to_string());
-            })
-        } else {
-            None
-        }
-    });
 
     let expanded = quote! {
         impl #name {
             pub fn json_schema() -> serde_json::Map<String, serde_json::Value> {
-                let mut schema = serde_json::Map::new();
-                let mut properties = serde_json::Map::new();
-                let mut required = Vec::new();
-
-                #(#field_entries)*
-
-                #(#required_fields)*
-
-                schema.insert("type".to_string(), serde_json::Value::String("object".to_string()));
-                schema.insert("properties".to_string(), serde_json::Value::Object(properties));
-                if !required.is_empty() {
-                    schema.insert("required".to_string(), serde_json::Value::Array(
-                        required.into_iter().map(serde_json::Value::String).collect()
-                    ));
-                }
-
-                schema
+                #schema_body
             }
         }
     };

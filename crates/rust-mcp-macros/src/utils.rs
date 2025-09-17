@@ -123,7 +123,6 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                         Lit::Int(lit_int) => {
                             let value = lit_int.base10_parse::<i64>()?;
-                            // Debug assertion to ensure integer default is parsed
                             assert!(
                                 value >= i64::MIN && value <= i64::MAX,
                                 "Default value {} out of range for i64",

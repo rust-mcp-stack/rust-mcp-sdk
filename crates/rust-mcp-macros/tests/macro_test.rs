@@ -5,36 +5,13 @@ use std::{panic, str::FromStr};
 
 use common::EditOperation;
 use rust_mcp_schema::{
-    ElicitRequestParamsRequestedSchema, ElicitRequestedSchema, PrimitiveSchemaDefinition,
+    BooleanSchema, ElicitRequestParamsRequestedSchema, ElicitRequestedSchema, EnumSchema,
+    NumberSchema, PrimitiveSchemaDefinition, StringSchema, StringSchemaFormat,
 };
 use serde_json::json;
 
 #[path = "common/common.rs"]
 pub mod common;
-
-#[mcp_elicit(message = "Please enter user info")]
-#[derive(JsonSchema)]
-struct UserInfo {
-    #[json_schema(
-        title = "User Name",
-        description = "The user's full name (overrides doc)",
-        min_length = 1,
-        max_length = 100
-    )]
-    pub name: String,
-    #[json_schema(
-        title = "User Email",
-        format = "email",
-        min_length = 5,
-        max_length = 255
-    )]
-    pub email: Option<String>,
-    #[json_schema(title = "Age", description = "age", minimum = 15, maximum = 125)]
-    pub age: i32,
-    /// Is user a student?
-    #[json_schema(title = "Is student", default = true)]
-    pub is_student: Option<bool>,
-}
 
 #[test]
 fn test_rename() {
@@ -147,14 +124,119 @@ fn test_attributes() {
 
 #[test]
 fn test_elicit_macro() {
+    #[derive(JsonSchema)]
+    enum Married {
+        #[json_schema(title = "This person is married")]
+        Yes,
+        #[json_schema(title = "This person is not married")]
+        No,
+    }
+
+    #[mcp_elicit(message = "Please enter user info")]
+    #[derive(JsonSchema)]
+    struct UserInfo {
+        #[json_schema(
+            title = "User Name",
+            description = "The user's full name (overrides doc)",
+            min_length = 1,
+            max_length = 100
+        )]
+        pub name: String,
+        #[json_schema(
+            title = "User Email",
+            format = "email",
+            min_length = 5,
+            max_length = 255
+        )]
+        pub email: Option<String>,
+        #[json_schema(title = "Age", description = "user age", minimum = 15, maximum = 125)]
+        pub age: i32,
+        /// Is user a student?
+        #[json_schema(title = "Is student", default = true)]
+        pub is_student: Option<bool>,
+
+        #[json_schema(title = "Is married?")]
+        pub is_married: Married,
+    }
+
     assert_eq!(UserInfo::message(), "Please enter user info");
 
     let requested_schema: ElicitRequestedSchema = UserInfo::requested_schema();
+    assert_eq!(requested_schema.required, vec!["name", "age", "is_married"]);
 
-    println!(">>> requested_schema {:?} ", requested_schema);
+    assert!(matches!(
+        requested_schema.properties.get("is_student").unwrap(),
+        PrimitiveSchemaDefinition::BooleanSchema(BooleanSchema {
+            default,
+            description,
+            title,
+            ..
+        })
+        if
+        description.as_ref().unwrap() == "Is user a student?" &&
+        title.as_ref().unwrap() == "Is student" &&
+        matches!(default, Some(true))
+
+    ));
+
+    assert!(matches!(
+        requested_schema.properties.get("is_married").unwrap(),
+        PrimitiveSchemaDefinition::EnumSchema(EnumSchema {
+            description,
+            enum_,
+            enum_names,
+            title,
+            ..
+        })
+        if description.is_none() && title.as_ref().unwrap() == "Is married?" &&
+        enum_.len()==2 && enum_.iter().all(|s| ["Yes", "No"].contains(&s.as_str())) &&
+        enum_names.len()==2 && enum_names.iter().all(|s| ["This person is married", "This person is not married"].contains(&s.as_str()))
+    ));
+
+    assert!(matches!(
+        requested_schema.properties.get("age").unwrap(),
+        PrimitiveSchemaDefinition::NumberSchema(NumberSchema {
+            description,
+            maximum,
+            minimum,
+            title,
+            type_
+        })
+        if
+        description.as_ref().unwrap() == "user age" &&
+        maximum.unwrap() == 125 && minimum.unwrap() == 15 && title.as_ref().unwrap() == "Age"
+    ));
+
+    assert!(matches!(
+        requested_schema.properties.get("name").unwrap(),
+        PrimitiveSchemaDefinition::StringSchema(StringSchema {
+            description,
+            format,
+            max_length,
+            min_length,
+            title,
+            ..
+        })
+        if format.is_none() &&
+        description.as_ref().unwrap() == "The user's full name (overrides doc)" &&
+        max_length.unwrap() == 100 && min_length.unwrap() == 1 && title.as_ref().unwrap() == "User Name"
+    ));
+
+    assert!(matches!(
+        requested_schema.properties.get("email").unwrap(),
+        PrimitiveSchemaDefinition::StringSchema(StringSchema {
+            description,
+            format,
+            max_length,
+            min_length,
+            title,
+            ..
+        }) if matches!(format.unwrap(), StringSchemaFormat::Email) &&
+        description.is_none() &&
+        max_length.unwrap() == 255 && min_length.unwrap() == 5 && title.as_ref().unwrap() == "User Email"
+    ));
 
     let json_schema = &UserInfo::json_schema();
-    println!(">>> requested_schema {:?} ", json_schema);
 
     let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
         Some(arr) => arr
