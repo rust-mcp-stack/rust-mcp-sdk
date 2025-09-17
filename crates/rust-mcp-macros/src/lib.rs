@@ -246,6 +246,69 @@ impl Parse for McpToolMacroAttributes {
     }
 }
 
+struct McpElicitationAttributes {
+    message: Option<String>,
+}
+
+impl Parse for McpElicitationAttributes {
+    fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut instance = Self { message: None };
+        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
+        for meta in meta_list {
+            if let Meta::NameValue(meta_name_value) = meta {
+                let ident = meta_name_value.path.get_ident().unwrap();
+                let ident_str = ident.to_string();
+                match ident_str.as_str() {
+                    "message" => {
+                        let value = match &meta_name_value.value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => lit_str.value(),
+                            Expr::Macro(expr_macro) => {
+                                let mac = &expr_macro.mac;
+                                if mac.path.is_ident("concat") {
+                                    let args: ExprList = syn::parse2(mac.tokens.clone())?;
+                                    let mut result = String::new();
+                                    for expr in args.exprs {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(lit_str),
+                                            ..
+                                        }) = expr
+                                        {
+                                            result.push_str(&lit_str.value());
+                                        } else {
+                                            return Err(Error::new_spanned(
+                                                expr,
+                                                "Only string literals are allowed inside concat!()",
+                                            ));
+                                        }
+                                    }
+                                    result
+                                } else {
+                                    return Err(Error::new_spanned(
+                                        expr_macro,
+                                        "Only concat!(...) is supported here",
+                                    ));
+                                }
+                            }
+                            _ => {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected a string literal or concat!(...)",
+                                ));
+                            }
+                        };
+                        instance.message = Some(value)
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(instance)
+    }
+}
+
 /// A procedural macro attribute to generate rust_mcp_schema::Tool related utility methods for a struct.
 ///
 /// The `mcp_tool` macro generates an implementation for the annotated struct that includes:
@@ -387,7 +450,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
     let output = quote! {
         impl #input_ident {
-            /// Returns the name of the tool as a string.
+            /// Returns the name of the tool as a String.
             pub fn tool_name() -> String {
                 #tool_name.to_string()
             }
@@ -404,7 +467,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         .iter()
                         .filter_map(|item| item.as_str().map(String::from))
                         .collect(),
-                    None => Vec::new(), // Default to an empty vector if "required" is missing or not an array
+                    None => Vec::new(),
                 };
 
                 let properties: Option<
@@ -440,6 +503,81 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
+#[proc_macro_attribute]
+pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let input_ident = &input.ident;
+
+    // Conditionally select the path
+    let base_crate = if cfg!(feature = "sdk") {
+        quote! { rust_mcp_sdk::schema }
+    } else {
+        quote! { rust_mcp_schema }
+    };
+
+    let macro_attributes = parse_macro_input!(attributes as McpElicitationAttributes);
+    let message = macro_attributes.message.unwrap_or_default();
+
+    let output = quote! {
+        impl #input_ident {
+
+            pub fn message()->String{
+                #message.to_string()
+            }
+
+            pub fn requested_schema() -> #base_crate::ElicitRequestParamsRequestedSchema {
+                let json_schema = &#input_ident::json_schema();
+
+                let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
+                    Some(arr) => arr
+                        .iter()
+                        .filter_map(|item| item.as_str().map(String::from))
+                        .collect(),
+                    None => Vec::new(),
+                };
+
+                let properties: Option<std::collections::HashMap<String, _>> = json_schema
+                    .get("properties")
+                    .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
+                    .map(|properties| {
+                        properties
+                            .iter()
+                            .filter_map(|(key, value)| {
+                                serde_json::to_value(value)
+                                    .ok() // If serialization fails, return None.
+                                    .and_then(|v| {
+                                        if let serde_json::Value::Object(obj) = v {
+                                            Some(obj)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .map(|obj| (key.to_string(), PrimitiveSchemaDefinition::try_from(&obj)))
+                            })
+                            .collect()
+                    });
+
+                let properties = properties
+                    .map(|map| {
+                        map.into_iter()
+                            .map(|(k, v)| v.map(|ok_v| (k, ok_v))) // flip Result inside tuple
+                            .collect::<Result<std::collections::HashMap<_, _>, _>>() // collect only if all Ok
+                    })
+                    .transpose()
+                    .unwrap();
+
+                let properties =
+                    properties.expect("Was not able to create a ElicitRequestParamsRequestedSchema");
+
+                let requested_schema = ElicitRequestParamsRequestedSchema::new(properties, required);
+                requested_schema
+            }
+        }
+        #input
+    };
+
+    TokenStream::from(output)
+}
 /// Derives a JSON Schema representation for a struct.
 ///
 /// This procedural macro generates a `json_schema()` method for the annotated struct, returning a
