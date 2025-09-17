@@ -166,11 +166,11 @@ pub async fn start_new_session(
 
     let h: Arc<dyn McpServerHandler> = state.handler.clone();
     // create a new server instance with unique session_id and
-    let runtime: Arc<ServerRuntime> = Arc::new(server_runtime::create_server_instance(
+    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
         Arc::clone(&state.server_details),
         h,
         session_id.to_owned(),
-    ));
+    );
 
     tracing::info!("a new client joined : {}", &session_id);
 
