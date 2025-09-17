@@ -5,9 +5,8 @@ mod utils;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse::Parse, parse_macro_input, punctuated::Punctuated, token, Attribute, Data, DeriveInput,
-    Error, Expr, ExprLit, Fields, GenericArgument, Lit, LitInt, LitStr, Meta, Path, PathArguments,
-    Token, Type,
+    parse::Parse, parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Error, Expr,
+    ExprLit, Fields, GenericArgument, Lit, Meta, PathArguments, Token, Type,
 };
 use utils::{is_option, renamed_field, type_to_json_schema};
 
@@ -261,50 +260,47 @@ impl Parse for McpElicitationAttributes {
             if let Meta::NameValue(meta_name_value) = meta {
                 let ident = meta_name_value.path.get_ident().unwrap();
                 let ident_str = ident.to_string();
-                match ident_str.as_str() {
-                    "message" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            Expr::Macro(expr_macro) => {
-                                let mac = &expr_macro.mac;
-                                if mac.path.is_ident("concat") {
-                                    let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                    let mut result = String::new();
-                                    for expr in args.exprs {
-                                        if let Expr::Lit(ExprLit {
-                                            lit: Lit::Str(lit_str),
-                                            ..
-                                        }) = expr
-                                        {
-                                            result.push_str(&lit_str.value());
-                                        } else {
-                                            return Err(Error::new_spanned(
-                                                expr,
-                                                "Only string literals are allowed inside concat!()",
-                                            ));
-                                        }
+                if ident_str.as_str() == "message" {
+                    let value = match &meta_name_value.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(lit_str),
+                            ..
+                        }) => lit_str.value(),
+                        Expr::Macro(expr_macro) => {
+                            let mac = &expr_macro.mac;
+                            if mac.path.is_ident("concat") {
+                                let args: ExprList = syn::parse2(mac.tokens.clone())?;
+                                let mut result = String::new();
+                                for expr in args.exprs {
+                                    if let Expr::Lit(ExprLit {
+                                        lit: Lit::Str(lit_str),
+                                        ..
+                                    }) = expr
+                                    {
+                                        result.push_str(&lit_str.value());
+                                    } else {
+                                        return Err(Error::new_spanned(
+                                            expr,
+                                            "Only string literals are allowed inside concat!()",
+                                        ));
                                     }
-                                    result
-                                } else {
-                                    return Err(Error::new_spanned(
-                                        expr_macro,
-                                        "Only concat!(...) is supported here",
-                                    ));
                                 }
-                            }
-                            _ => {
+                                result
+                            } else {
                                 return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal or concat!(...)",
+                                    expr_macro,
+                                    "Only concat!(...) is supported here",
                                 ));
                             }
-                        };
-                        instance.message = Some(value)
-                    }
-                    _ => {}
+                        }
+                        _ => {
+                            return Err(Error::new_spanned(
+                                &meta_name_value.value,
+                                "Expected a string literal or concat!(...)",
+                            ));
+                        }
+                    };
+                    instance.message = Some(value)
                 }
             }
         }
@@ -588,7 +584,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                                       quote! { #enum_parse }
                                   )
                               }
-                              _ => panic!("Unsupported inner type for Option field: {}", quote! { #inner_type }.to_string()),
+                              _ => panic!("Unsupported inner type for Option field: {}", quote! { #inner_type }),
                           };
                           let inner_type_str = quote! { stringify!(#inner_type_ident) };
                           quote! {
@@ -648,7 +644,7 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                                       quote! { #enum_parse }
                                   )
                               }
-                              _ => panic!("Unsupported field type: {}", quote! { #field_type }.to_string()),
+                              _ => panic!("Unsupported field type: {}", quote! { #field_type }),
                           };
                           let type_str = quote! { stringify!(#field_type_ident) };
                           quote! {
@@ -959,7 +955,7 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
                             }
                         } else {
                             // Tuple variant: array with items
-                            let field_schemas = fields.unnamed.iter().enumerate().map(|(i, field)| {
+                            let field_schemas = fields.unnamed.iter().map(|field| {
                                 let field_type = &field.ty;
                                 let field_attrs = &field.attrs;
                                 let schema = type_to_json_schema(field_type, field_attrs);

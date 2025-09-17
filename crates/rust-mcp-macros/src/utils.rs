@@ -1,6 +1,6 @@
 use quote::quote;
 use syn::{
-    punctuated::Punctuated, token, Attribute, Data, DeriveInput, Lit, LitInt, LitStr, Path,
+    punctuated::Punctuated, token, Attribute, DeriveInput, Lit, LitInt, LitStr, Path,
     PathArguments, Type,
 };
 
@@ -16,6 +16,7 @@ pub fn is_option(ty: &Type) -> bool {
     false
 }
 
+#[allow(unused)]
 // Check if a type is a Vec<T>
 pub fn is_vec(ty: &Type) -> bool {
     if let Type::Path(type_path) = ty {
@@ -28,6 +29,7 @@ pub fn is_vec(ty: &Type) -> bool {
     false
 }
 
+#[allow(unused)]
 // Extract the inner type from Vec<T> or Option<T>
 pub fn inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
@@ -179,9 +181,8 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         Lit::Int(lit_int) => {
                             let value = lit_int.base10_parse::<i64>()?;
                             assert!(
-                                value >= i64::MIN && value <= i64::MAX,
-                                "Default value {} out of range for i64",
-                                value
+                                (i64::MIN..=i64::MAX).contains(&value),
+                                "Default value {value} out of range for i64"
                             );
                             quote! { serde_json::Value::Number(serde_json::Number::from(#value)) }
                         }
@@ -442,6 +443,7 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
     }
 }
 
+#[allow(unused)]
 pub fn has_derive(attrs: &[Attribute], trait_name: &str) -> bool {
     attrs.iter().any(|attr| {
         if attr.path().is_ident("derive") {

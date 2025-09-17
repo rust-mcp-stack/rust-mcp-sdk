@@ -404,7 +404,7 @@ pub mod sample_tools {
                 tokio::time::sleep(Duration::from_millis(self.interval)).await;
             }
 
-            let message = format!("so many messages sent");
+            let message = "so many messages sent".to_string();
             Ok(CallToolResult::text_content(vec![TextContent::from(
                 message,
             )]))

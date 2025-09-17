@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate rust_mcp_macros;
 
-use std::{collections::HashMap, panic, str::FromStr};
+use std::collections::HashMap;
 
 use common::EditOperation;
 use rust_mcp_schema::{
     BooleanSchema, ElicitRequestedSchema, ElicitResultContentValue, EnumSchema, NumberSchema,
-    PrimitiveSchemaDefinition, RpcError, StringSchema, StringSchemaFormat,
+    PrimitiveSchemaDefinition, StringSchema, StringSchemaFormat,
 };
 use serde_json::json;
 

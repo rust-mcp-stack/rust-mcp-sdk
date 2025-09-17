@@ -309,7 +309,7 @@ async fn should_handle_successful_initial_get_connection_for_sse() {
     // let payload = r#"{"jsonrpc": "2.0", "method": "serverNotification", "params": {}}"#;
     //
     let mut body = String::new();
-    body.push_str(&"data: Connection established\n\n".to_string());
+    body.push_str("data: Connection established\n\n");
 
     let response = ResponseTemplate::new(200)
         .set_body_raw(body.into_bytes(), "text/event-stream")
@@ -428,7 +428,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     // let payload = r#"{"jsonrpc": "2.0", "method": "serverNotification", "params": {}}"#;
     //
     let mut body = String::new();
-    body.push_str(&"data: Connection established\n\n".to_string());
+    body.push_str("data: Connection established\n\n");
 
     let response = ResponseTemplate::new(405)
         .set_body_raw(body.into_bytes(), "text/event-stream")

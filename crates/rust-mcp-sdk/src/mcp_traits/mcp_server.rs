@@ -16,6 +16,7 @@ use crate::schema::{
 };
 use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
+use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
 
 //TODO: support options , such as enforceStrictCapabilities
