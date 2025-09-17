@@ -700,10 +700,28 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let output = quote! {
         impl #input_ident {
 
+            /// Returns the elicitation message defined in the `#[mcp_elicit(message = "...")]` attribute.
+            ///
+            /// This message is used to prompt the user or system for input when eliciting data for the struct.
+            /// If no message is provided in the attribute, an empty string is returned.
+            ///
+            /// # Returns
+            /// A `String` containing the elicitation message.
             pub fn message()->String{
                 #message.to_string()
             }
 
+            /// This method returns a `ElicitRequestedSchema` by retrieves the
+            /// struct's JSON schema (via the `JsonSchema` derive) and converting int into
+            /// a `ElicitRequestedSchema`. It extracts the `required` fields and
+            /// `properties` from the schema, mapping them to a `HashMap` of `PrimitiveSchemaDefinition` objects.
+            ///
+            /// # Returns
+            /// An `ElicitRequestedSchema` representing the schema of the struct.
+            ///
+            /// # Panics
+            /// Panics if the schema's properties cannot be converted to `PrimitiveSchemaDefinition` or if the schema
+            /// is malformed.
             pub fn requested_schema() -> #base_crate::ElicitRequestedSchema {
                 let json_schema = &#input_ident::json_schema();
 
@@ -752,6 +770,29 @@ pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 requested_schema
             }
 
+            /// Converts a map of field names and `ElicitResultContentValue` into an instance of the struct.
+            ///
+            /// This method parses the provided content map, matching field names to struct fields and converting
+            /// `ElicitResultContentValue` variants into the appropriate Rust types (e.g., `String`, `bool`, `i32`,
+            /// `i64`, or simple enums). It supports both required and optional fields (`Option<T>`).
+            ///
+            /// # Parameters
+            /// - `content`: An optional `HashMap` mapping field names to `ElicitResultContentValue` values.
+            ///
+            /// # Returns
+            /// - `Ok(Self)` if the map is successfully parsed into the struct.
+            /// - `Err(RpcError)` if:
+            ///   - A required field is missing.
+            ///   - A value’s type does not match the expected field type.
+            ///   - An integer value cannot be converted (e.g., `i64` to `i32` out of bounds).
+            ///   - An enum value is invalid (e.g., string value does not match a enum variant name).
+            ///
+            /// # Errors
+            /// Returns `RpcError` with messages like:
+            /// - `"Missing required field: {}"`
+            /// - `"Type mismatch for field '{}': expected {}, found {}"`
+            /// - `"Invalid number for field '{}': value {} does not fit in i32"`
+            /// - `"Invalid enum value for field '{}': expected 'Yes' or 'No', found '{}'"`.
             pub fn from_content_map(content: ::std::option::Option<::std::collections::HashMap<::std::string::String, #base_crate::ElicitResultContentValue>>) -> Result<Self, #base_crate::RpcError> {
                 #field_assignments
             }

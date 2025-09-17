@@ -319,19 +319,21 @@ fn test_from_content_map() {
     let mut content: ::std::collections::HashMap<::std::string::String, ElicitResultContentValue> =
         HashMap::new();
 
-    content.insert(
-        "name".to_string(),
-        ElicitResultContentValue::String("Ali".to_string()),
-    );
-    content.insert(
-        "is_married".to_string(),
-        ElicitResultContentValue::String("Yes".to_string()),
-    );
-    content.insert("age".to_string(), ElicitResultContentValue::Integer(15));
-    content.insert(
-        "is_student".to_string(),
-        ElicitResultContentValue::Boolean(false),
-    );
+    content.extend([
+        (
+            "name".to_string(),
+            ElicitResultContentValue::String("Ali".to_string()),
+        ),
+        (
+            "is_married".to_string(),
+            ElicitResultContentValue::String("Yes".to_string()),
+        ),
+        ("age".to_string(), ElicitResultContentValue::Integer(15)),
+        (
+            "is_student".to_string(),
+            ElicitResultContentValue::Boolean(false),
+        ),
+    ]);
 
     let u: UserInfo = UserInfo::from_content_map(Some(content)).unwrap();
     assert!(matches!(u.is_married, Married::Yes));
