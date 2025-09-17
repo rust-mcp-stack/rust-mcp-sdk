@@ -15,7 +15,9 @@ use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-const MCP_SERVER_URL: &str = "http://localhost:3001/sse";
+// Connect to a server started with the following command:
+// npx @modelcontextprotocol/server-everything sse
+const MCP_SERVER_URL: &str = "http://127.0.0.1:3001/sse";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
@@ -44,6 +46,7 @@ async fn main() -> SdkResult<()> {
     // STEP 3: instantiate our custom handler that is responsible for handling MCP messages
     let handler = MyClientHandler {};
 
+    // STEP 4: create the client
     let client = client_runtime::create_client(client_details, transport, handler);
 
     // STEP 5: start the MCP client
@@ -57,6 +60,7 @@ async fn main() -> SdkResult<()> {
     let utils = InquiryUtils {
         client: Arc::clone(&client),
     };
+
     // Display server information (name and version)
     utils.print_server_info();
 
@@ -78,8 +82,11 @@ async fn main() -> SdkResult<()> {
     // Call add tool, and print the result
     utils.call_add_tool(100, 25).await?;
 
-    // Set the log level
-    utils.client.set_logging_level(LoggingLevel::Debug).await?;
+    // // Set the log level
+    match utils.client.set_logging_level(LoggingLevel::Debug).await {
+        Ok(_) => println!("Log level is set to \"Debug\""),
+        Err(err) => eprintln!("Error setting the Log level : {err}"),
+    }
 
     // Send 3 pings to the server, with a 2-second interval between each ping.
     utils.ping_n_times(3).await;

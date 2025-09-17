@@ -10,6 +10,7 @@ license = "MIT"
 rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "server",
     "macros",
+    "streamable-http",
     "hyper-server",
     "2025_06_18",
 ] }

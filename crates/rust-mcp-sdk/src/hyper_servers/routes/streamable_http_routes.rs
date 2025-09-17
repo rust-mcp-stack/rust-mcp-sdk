@@ -1,4 +1,4 @@
-use super::hyper_utils::{start_new_session, MCP_SESSION_ID_HEADER};
+use super::hyper_utils::start_new_session;
 use crate::schema::schema_utils::SdkError;
 use crate::{
     error::McpSdkError,
@@ -14,6 +14,7 @@ use crate::{
     },
     utils::valid_initialize_method,
 };
+use axum::routing::get;
 use axum::{
     extract::{Query, State},
     middleware,
@@ -22,10 +23,8 @@ use axum::{
     Json, Router,
 };
 use hyper::{HeaderMap, StatusCode};
-use rust_mcp_transport::SessionId;
+use rust_mcp_transport::{SessionId, MCP_SESSION_ID_HEADER};
 use std::{collections::HashMap, sync::Arc};
-
-use axum::routing::get;
 
 pub fn routes(state: Arc<AppState>, streamable_http_endpoint: &str) -> Router<Arc<AppState>> {
     Router::new()

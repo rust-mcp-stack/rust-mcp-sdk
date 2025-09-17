@@ -1,3 +1,4 @@
+pub(super) mod id_generator;
 #[cfg(feature = "client")]
 pub mod mcp_client;
 pub mod mcp_handler;
@@ -5,4 +6,5 @@ pub mod mcp_handler;
 pub mod mcp_server;
 mod request_id_gen;
 
+pub use id_generator::*;
 pub use request_id_gen::*;

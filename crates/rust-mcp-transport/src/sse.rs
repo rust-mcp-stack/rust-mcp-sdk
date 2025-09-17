@@ -156,7 +156,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
 
         let mut lock = self.read_write_streams.lock().await;
         let (read_rx, write_tx) = lock.take().ok_or_else(|| {
-            TransportError::FromString(
+            TransportError::Internal(
                 "SSE streams already taken or transport not initialized".to_string(),
             )
         })?;
@@ -241,7 +241,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
                 if let Some(sender) = sender.as_ref() {
                     match sender.write_str(":\n").await {
                         Ok(_) => {}
-                        Err(TransportError::StdioError(error)) => {
+                        Err(TransportError::Io(error)) => {
                             if error.kind() == std::io::ErrorKind::BrokenPipe {
                                 let _ = disconnect_tx.send(());
                                 break;

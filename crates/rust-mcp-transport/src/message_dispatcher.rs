@@ -29,7 +29,13 @@ use crate::McpDispatch;
 /// a configurable timeout mechanism for asynchronous responses.
 pub struct MessageDispatcher<R> {
     pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
-    writable_std: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
+    writable_std: Option<Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>>,
+    writable_tx: Option<
+        tokio::sync::mpsc::Sender<(
+            String,
+            tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
+        )>,
+    >,
     request_timeout: Duration,
 }
 
@@ -51,7 +57,24 @@ impl<R> MessageDispatcher<R> {
     ) -> Self {
         Self {
             pending_requests,
-            writable_std,
+            writable_std: Some(writable_std),
+            writable_tx: None,
+            request_timeout,
+        }
+    }
+
+    pub fn new_with_acknowledgement(
+        pending_requests: Arc<Mutex<HashMap<RequestId, oneshot::Sender<R>>>>,
+        writable_tx: tokio::sync::mpsc::Sender<(
+            String,
+            tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
+        )>,
+        request_timeout: Duration,
+    ) -> Self {
+        Self {
+            pending_requests,
+            writable_tx: Some(writable_tx),
+            writable_std: None,
             request_timeout,
         }
     }
@@ -125,7 +148,7 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                     match await_timeout(rx, request_timeout.unwrap_or(self.request_timeout)).await {
                         Ok(response) => Ok(Some(ServerMessages::Single(response))),
                         Err(error) => match error {
-                            TransportError::OneshotRecvError(_) => {
+                            TransportError::ChannelClosed(_) => {
                                 Err(schema_utils::SdkError::connection_closed().into())
                             }
                             _ => Err(error),
@@ -147,6 +170,9 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                     })
                     .unzip();
 
+                // Ensure all request IDs are stored before sending the request
+                let tasks = join_all(pending_tasks).await;
+
                 // send the batch messages to the server
                 let message_payload = serde_json::to_string(&client_messages).map_err(|_| {
                     crate::error::TransportError::JsonrpcError(RpcError::parse_error())
@@ -154,11 +180,9 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                 self.write_str(message_payload.as_str()).await?;
 
                 // no request in the batch, no need to wait for the result
-                if pending_tasks.is_empty() {
+                if request_ids.is_empty() {
                     return Ok(None);
                 }
-
-                let tasks = join_all(pending_tasks).await;
 
                 let timeout_wrapped_futures = tasks.into_iter().filter_map(|rx| {
                     rx.map(|rx| await_timeout(rx, request_timeout.unwrap_or(self.request_timeout)))
@@ -210,11 +234,24 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
     /// appending a newline character and flushing the stream afterward.
     ///
     async fn write_str(&self, payload: &str) -> TransportResult<()> {
-        let mut writable_std = self.writable_std.lock().await;
-        writable_std.write_all(payload.as_bytes()).await?;
-        writable_std.write_all(b"\n").await?; // new line
-        writable_std.flush().await?;
-        Ok(())
+        if let Some(writable_std) = self.writable_std.as_ref() {
+            let mut writable_std = writable_std.lock().await;
+            writable_std.write_all(payload.as_bytes()).await?;
+            writable_std.write_all(b"\n").await?; // new line
+            writable_std.flush().await?;
+            return Ok(());
+        };
+
+        if let Some(writable_tx) = self.writable_tx.as_ref() {
+            let (resp_tx, resp_rx) = oneshot::channel();
+            writable_tx
+                .send((payload.to_string(), resp_tx))
+                .await
+                .map_err(|err| TransportError::Internal(format!("{err}")))?; // Send fails if channel closed
+            return resp_rx.await?; // Await the POST result; propagates the error if POST failed
+        }
+
+        Err(TransportError::Internal("Invalid dispatcher!".to_string()))
     }
 }
 
@@ -339,10 +376,23 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
     /// appending a newline character and flushing the stream afterward.
     ///
     async fn write_str(&self, payload: &str) -> TransportResult<()> {
-        let mut writable_std = self.writable_std.lock().await;
-        writable_std.write_all(payload.as_bytes()).await?;
-        writable_std.write_all(b"\n").await?; // new line
-        writable_std.flush().await?;
-        Ok(())
+        if let Some(writable_std) = self.writable_std.as_ref() {
+            let mut writable_std = writable_std.lock().await;
+            writable_std.write_all(payload.as_bytes()).await?;
+            writable_std.write_all(b"\n").await?; // new line
+            writable_std.flush().await?;
+            return Ok(());
+        };
+
+        if let Some(writable_tx) = self.writable_tx.as_ref() {
+            let (resp_tx, resp_rx) = oneshot::channel();
+            writable_tx
+                .send((payload.to_string(), resp_tx))
+                .await
+                .map_err(|err| TransportError::Internal(err.to_string()))?; // Send fails if channel closed
+            return resp_rx.await?; // Await the POST result; propagates the error if POST failed
+        }
+
+        Err(TransportError::Internal("Invalid dispatcher!".to_string()))
     }
 }

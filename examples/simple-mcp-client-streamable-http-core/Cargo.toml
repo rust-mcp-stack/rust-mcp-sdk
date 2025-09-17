@@ -1,6 +1,6 @@
 [package]
-name = "hello-world-server-core-streamable-http"
-version = "0.1.22"
+name = "simple-mcp-client-streamable-http-core"
+version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT"
@@ -8,9 +8,9 @@ license = "MIT"
 
 [dependencies]
 rust-mcp-sdk = { workspace = true, default-features = false, features = [
-    "server",
+    "client",
     "macros",
-    "hyper-server",
+    "streamable-http",
     "2025_06_18",
 ] }
 
@@ -19,8 +19,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+thiserror = { workspace = true }
+colored = "3.0.0"
+tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 
 [lints]

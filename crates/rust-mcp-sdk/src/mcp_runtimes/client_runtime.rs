@@ -1,12 +1,17 @@
 pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
-
+use crate::error::{McpSdkError, SdkResult};
+use crate::id_generator::FastIdGenerator;
+use crate::mcp_traits::mcp_client::McpClient;
+use crate::mcp_traits::mcp_handler::McpClientHandler;
+use crate::mcp_traits::IdGenerator;
+use crate::utils::ensure_server_protocole_compatibility;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
     schema::{
         schema_utils::{
-            self, ClientMessage, ClientMessages, FromMessage, MessageFromClient, ServerMessage,
-            ServerMessages,
+            self, ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromClient,
+            ServerMessage, ServerMessages,
         },
         InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
         RequestId, RpcError, ServerResult,
@@ -16,63 +21,100 @@ use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
-use rust_mcp_transport::{IoStream, McpDispatch, MessageDispatcher, Transport};
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+#[cfg(feature = "streamable-http")]
+use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
+use rust_mcp_transport::{IoStream, SessionId, StreamId, Transport, TransportDispatcher};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 
-use crate::error::{McpSdkError, SdkResult};
-use crate::mcp_traits::mcp_client::McpClient;
-use crate::mcp_traits::mcp_handler::McpClientHandler;
-use crate::utils::ensure_server_protocole_compatibility;
+pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
+
+// Define a type alias for the TransportDispatcher trait object
+type TransportDispatcherType = dyn TransportDispatcher<
+    ServerMessages,
+    MessageFromClient,
+    ServerMessage,
+    ClientMessages,
+    ClientMessage,
+>;
+type TransportType = Arc<TransportDispatcherType>;
 
 pub struct ClientRuntime {
-    // The transport interface for handling messages between client and server
-    transport: Arc<
-        dyn Transport<
-            ServerMessages,
-            MessageFromClient,
-            ServerMessage,
-            ClientMessages,
-            ClientMessage,
-        >,
-    >,
+    // A thread-safe map storing transport types
+    transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
     // The handler for processing MCP messages
     handler: Box<dyn McpClientHandler>,
-    // // Information about the server
+    // Information about the server
     client_details: InitializeRequestParams,
-    // Details about the connected server
-    server_details: Arc<RwLock<Option<InitializeResult>>>,
     handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), McpSdkError>>>>,
+    // Generator for unique request IDs
     request_id_gen: Box<dyn RequestIdGen>,
+    // Generator for stream IDs
+    stream_id_gen: FastIdGenerator,
+    #[cfg(feature = "streamable-http")]
+    // Optional configuration for streamable transport
+    transport_options: Option<StreamableTransportOptions>,
+    // Flag indicating whether the client has been shut down
+    is_shut_down: Mutex<bool>,
+    // Session ID
+    session_id: tokio::sync::RwLock<Option<SessionId>>,
+    // Details about the connected server
+    server_details_tx: watch::Sender<Option<InitializeResult>>,
+    server_details_rx: watch::Receiver<Option<InitializeResult>>,
 }
 
 impl ClientRuntime {
     pub(crate) fn new(
         client_details: InitializeRequestParams,
-        transport: impl Transport<
-            ServerMessages,
-            MessageFromClient,
-            ServerMessage,
-            ClientMessages,
-            ClientMessage,
-        >,
+        transport: TransportType,
         handler: Box<dyn McpClientHandler>,
     ) -> Self {
+        let mut map: HashMap<String, TransportType> = HashMap::new();
+        map.insert(DEFAULT_STREAM_ID.to_string(), transport);
+        let (server_details_tx, server_details_rx) =
+            watch::channel::<Option<InitializeResult>>(None);
         Self {
-            transport: Arc::new(transport),
+            transport_map: tokio::sync::RwLock::new(map),
             handler,
             client_details,
-            server_details: Arc::new(RwLock::new(None)),
             handlers: Mutex::new(vec![]),
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
+            #[cfg(feature = "streamable-http")]
+            transport_options: None,
+            is_shut_down: Mutex::new(false),
+            session_id: tokio::sync::RwLock::new(None),
+            stream_id_gen: FastIdGenerator::new(Some("s_")),
+            server_details_tx,
+            server_details_rx,
         }
     }
 
-    async fn initialize_request(&self) -> SdkResult<()> {
+    #[cfg(feature = "streamable-http")]
+    pub(crate) fn new_instance(
+        client_details: InitializeRequestParams,
+        transport_options: StreamableTransportOptions,
+        handler: Box<dyn McpClientHandler>,
+    ) -> Self {
+        let map: HashMap<String, TransportType> = HashMap::new();
+        let (server_details_tx, server_details_rx) =
+            watch::channel::<Option<InitializeResult>>(None);
+        Self {
+            transport_map: tokio::sync::RwLock::new(map),
+            handler,
+            client_details,
+            handlers: Mutex::new(vec![]),
+            transport_options: Some(transport_options),
+            is_shut_down: Mutex::new(false),
+            session_id: tokio::sync::RwLock::new(None),
+            request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
+            stream_id_gen: FastIdGenerator::new(Some("s_")),
+            server_details_tx,
+            server_details_rx,
+        }
+    }
+
+    async fn initialize_request(self: Arc<Self>) -> SdkResult<()> {
         let request = InitializeRequest::new(self.client_details.clone());
         let result: ServerResult = self.request(request.into(), None).await?.try_into()?;
 
@@ -81,9 +123,15 @@ impl ClientRuntime {
                 &self.client_details.protocol_version,
                 &initialize_result.protocol_version,
             )?;
-
             // store server details
             self.set_server_details(initialize_result)?;
+
+            #[cfg(feature = "streamable-http")]
+            // try to create a sse stream for server initiated messages , if supported by the server
+            if let Err(error) = self.clone().create_sse_stream().await {
+                tracing::warn!("{error}");
+            }
+
             // send a InitializedNotification to the server
             self.send_notification(InitializedNotification::new(None).into())
                 .await?;
@@ -92,21 +140,14 @@ impl ClientRuntime {
                 .with_message("Incorrect response to InitializeRequest!".into())
                 .into());
         }
+
         Ok(())
     }
 
     pub(crate) async fn handle_message(
         &self,
         message: ServerMessage,
-        transport: &Arc<
-            dyn Transport<
-                ServerMessages,
-                MessageFromClient,
-                ServerMessage,
-                ClientMessages,
-                ClientMessage,
-            >,
-        >,
+        transport: &TransportType,
     ) -> SdkResult<Option<ClientMessage>> {
         let response = match message {
             ServerMessage::Request(jsonrpc_request) => {
@@ -162,28 +203,26 @@ impl ClientRuntime {
         };
         Ok(response)
     }
-}
 
-#[async_trait]
-impl McpClient for ClientRuntime {
-    fn sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<ServerMessage>>>>
-    where
-        MessageDispatcher<ServerMessage>:
-            McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>,
-    {
-        (self.transport.message_sender().clone()) as _
-    }
+    async fn start_standalone(self: Arc<Self>) -> SdkResult<()> {
+        let self_clone = self.clone();
+        let transport_map = self_clone.transport_map.read().await;
+        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+            RpcError::internal_error()
+                .with_message("transport stream does not exists or is closed!".to_string()),
+        )?;
 
-    async fn start(self: Arc<Self>) -> SdkResult<()> {
         //TODO: improve the flow
-        let mut stream = self.transport.start().await?;
-        let transport = self.transport.clone();
+        let mut stream = transport.start().await?;
+
+        let transport_clone = transport.clone();
         let mut error_io_stream = transport.error_stream().write().await;
         let error_io_stream = error_io_stream.take();
 
         let self_clone = Arc::clone(&self);
         let self_clone_err = Arc::clone(&self);
 
+        // task reading from the error stream
         let err_task = tokio::spawn(async move {
             let self_ref = &*self_clone_err;
 
@@ -191,7 +230,7 @@ impl McpClient for ClientRuntime {
                 let mut reader = BufReader::new(error_input).lines();
                 loop {
                     tokio::select! {
-                        should_break = self_ref.transport.is_shut_down() =>{
+                        should_break = transport_clone.is_shut_down() =>{
                             if should_break {
                                 break;
                             }
@@ -221,14 +260,10 @@ impl McpClient for ClientRuntime {
             Ok::<(), McpSdkError>(())
         });
 
-        let transport = self.transport.clone();
+        let transport = transport.clone();
 
+        // main task reading from mcp_message stream
         let main_task = tokio::spawn(async move {
-            let sender = self_clone.sender();
-            let sender = sender.read().await;
-            let sender = sender
-                .as_ref()
-                .ok_or(schema_utils::SdkError::connection_closed())?;
             while let Some(mcp_messages) = stream.next().await {
                 let self_ref = &*self_clone;
 
@@ -239,7 +274,7 @@ impl McpClient for ClientRuntime {
                         match result {
                             Ok(result) => {
                                 if let Some(result) = result {
-                                    sender
+                                    transport
                                         .send_message(ClientMessages::Single(result), None)
                                         .await?;
                                 }
@@ -260,7 +295,7 @@ impl McpClient for ClientRuntime {
                         let results: Vec<_> = results.into_iter().flatten().collect();
 
                         if !results.is_empty() {
-                            sender
+                            transport
                                 .send_message(ClientMessages::Batch(results), None)
                                 .await?;
                         }
@@ -271,71 +306,349 @@ impl McpClient for ClientRuntime {
         });
 
         // send initialize request to the MCP server
-        self.initialize_request().await?;
+        self.clone().initialize_request().await?;
 
         let mut lock = self.handlers.lock().await;
         lock.push(main_task);
         lock.push(err_task);
+        Ok(())
+    }
+
+    pub(crate) async fn store_transport(
+        &self,
+        stream_id: &str,
+        transport: TransportType,
+    ) -> SdkResult<()> {
+        let mut transport_map = self.transport_map.write().await;
+        tracing::trace!("save transport for stream id : {}", stream_id);
+        transport_map.insert(stream_id.to_string(), transport);
+        Ok(())
+    }
+
+    pub(crate) async fn transport_by_stream(&self, stream_id: &str) -> SdkResult<TransportType> {
+        let transport_map = self.transport_map.read().await;
+        transport_map.get(stream_id).cloned().ok_or_else(|| {
+            RpcError::internal_error()
+                .with_message(format!("Transport for key {stream_id} not found"))
+                .into()
+        })
+    }
+
+    #[cfg(feature = "streamable-http")]
+    pub(crate) async fn new_transport(
+        &self,
+        session_id: Option<SessionId>,
+        standalone: bool,
+    ) -> SdkResult<
+        impl TransportDispatcher<
+            ServerMessages,
+            MessageFromClient,
+            ServerMessage,
+            ClientMessages,
+            ClientMessage,
+        >,
+    > {
+        let options = self
+            .transport_options
+            .as_ref()
+            .ok_or(schema_utils::SdkError::connection_closed())?;
+        let transport = ClientStreamableTransport::new(options, session_id, standalone)?;
+
+        Ok(transport)
+    }
+
+    #[cfg(feature = "streamable-http")]
+    pub(crate) async fn create_sse_stream(self: Arc<Self>) -> SdkResult<()> {
+        let stream_id: StreamId = DEFAULT_STREAM_ID.into();
+        let session_id = self.session_id.read().await.clone();
+        let transport: Arc<
+            dyn TransportDispatcher<
+                ServerMessages,
+                MessageFromClient,
+                ServerMessage,
+                ClientMessages,
+                ClientMessage,
+            >,
+        > = Arc::new(self.new_transport(session_id, true).await?);
+        let mut stream = transport.start().await?;
+        self.store_transport(&stream_id, transport.clone()).await?;
+
+        let self_clone = Arc::clone(&self);
+
+        let main_task = tokio::spawn(async move {
+            loop {
+                if let Some(mcp_messages) = stream.next().await {
+                    match mcp_messages {
+                        ServerMessages::Single(server_message) => {
+                            let result = self.handle_message(server_message, &transport).await?;
+
+                            if let Some(result) = result {
+                                transport
+                                    .send_message(ClientMessages::Single(result), None)
+                                    .await?;
+                            }
+                        }
+                        ServerMessages::Batch(server_messages) => {
+                            let handling_tasks: Vec<_> = server_messages
+                                .into_iter()
+                                .map(|server_message| {
+                                    self.handle_message(server_message, &transport)
+                                })
+                                .collect();
+
+                            let results: Vec<_> = try_join_all(handling_tasks).await?;
+
+                            let results: Vec<_> = results.into_iter().flatten().collect();
+
+                            if !results.is_empty() {
+                                transport
+                                    .send_message(ClientMessages::Batch(results), None)
+                                    .await?;
+                            }
+                        }
+                    }
+                    // close the stream after all messages are sent, unless it is a standalone stream
+                    if !stream_id.eq(DEFAULT_STREAM_ID) {
+                        return Ok::<_, McpSdkError>(());
+                    }
+                } else {
+                    // end of stream
+                    return Ok::<_, McpSdkError>(());
+                }
+            }
+        });
+
+        let mut lock = self_clone.handlers.lock().await;
+        lock.push(main_task);
 
         Ok(())
     }
 
-    fn set_server_details(&self, server_details: InitializeResult) -> SdkResult<()> {
-        match self.server_details.write() {
-            Ok(mut details) => {
-                *details = Some(server_details);
-                Ok(())
-            }
-            // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            Err(_) => Err(RpcError::internal_error()
-                .with_message("Internal Error: Failed to acquire write lock.".to_string())
-                .into()),
-        }
-    }
-    fn client_info(&self) -> &InitializeRequestParams {
-        &self.client_details
-    }
-    fn server_info(&self) -> Option<InitializeResult> {
-        if let Ok(details) = self.server_details.read() {
-            details.clone()
-        } else {
-            // Failed to acquire read lock, likely due to PoisonError from a thread panic. Returning None.
-            None
-        }
-    }
+    #[cfg(feature = "streamable-http")]
+    pub(crate) async fn start_stream(
+        &self,
+        messages: ClientMessages,
+        timeout: Option<Duration>,
+    ) -> SdkResult<Option<ServerMessages>> {
+        use futures::stream::{AbortHandle, Abortable};
+        let stream_id: StreamId = self.stream_id_gen.generate();
+        let session_id = self.session_id.read().await.clone();
+        let no_session_id = session_id.is_none();
 
+        let has_request = match &messages {
+            ClientMessages::Single(client_message) => client_message.is_request(),
+            ClientMessages::Batch(client_messages) => {
+                client_messages.iter().any(|m| m.is_request())
+            }
+        };
+
+        let transport = Arc::new(self.new_transport(session_id, false).await?);
+
+        let mut stream = transport.start().await?;
+
+        self.store_transport(&stream_id, transport).await?;
+
+        let transport = self.transport_by_stream(&stream_id).await?; //TODO: remove
+
+        let send_task = async {
+            let result = transport.send_message(messages, timeout).await?;
+
+            if no_session_id {
+                if let Some(request_id) = transport.session_id().await.clone() {
+                    let mut guard = self.session_id.write().await;
+                    *guard = Some(request_id)
+                }
+            }
+
+            Ok::<_, McpSdkError>(result)
+        };
+
+        if !has_request {
+            return send_task.await;
+        }
+
+        let (abort_recv_handle, abort_recv_reg) = AbortHandle::new_pair();
+
+        let receive_task = async {
+            loop {
+                tokio::select! {
+                    Some(mcp_messages) = stream.next() =>{
+
+                        match mcp_messages {
+                            ServerMessages::Single(server_message) => {
+                                let result = self.handle_message(server_message, &transport).await?;
+                                if let Some(result) = result {
+                                    transport.send_message(ClientMessages::Single(result), None).await?;
+                                }
+                            }
+                            ServerMessages::Batch(server_messages) => {
+
+                                let handling_tasks: Vec<_> = server_messages
+                                    .into_iter()
+                                    .map(|server_message| self.handle_message(server_message, &transport))
+                                    .collect();
+
+                                let results: Vec<_> = try_join_all(handling_tasks).await?;
+
+                                let results: Vec<_> = results.into_iter().flatten().collect();
+
+                                if !results.is_empty() {
+                                    transport.send_message(ClientMessages::Batch(results), None).await?;
+                                }
+                            }
+                        }
+                        // close the stream after all messages are sent, unless it is a standalone stream
+                        if !stream_id.eq(DEFAULT_STREAM_ID){
+                            return  Ok::<_, McpSdkError>(());
+                        }
+                    }
+                }
+            }
+        };
+
+        let receive_task = Abortable::new(receive_task, abort_recv_reg);
+
+        // Pin the tasks to ensure they are not moved
+        tokio::pin!(send_task);
+        tokio::pin!(receive_task);
+
+        // Run both tasks with cancellation logic
+        let (send_res, _) = tokio::select! {
+            res = &mut send_task => {
+                // cancel the receive_task task, to cover the case where send_task returns with error
+                abort_recv_handle.abort();
+                (res, receive_task.await) // Wait for receive_task to finish (it should exit due to cancellation)
+            }
+            res = &mut receive_task => {
+                (send_task.await, res)
+            }
+        };
+        send_res
+    }
+}
+
+#[async_trait]
+impl McpClient for ClientRuntime {
     async fn send(
         &self,
         message: MessageFromClient,
         request_id: Option<RequestId>,
-        timeout: Option<Duration>,
+        request_timeout: Option<Duration>,
     ) -> SdkResult<Option<ServerMessage>> {
-        let sender = self.sender();
-        let sender = sender.read().await;
-        let sender = sender
-            .as_ref()
-            .ok_or(schema_utils::SdkError::connection_closed())?;
+        #[cfg(feature = "streamable-http")]
+        {
+            if self.transport_options.is_some() {
+                let outgoing_request_id = self
+                    .request_id_gen
+                    .request_id_for_message(&message, request_id);
+                let mcp_message = ClientMessage::from_message(message, outgoing_request_id)?;
+
+                let response = self
+                    .start_stream(ClientMessages::Single(mcp_message), request_timeout)
+                    .await?;
+                return response
+                    .map(|r| r.as_single())
+                    .transpose()
+                    .map_err(|err| err.into());
+            }
+        }
+
+        let transport_map = self.transport_map.read().await;
+
+        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+            RpcError::internal_error()
+                .with_message("transport stream does not exists or is closed!".to_string()),
+        )?;
 
         let outgoing_request_id = self
             .request_id_gen
             .request_id_for_message(&message, request_id);
 
         let mcp_message = ClientMessage::from_message(message, outgoing_request_id)?;
+        let response = transport
+            .send_message(ClientMessages::Single(mcp_message), request_timeout)
+            .await?;
+        response
+            .map(|r| r.as_single())
+            .transpose()
+            .map_err(|err| err.into())
+    }
 
-        let response = sender
-            .send_message(ClientMessages::Single(mcp_message), timeout)
-            .await?
-            .map(|res| res.as_single())
-            .transpose()?;
+    async fn send_batch(
+        &self,
+        messages: Vec<ClientMessage>,
+        timeout: Option<Duration>,
+    ) -> SdkResult<Option<Vec<ServerMessage>>> {
+        #[cfg(feature = "streamable-http")]
+        {
+            if self.transport_options.is_some() {
+                let result = self
+                    .start_stream(ClientMessages::Batch(messages), timeout)
+                    .await?;
+                // let response = self.start_stream(&stream_id, request_id, message).await?;
+                return result
+                    .map(|r| r.as_batch())
+                    .transpose()
+                    .map_err(|err| err.into());
+            }
+        }
 
-        Ok(response)
+        let transport_map = self.transport_map.read().await;
+        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+            RpcError::internal_error()
+                .with_message("transport stream does not exists or is closed!".to_string()),
+        )?;
+        transport
+            .send_batch(messages, timeout)
+            .await
+            .map_err(|err| err.into())
+    }
+
+    async fn start(self: Arc<Self>) -> SdkResult<()> {
+        #[cfg(feature = "streamable-http")]
+        {
+            if self.transport_options.is_some() {
+                self.initialize_request().await?;
+                return Ok(());
+            }
+        }
+
+        self.start_standalone().await
+    }
+
+    fn set_server_details(&self, server_details: InitializeResult) -> SdkResult<()> {
+        self.server_details_tx
+            .send(Some(server_details))
+            .map_err(|_| {
+                RpcError::internal_error()
+                    .with_message("Failed to set server details".to_string())
+                    .into()
+            })
+    }
+
+    fn client_info(&self) -> &InitializeRequestParams {
+        &self.client_details
+    }
+
+    fn server_info(&self) -> Option<InitializeResult> {
+        self.server_details_rx.borrow().clone()
     }
 
     async fn is_shut_down(&self) -> bool {
-        self.transport.is_shut_down().await
+        let result = self.is_shut_down.lock().await;
+        *result
     }
+
     async fn shut_down(&self) -> SdkResult<()> {
-        self.transport.shut_down().await?;
+        let mut is_shut_down_lock = self.is_shut_down.lock().await;
+        *is_shut_down_lock = true;
+
+        let mut transport_map = self.transport_map.write().await;
+        let transports: Vec<_> = transport_map.drain().map(|(_, v)| v).collect();
+        drop(transport_map);
+        for transport in transports {
+            let _ = transport.shut_down().await;
+        }
 
         // wait for tasks
         let mut tasks_lock = self.handlers.lock().await;
@@ -343,5 +656,19 @@ impl McpClient for ClientRuntime {
         join_all(join_handlers).await;
 
         Ok(())
+    }
+
+    async fn terminate_session(&self) {
+        #[cfg(feature = "streamable-http")]
+        {
+            if let Some(transport_options) = self.transport_options.as_ref() {
+                let session_id = self.session_id.read().await.clone();
+                transport_options
+                    .terminate_session(session_id.as_ref())
+                    .await;
+                let _ = self.shut_down().await;
+            }
+        }
+        let _ = self.shut_down().await;
     }
 }

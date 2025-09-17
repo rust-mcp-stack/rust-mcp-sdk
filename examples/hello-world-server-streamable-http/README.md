@@ -66,4 +66,4 @@ Then , to test the server, visit one of the following URLs based on the desired 
 
 Here you can see it in action :
 
-![hello-world-mcp-server-sse-core](../../assets/examples/hello-world-server-core-streamable-http.gif)
+![hello-world-mcp-server-sse-core](../../assets/examples/hello-world-server-streamable-http-core.gif)

@@ -38,7 +38,7 @@ use crate::{
 /// # Examples
 /// You can find a detailed example of how to use this function in the repository:
 ///
-/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)
+/// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio)
 pub fn create_server(
     server_details: InitializeResult,
     transport: impl TransportDispatcher<

@@ -1,5 +1,6 @@
 use crate::schema::schema_utils::{
-    ClientMessage, ClientMessages, MessageFromServer, SdkError, ServerMessage, ServerMessages,
+    ClientMessage, ClientMessages, MessageFromClient, MessageFromServer, SdkError, ServerMessage,
+    ServerMessages,
 };
 use crate::schema::RequestId;
 use async_trait::async_trait;
@@ -193,22 +194,22 @@ where
             #[cfg(unix)]
             command.process_group(0);
 
-            let mut process = command.spawn().map_err(TransportError::StdioError)?;
+            let mut process = command.spawn().map_err(TransportError::Io)?;
 
             let stdin = process
                 .stdin
                 .take()
-                .ok_or_else(|| TransportError::FromString("Unable to retrieve stdin.".into()))?;
+                .ok_or_else(|| TransportError::Internal("Unable to retrieve stdin.".into()))?;
 
             let stdout = process
                 .stdout
                 .take()
-                .ok_or_else(|| TransportError::FromString("Unable to retrieve stdout.".into()))?;
+                .ok_or_else(|| TransportError::Internal("Unable to retrieve stdout.".into()))?;
 
             let stderr = process
                 .stderr
                 .take()
-                .ok_or_else(|| TransportError::FromString("Unable to retrieve stderr.".into()))?;
+                .ok_or_else(|| TransportError::Internal("Unable to retrieve stderr.".into()))?;
 
             let pending_requests_clone = self.pending_requests.clone();
 
@@ -274,7 +275,7 @@ where
     }
 
     async fn consume_string_payload(&self, _payload: &str) -> TransportResult<()> {
-        Err(TransportError::FromString(
+        Err(TransportError::Internal(
             "Invalid invocation of consume_string_payload() function in StdioTransport".to_string(),
         ))
     }
@@ -284,7 +285,7 @@ where
         _interval: Duration,
         _disconnect_tx: oneshot::Sender<()>,
     ) -> TransportResult<JoinHandle<()>> {
-        Err(TransportError::FromString(
+        Err(TransportError::Internal(
             "Invalid invocation of keep_alive() function for StdioTransport".to_string(),
         ))
     }
@@ -362,5 +363,57 @@ impl
         ServerMessages,
         ServerMessage,
     > for StdioTransport<ClientMessage>
+{
+}
+
+#[async_trait]
+impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
+    for StdioTransport<ServerMessage>
+{
+    async fn send_message(
+        &self,
+        message: ClientMessages,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ServerMessages>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send_message(message, request_timeout).await
+    }
+
+    async fn send(
+        &self,
+        message: ClientMessage,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<ServerMessage>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send(message, request_timeout).await
+    }
+
+    async fn send_batch(
+        &self,
+        message: Vec<ClientMessage>,
+        request_timeout: Option<Duration>,
+    ) -> TransportResult<Option<Vec<ServerMessage>>> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.send_batch(message, request_timeout).await
+    }
+
+    async fn write_str(&self, payload: &str) -> TransportResult<()> {
+        let sender = self.message_sender.read().await;
+        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
+        sender.write_str(payload).await
+    }
+}
+
+impl
+    TransportDispatcher<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    > for StdioTransport<ServerMessage>
 {
 }

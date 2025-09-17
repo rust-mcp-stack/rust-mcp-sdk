@@ -37,13 +37,12 @@ mod tests {
                         // Check for `use rust_mcp_schema`
                         if content.contains("use rust_mcp_schema") {
                             errors.push(format!(
-                                "File {} contains `use rust_mcp_schema`. Use `use crate::schema` instead.",
-                                abs_path
+                                "File {abs_path} contains `use rust_mcp_schema`. Use `use crate::schema` instead."
                             ));
                         }
                     }
                     Err(e) => {
-                        errors.push(format!("Failed to read file `{}`: {}", path_str, e));
+                        errors.push(format!("Failed to read file `{path_str}`: {e}"));
                     }
                 }
             }

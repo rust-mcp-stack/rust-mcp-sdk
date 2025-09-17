@@ -33,14 +33,14 @@ Build and run instructions are available in their respective README.md files.
 You can run examples by passing the example project name to Cargo using the `-p` argument, like this:
 
 ```sh
-cargo run -p simple-mcp-client
+cargo run -p simple-mcp-client-stdio
 ```
 
-You can build the examples in a similar way. The following command builds the project and generates the binary at `target/release/hello-world-mcp-server`:
+You can build the examples in a similar way. The following command builds the project and generates the binary at `target/release/hello-world-mcp-server-stdio`:
 
 ```sh
 
-cargo build -p hello-world-mcp-server --release
+cargo build -p hello-world-mcp-server-stdio --release
 ```
 
 ## Code Formatting

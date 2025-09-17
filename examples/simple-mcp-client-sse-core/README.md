@@ -32,7 +32,7 @@ npx @modelcontextprotocol/server-everything sse
 2. Open a new terminal and run the project with:
 
 ```bash
-cargo run -p simple-mcp-client-core-sse
+cargo run -p simple-mcp-client-sse-core
 ```
 
 You can observe a sample output of the project; however, your results may vary slightly depending on the version of the MCP Server in use when you run it.

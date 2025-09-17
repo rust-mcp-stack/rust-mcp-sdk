@@ -22,14 +22,14 @@ cd rust-mcp-sdk
 2. Build the project:
 
 ```bash
-cargo build -p hello-world-mcp-server --release
+cargo build -p hello-world-mcp-server-stdio --release
 ```
 
-3.  After building the project, the binary will be located at `target/release/hello-world-mcp-server`
+3.  After building the project, the binary will be located at `target/release/hello-world-mcp-server-stdio`
     You can test it with [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector), or alternatively, use it with any MCP client you prefer.
 
 ```bash
-npx -y @modelcontextprotocol/inspector ./target/release/hello-world-mcp-server
+npx -y @modelcontextprotocol/inspector ./target/release/hello-world-mcp-server-stdio
 ```
 
 ```
@@ -40,4 +40,4 @@ Starting MCP inspector...
 
 Here you can see it in action :
 
-![hello-world-mcp-server](../../assets/examples/hello-world-mcp-server.gif)
+![hello-world-mcp-server-stdio](../../assets/examples/hello-world-mcp-server.gif)

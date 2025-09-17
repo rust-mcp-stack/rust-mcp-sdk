@@ -1,6 +1,6 @@
 [package]
-name = "simple-mcp-client-core-sse"
-version = "0.1.22"
+name = "hello-world-mcp-server-stdio-core"
+version = "0.1.19"
 edition = "2021"
 publish = false
 license = "MIT"
@@ -8,8 +8,9 @@ license = "MIT"
 
 [dependencies]
 rust-mcp-sdk = { workspace = true, default-features = false, features = [
-    "client",
+    "server",
     "macros",
+    "stdio",
     "2025_06_18",
 ] }
 
@@ -18,11 +19,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
-thiserror = { workspace = true }
-colored = "3.0.0"
-tracing-subscriber = { workspace = true }
-tracing = { workspace = true }
-
 
 [lints]
 workspace = true

@@ -57,6 +57,43 @@ impl MCPStream {
         (stream, sender, error_io)
     }
 
+    pub fn create_with_ack<X, R>(
+        readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
+        writable: tokio::sync::mpsc::Sender<(
+            String,
+            tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
+        )>,
+        error_io: IoStream,
+        pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
+        request_timeout: Duration,
+        cancellation_token: CancellationToken,
+    ) -> (
+        tokio_stream::wrappers::ReceiverStream<X>,
+        MessageDispatcher<R>,
+        IoStream,
+    )
+    where
+        R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+        X: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
+    {
+        let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+        // Clone cancellation_token for reader
+        let reader_token = cancellation_token.clone();
+
+        #[allow(clippy::let_underscore_future)]
+        let _ = Self::spawn_reader(readable, tx, reader_token);
+
+        let sender = MessageDispatcher::new_with_acknowledgement(
+            pending_requests,
+            writable,
+            request_timeout,
+        );
+
+        (stream, sender, error_io)
+    }
+
     /// Creates a new task that continuously reads from the readable stream.
     /// The received data is deserialized into a JsonrpcMessage. If the deserialization is successful,
     /// the object is transmitted. If the object is a response or error corresponding to a pending request,

@@ -1,14 +1,11 @@
-use std::sync::Arc;
-
+use crate::tools::GreetingTools;
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
     schema_utils::CallToolError, CallToolRequest, CallToolResult, ListToolsRequest,
     ListToolsResult, RpcError,
 };
 use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
-
-use crate::tools::GreetingTools;
-
+use std::sync::Arc;
 // Custom Handler to handle MCP Messages
 pub struct MyServerHandler;
 

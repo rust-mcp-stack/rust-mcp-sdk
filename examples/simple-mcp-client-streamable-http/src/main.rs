@@ -3,19 +3,20 @@ mod inquiry_utils;
 
 use handler::MyClientHandler;
 
-use inquiry_utils::InquiryUtils;
 use rust_mcp_sdk::error::SdkResult;
-use rust_mcp_sdk::mcp_client::client_runtime_core;
+use rust_mcp_sdk::mcp_client::client_runtime;
 use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
     LATEST_PROTOCOL_VERSION,
 };
-use rust_mcp_sdk::{ClientSseTransport, ClientSseTransportOptions, McpClient};
+use rust_mcp_sdk::{McpClient, RequestOptions, StreamableTransportOptions};
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-const MCP_SERVER_URL: &str = "http://localhost:3001/sse";
+use crate::inquiry_utils::InquiryUtils;
+
+const MCP_SERVER_URL: &str = "http://127.0.0.1:8080/mcp";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
@@ -30,21 +31,26 @@ async fn main() -> SdkResult<()> {
     let client_details: InitializeRequestParams = InitializeRequestParams {
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
-            name: "simple-rust-mcp-client-core-sse".to_string(),
+            name: "simple-rust-mcp-client-sse".to_string(),
             version: "0.1.0".to_string(),
-            title: Some("Simple Rust MCP Client (Core,SSE)".to_string()),
+            title: Some("Simple Rust MCP Client (SSE)".to_string()),
         },
         protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
-    // Step2 : Create a transport, with options to launch/connect to a MCP Server
-    // Assuming @modelcontextprotocol/server-everything is launched with sse argument and listening on port 3001
-    let transport = ClientSseTransport::new(MCP_SERVER_URL, ClientSseTransportOptions::default())?;
+    // Step 2: Create transport options to connect to an MCP server via Streamable HTTP.
+    let transport_options = StreamableTransportOptions {
+        mcp_url: MCP_SERVER_URL.to_string(),
+        request_options: RequestOptions {
+            ..RequestOptions::default()
+        },
+    };
 
     // STEP 3: instantiate our custom handler that is responsible for handling MCP messages
     let handler = MyClientHandler {};
 
-    let client = client_runtime_core::create_client(client_details, transport, handler);
+    // STEP 4: create the client with transport options and the handler
+    let client = client_runtime::with_transport_options(client_details, transport_options, handler);
 
     // STEP 5: start the MCP client
     client.clone().start().await?;
@@ -57,6 +63,7 @@ async fn main() -> SdkResult<()> {
     let utils = InquiryUtils {
         client: Arc::clone(&client),
     };
+
     // Display server information (name and version)
     utils.print_server_info();
 
@@ -79,7 +86,10 @@ async fn main() -> SdkResult<()> {
     utils.call_add_tool(100, 25).await?;
 
     // Set the log level
-    utils.client.set_logging_level(LoggingLevel::Debug).await?;
+    match utils.client.set_logging_level(LoggingLevel::Debug).await {
+        Ok(_) => println!("Log level is set to \"Debug\""),
+        Err(err) => eprintln!("Error setting the Log level : {err}"),
+    }
 
     // Send 3 pings to the server, with a 2-second interval between each ping.
     utils.ping_n_times(3).await;

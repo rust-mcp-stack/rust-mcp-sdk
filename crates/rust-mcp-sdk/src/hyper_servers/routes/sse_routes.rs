@@ -1,3 +1,4 @@
+use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::ClientMessage;
 use crate::{
     hyper_servers::{
@@ -90,13 +91,17 @@ pub async fn handle_sse(
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
     // create a transport for sending/receiving messages
-    let transport = SseTransport::new(
+    let Ok(transport) = SseTransport::new(
         read_rx,
         write_tx,
         read_tx,
         Arc::clone(&state.transport_options),
-    )
-    .unwrap();
+    ) else {
+        return Err(TransportServerError::TransportError(
+            "Failed to create SSE transport".to_string(),
+        ));
+    };
+
     let h: Arc<dyn McpServerHandler> = state.handler.clone();
     // create a new server instance with unique session_id and
     let server: Arc<ServerRuntime> = server_runtime::create_server_instance(
@@ -115,7 +120,12 @@ pub async fn handle_sse(
     // Start the server
     tokio::spawn(async move {
         match server
-            .start_stream(transport, DEFAULT_STREAM_ID, state.ping_interval, None)
+            .start_stream(
+                Arc::new(transport),
+                DEFAULT_STREAM_ID,
+                state.ping_interval,
+                None,
+            )
             .await
         {
             Ok(_) => tracing::info!("server {} exited gracefully.", session_id.to_owned()),

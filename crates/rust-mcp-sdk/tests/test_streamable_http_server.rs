@@ -8,13 +8,12 @@ use rust_mcp_schema::{
         SdkErrorCodes, ServerJsonrpcNotification, ServerJsonrpcRequest, ServerJsonrpcResponse,
         ServerMessages,
     },
-    CallToolRequest, CallToolRequestParams, ListPromptsRequestParams, ListRootsRequestParams,
-    ListRootsResult, ListToolsRequest, LoggingLevel, LoggingMessageNotificationParams, RequestId,
-    RootsListChangedNotification, ServerNotification, ServerRequest, ServerResult,
+    CallToolRequest, CallToolRequestParams, ListRootsResult, ListToolsRequest, LoggingLevel,
+    LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
+    ServerRequest, ServerResult,
 };
 use rust_mcp_sdk::mcp_server::HyperServerOptions;
 use serde_json::{json, Map, Value};
-use tokio_stream::StreamExt;
 
 use crate::common::{
     random_port, read_sse_event, read_sse_event_from_stream, send_delete_request, send_get_request,

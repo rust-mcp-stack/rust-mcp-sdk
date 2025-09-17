@@ -19,9 +19,11 @@ use futures::{StreamExt, TryFutureExt};
 use rust_mcp_transport::SessionId;
 use rust_mcp_transport::{IoStream, TransportDispatcher};
 use std::collections::HashMap;
+use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
+
 use tokio::sync::{mpsc, oneshot, watch};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
@@ -46,7 +48,7 @@ pub struct ServerRuntime {
     server_details: Arc<InitializeResult>,
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
-    transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
+    transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>, //TODO: remove the transport_map, we do not need a hashmap for it
     request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
@@ -357,6 +359,9 @@ impl ServerRuntime {
             >,
         >,
     ) -> SdkResult<()> {
+        if stream_id != DEFAULT_STREAM_ID {
+            return Ok(());
+        }
         let mut transport_map = self.transport_map.write().await;
         tracing::trace!("save transport for stream id : {}", stream_id);
         transport_map.insert(stream_id.to_string(), transport);
@@ -364,32 +369,16 @@ impl ServerRuntime {
     }
 
     pub(crate) async fn remove_transport(&self, stream_id: &str) -> SdkResult<()> {
+        if stream_id != DEFAULT_STREAM_ID {
+            return Ok(());
+        }
         let mut transport_map = self.transport_map.write().await;
         tracing::trace!("removing transport for stream id : {}", stream_id);
+        if let Some(transport) = transport_map.get(stream_id) {
+            transport.shut_down().await?;
+        }
         transport_map.remove(stream_id);
         Ok(())
-    }
-
-    pub(crate) async fn transport_by_stream(
-        &self,
-        stream_id: &str,
-    ) -> SdkResult<
-        Arc<
-            dyn TransportDispatcher<
-                ClientMessages,
-                MessageFromServer,
-                ClientMessage,
-                ServerMessages,
-                ServerMessage,
-            >,
-        >,
-    > {
-        let transport_map = self.transport_map.read().await;
-        transport_map.get(stream_id).cloned().ok_or_else(|| {
-            RpcError::internal_error()
-                .with_message(format!("Transport for key {stream_id} not found"))
-                .into()
-        })
     }
 
     pub(crate) async fn shutdown(&self) {
@@ -403,17 +392,24 @@ impl ServerRuntime {
 
     pub(crate) async fn stream_id_exists(&self, stream_id: &str) -> bool {
         let transport_map = self.transport_map.read().await;
-        transport_map.contains_key(stream_id)
+        let live_transport = if let Some(t) = transport_map.get(stream_id) {
+            !t.is_shut_down().await
+        } else {
+            false
+        };
+        live_transport
     }
 
     pub(crate) async fn start_stream(
         self: Arc<Self>,
-        transport: impl TransportDispatcher<
-            ClientMessages,
-            MessageFromServer,
-            ClientMessage,
-            ServerMessages,
-            ServerMessage,
+        transport: Arc<
+            dyn TransportDispatcher<
+                ClientMessages,
+                MessageFromServer,
+                ClientMessage,
+                ServerMessages,
+                ServerMessage,
+            >,
         >,
         stream_id: &str,
         ping_interval: Duration,
@@ -421,10 +417,11 @@ impl ServerRuntime {
     ) -> SdkResult<()> {
         let mut stream = transport.start().await?;
 
-        self.store_transport(stream_id, Arc::new(transport)).await?;
+        if stream_id == DEFAULT_STREAM_ID {
+            self.store_transport(stream_id, transport.clone()).await?;
+        }
 
         let self_clone = self.clone();
-        let transport = self_clone.transport_by_stream(stream_id).await?;
 
         let (disconnect_tx, mut disconnect_rx) = oneshot::channel::<()>();
         let abort_alive_task = transport
@@ -439,7 +436,10 @@ impl ServerRuntime {
 
         // in case there is a payload, we consume it by transport to get processed
         if let Some(payload) = payload {
-            transport.consume_string_payload(&payload).await?;
+            if let Err(err) = transport.consume_string_payload(&payload).await {
+                let _ = self.remove_transport(stream_id).await;
+                return Err(err.into());
+            }
         }
 
         // Create a channel to collect results from spawned tasks

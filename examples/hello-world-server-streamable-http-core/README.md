@@ -37,7 +37,7 @@ cd rust-mcp-sdk
 2. Build and start the server:
 
 ```bash
-cargo run -p hello-world-server-core-streamable-http --release
+cargo run -p hello-world-server-streamable-http-core --release
 ```
 
 By default, both the Streamable HTTP and SSE endpoints are displayed in the terminal:
@@ -65,4 +65,4 @@ Then , to test the server, visit one of the following URLs based on the desired 
 
 Here you can see it in action :
 
-![hello-world-mcp-server-sse-core](../../assets/examples/hello-world-server-core-streamable-http.gif)
+![hello-world-mcp-server-sse-core](../../assets/examples/hello-world-server-streamable-http-core.gif)

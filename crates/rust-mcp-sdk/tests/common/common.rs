@@ -1,5 +1,8 @@
+mod mock_server;
+mod test_client;
 mod test_server;
 use async_trait::async_trait;
+pub use mock_server::*;
 use reqwest::{Client, Response, Url};
 use rust_mcp_macros::{mcp_tool, JsonSchema};
 use rust_mcp_schema::ProtocolVersion;
@@ -8,9 +11,12 @@ use rust_mcp_sdk::mcp_client::ClientHandler;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
 use std::process;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::time::timeout;
 use tokio_stream::StreamExt;
+use wiremock::{MockServer, Request, ResponseTemplate};
 
+pub use test_client::*;
 pub use test_server::*;
 
 pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything";
@@ -336,4 +342,53 @@ pub mod sample_tools {
             return Ok(CallToolResult::text_content(goodbye_message, None));
         }
     }
+}
+
+pub async fn wiremock_request(mock_server: &MockServer, index: usize) -> Request {
+    let requests = mock_server.received_requests().await.unwrap();
+    requests[index].clone()
+}
+
+pub async fn debug_wiremock(mock_server: &MockServer) {
+    let requests = mock_server.received_requests().await.unwrap();
+    let len = requests.len();
+    println!(">>>  {len} request(s) received <<<");
+
+    for (index, request) in requests.iter().enumerate() {
+        println!("\n--- #{index} of {len} ---");
+        println!("Method: {}", request.method);
+        println!("Path: {}", request.url.path());
+        // println!("Headers: {:#?}", request.headers);
+        println!("---- headers ----");
+        for (key, values) in &request.headers {
+            println!("{key}: {values:?}");
+        }
+
+        let body_str = String::from_utf8_lossy(&request.body);
+        println!("Body: {body_str}\n");
+    }
+}
+
+pub fn create_sse_response(payload: &str) -> ResponseTemplate {
+    let sse_body = format!(r#"data: {}{}"#, payload, "\n\n");
+    ResponseTemplate::new(200).set_body_raw(sse_body.into_bytes(), "text/event-stream")
+}
+
+pub async fn wait_for_n_requests(
+    mock_server: &MockServer,
+    num_requests: usize,
+    duration: Option<Duration>,
+) {
+    let duration = duration.unwrap_or(Duration::from_secs(1));
+    timeout(duration, async {
+        loop {
+            let requests = mock_server.received_requests().await.unwrap();
+            if requests.len() >= num_requests {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
 }

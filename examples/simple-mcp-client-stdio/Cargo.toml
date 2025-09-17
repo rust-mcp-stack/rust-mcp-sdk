@@ -1,6 +1,6 @@
 [package]
-name = "simple-mcp-client"
-version = "0.1.31"
+name = "simple-mcp-client-stdio"
+version = "0.1.28"
 edition = "2021"
 publish = false
 license = "MIT"
@@ -10,6 +10,7 @@ license = "MIT"
 rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "client",
     "macros",
+    "stdio",
     "2025_06_18",
 ] }
 

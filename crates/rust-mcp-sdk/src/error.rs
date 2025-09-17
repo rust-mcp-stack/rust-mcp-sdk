@@ -11,25 +11,36 @@ pub type SdkResult<T> = core::result::Result<T, McpSdkError>;
 
 #[derive(Debug, Error)]
 pub enum McpSdkError {
+    #[error("Transport error: {0}")]
+    Transport(#[from] TransportError),
+
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("{0}")]
     RpcError(#[from] RpcError),
+
     #[error("{0}")]
-    IoError(#[from] std::io::Error),
-    #[error("{0}")]
-    TransportError(#[from] TransportError),
-    #[error("{0}")]
-    JoinError(#[from] JoinError),
-    #[error("{0}")]
-    AnyError(Box<(dyn std::error::Error + Send + Sync)>),
-    #[error("{0}")]
-    SdkError(#[from] crate::schema::schema_utils::SdkError),
+    Join(#[from] JoinError),
+
     #[cfg(feature = "hyper-server")]
     #[error("{0}")]
-    TransportServerError(#[from] TransportServerError),
-    #[error("Incompatible mcp protocol version: requested:{0} current:{1}")]
-    IncompatibleProtocolVersion(String, String),
+    HyperServer(#[from] TransportServerError),
+
     #[error("{0}")]
-    ParseProtocolVersionError(#[from] ParseProtocolVersionError),
+    SdkError(#[from] crate::schema::schema_utils::SdkError),
+
+    #[error("Protocol error: {kind}")]
+    Protocol { kind: ProtocolErrorKind },
+}
+
+// Sub-enum for protocol-related errors
+#[derive(Debug, Error)]
+pub enum ProtocolErrorKind {
+    #[error("Incompatible protocol version: requested {requested}, current {current}")]
+    IncompatibleVersion { requested: String, current: String },
+    #[error("Failed to parse protocol version: {0}")]
+    ParseError(#[from] ParseProtocolVersionError),
 }
 
 impl McpSdkError {

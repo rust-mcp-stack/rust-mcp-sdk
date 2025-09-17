@@ -4,14 +4,17 @@ members = [
     "crates/rust-mcp-macros",
     "crates/rust-mcp-sdk",
     "crates/rust-mcp-transport",
-    "examples/simple-mcp-client",
-    "examples/simple-mcp-client-core",
-    "examples/hello-world-mcp-server",
-    "examples/hello-world-mcp-server-core",
+    "examples/simple-mcp-client-stdio",
+    "examples/simple-mcp-client-stdio-core",
+    "examples/hello-world-mcp-server-stdio",
+    "examples/hello-world-mcp-server-stdio-core",
     "examples/hello-world-server-streamable-http",
-    "examples/hello-world-server-core-streamable-http",
+    "examples/hello-world-server-streamable-http-core",
     "examples/simple-mcp-client-sse",
-    "examples/simple-mcp-client-core-sse",
+    "examples/simple-mcp-client-sse-core",
+    "examples/simple-mcp-client-streamable-http",
+    "examples/simple-mcp-client-streamable-http-core",
+
 ]
 
 [workspace.dependencies]
@@ -39,7 +42,7 @@ tracing-subscriber = { version = "0.3", features = [
     "std",
     "fmt",
 ] }
-
+base64 = "0.22"
 axum = "0.8"
 rustls = "0.23"
 tokio-rustls = "0.26"
