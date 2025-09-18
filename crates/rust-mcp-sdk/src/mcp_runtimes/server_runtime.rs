@@ -368,7 +368,7 @@ impl ServerRuntime {
         Ok(())
     }
 
-    //TODO: re-visit and simlify unnecesarry hashmap
+    //TODO: re-visit and simplify unnecessary hashmap
     pub(crate) async fn remove_transport(&self, stream_id: &str) -> SdkResult<()> {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
