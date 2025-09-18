@@ -69,6 +69,7 @@ server = []                                                               # Serv
 client = []                                                               # Client feature
 hyper-server = ["axum", "axum-server", "hyper", "server", "tokio-stream"]
 ssl = ["axum-server/tls-rustls"]
+tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 macros = ["rust-mcp-macros/sdk"]
 
 # enables mcp protocol version 2025-06-18
