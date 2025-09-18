@@ -1,5 +1,8 @@
 # rust-mcp-macros.
 
+
+## mcp_tool Macro
+
 A procedural macro, part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem, to generate `rust_mcp_schema::Tool` instance from a struct.
 
 The `mcp_tool` macro generates an implementation for the annotated struct that includes:
@@ -80,11 +83,7 @@ fn main() {
 
 ```
 
----
 
-<img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Check out [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) , a high-performance, asynchronous toolkit for building MCP servers and clients. Focus on your app's logic while [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) takes care of the rest!
-
----
 
 
 **Note**: The following attributes are available only in version `2025_03_26` and later of the MCP Schema, and their values will be used in the [annotations](https://github.com/rust-mcp-stack/rust-mcp-schema/blob/main/src/generated_schema/2025_03_26/mcp_schema.rs#L5557) attribute of the *[Tool struct](https://github.com/rust-mcp-stack/rust-mcp-schema/blob/main/src/generated_schema/2025_03_26/mcp_schema.rs#L5554-L5566).
@@ -93,3 +92,106 @@ fn main() {
 - `idempotent_hint`
 - `open_world_hint`
 - `read_only_hint`
+
+
+
+
+
+## mcp_elicit Macro
+
+The `mcp_elicit` macro generates implementations for the annotated struct to facilitate data elicitation. It enables struct to generate `ElicitRequestedSchema` and also parsing a map of field names to `ElicitResultContentValue` values back into the struct, supporting both required and optional fields. The generated implementation includes:
+
+- A `message()` method returning the elicitation message as a string.
+- A `requested_schema()` method returning an `ElicitRequestedSchema` based on the struct’s JSON schema.
+- A `from_content_map()` method to convert a map of `ElicitResultContentValue` values into a struct instance.
+
+### Attributes
+
+- `message` - An optional string (or `concat!(...)` expression) to prompt the user or system for input. Defaults to an empty string if not provided.
+
+### Supported Field Types
+
+- `String`: Maps to `ElicitResultContentValue::String`.
+- `bool`: Maps to `ElicitResultContentValue::Boolean`.
+- `i32`: Maps to `ElicitResultContentValue::Integer` (with bounds checking).
+- `i64`: Maps to `ElicitResultContentValue::Integer`.
+- `enum` Only simple enums are supported. The enum must implement the FromStr trait.
+- `Option<T>`: Supported for any of the above types, mapping to `None` if the field is missing.
+
+
+### Usage Example
+
+```rust
+use rust_mcp_sdk::macros::{mcp_elicit, JsonSchema};
+use rust_mcp_sdk::schema::RpcError;
+use std::str::FromStr;
+
+// Simple enum with FromStr trait implemented
+#[derive(JsonSchema, Debug)]
+pub enum Colors {
+    #[json_schema(title = "Green Color")]
+    Green,
+    #[json_schema(title = "Red Color")]
+    Red,
+}
+impl FromStr for Colors {
+    type Err = RpcError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "green" => Ok(Colors::Green),
+            "red" => Ok(Colors::Red),
+            _ => Err(RpcError::parse_error().with_message("Invalid color".to_string())),
+        }
+    }
+}
+
+// A struct that could be used to send elicit request and get the input from the user
+#[mcp_elicit(message = "Please enter your info")]
+#[derive(JsonSchema)]
+pub struct UserInfo {
+    #[json_schema(
+        title = "Name",
+        description = "The user's full name",
+        min_length = 5,
+        max_length = 100
+    )]
+    pub name: String,
+
+    /// Email address of the user
+    #[json_schema(title = "Email", format = "email")]
+    pub email: Option<String>,
+
+    /// The user's age in years
+    #[json_schema(title = "Age", minimum = 15, maximum = 125)]
+    pub age: i32,
+
+    /// Is user a student?
+    #[json_schema(title = "Is student?", default = true)]
+    pub is_student: Option<bool>,
+
+    /// User's favorite color
+    pub favorate_color: Colors,
+}
+
+    // ....
+    // .......
+    // ...........
+
+    // send a Elicit Request , ask for UserInfo data and convert the result back to a valid UserInfo instance
+
+    let result: ElicitResult = server
+        .elicit_input(UserInfo::message(), UserInfo::requested_schema())
+        .await?;
+
+    // Create a UserInfo instance using data provided by the user on the client side
+    let user_info = UserInfo::from_content_map(result.content)?;
+
+
+```
+
+---
+
+<img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Check out [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk), a high-performance, asynchronous toolkit for building MCP servers and clients. Focus on your app's logic while [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) takes care of the rest!
+
+---

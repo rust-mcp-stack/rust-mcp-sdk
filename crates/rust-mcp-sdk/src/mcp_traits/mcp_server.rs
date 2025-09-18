@@ -4,9 +4,10 @@ use crate::schema::{
         ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
-    GetPromptRequest, Implementation, InitializeRequestParams, InitializeResult,
-    ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest,
-    ListRootsRequestParams, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
+    ElicitRequest, ElicitRequestParams, ElicitRequestedSchema, ElicitResult, GetPromptRequest,
+    Implementation, InitializeRequestParams, InitializeResult, ListPromptsRequest,
+    ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListRootsRequestParams,
+    ListRootsResult, ListToolsRequest, LoggingMessageNotification,
     LoggingMessageNotificationParams, PingRequest, PromptListChangedNotification,
     PromptListChangedNotificationParams, ReadResourceRequest, RequestId,
     ResourceListChangedNotification, ResourceListChangedNotificationParams,
@@ -56,6 +57,23 @@ pub trait McpServer: Sync + Send {
     /// Returns the server's capabilities.
     fn capabilities(&self) -> &ServerCapabilities {
         &self.server_info().capabilities
+    }
+
+    /// Sends an elicitation request to the client to prompt user input and returns the received response.
+    ///
+    /// The requested_schema argument allows servers to define the structure of the expected response using a restricted subset of JSON Schema.
+    /// To simplify client user experience, elicitation schemas are limited to flat objects with primitive properties only
+    async fn elicit_input(
+        &self,
+        message: String,
+        requested_schema: ElicitRequestedSchema,
+    ) -> SdkResult<ElicitResult> {
+        let request: ElicitRequest = ElicitRequest::new(ElicitRequestParams {
+            message,
+            requested_schema,
+        });
+        let response = self.request(request.into(), None).await?;
+        ElicitResult::try_from(response).map_err(|err| err.into())
     }
 
     /// Sends a request to the client and processes the response.

@@ -302,7 +302,7 @@ async fn get_standalone_stream(
     headers.insert("mcp-session-id", session_id);
     headers.insert("mcp-protocol-version", "2025-03-26");
 
-    if let Some(last_event_id) = last_event_id.clone() {
+    if let Some(last_event_id) = last_event_id {
         headers.insert("last-event-id", last_event_id);
     }
 
