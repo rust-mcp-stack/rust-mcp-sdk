@@ -72,10 +72,9 @@ Create a new module in the project called `tools.rs` and include the definitions
 //src/tools.rs
 use rust_mcp_sdk::schema::{CallToolResult, TextContent, schema_utils::CallToolError};
 use rust_mcp_sdk::{
-    macros::{mcp_tool, JsonSchema},
+    macros::{JsonSchema, mcp_tool},
     tool_box,
 };
-
 
 //****************//
 //  SayHelloTool  //
@@ -93,7 +92,9 @@ pub struct SayHelloTool {
 impl SayHelloTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let hello_message = format!("Hello, {}!", self.name);
-        Ok(CallToolResult::text_content( vec![TextContent::from(hello_message)] ))
+        Ok(CallToolResult::text_content(vec![TextContent::from(
+            hello_message,
+        )]))
     }
 }
 
@@ -112,7 +113,9 @@ pub struct SayGoodbyeTool {
 impl SayGoodbyeTool {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let hello_message = format!("Goodbye, {}!", self.name);
-        Ok(CallToolResult::text_content( vec![TextContent::from(hello_message)] ))
+        Ok(CallToolResult::text_content(vec![TextContent::from(
+            hello_message,
+        )]))
     }
 }
 
@@ -142,12 +145,14 @@ Here is the code for `handler.rs` :
 ```rs
 // src/handler.rs
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
-    schema_utils::CallToolError, CallToolRequest, CallToolResult, RpcError,
-    ListToolsRequest, ListToolsResult,
+    CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, RpcError,
+    schema_utils::CallToolError,
 };
-use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
+use rust_mcp_sdk::{McpServer, mcp_server::ServerHandler};
 
 use crate::tools::GreetingTools;
 
@@ -207,14 +212,11 @@ mod handler;
 mod tools;
 use handler::MyServerHandler;
 use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-    LATEST_PROTOCOL_VERSION,
+    Implementation, InitializeResult, LATEST_PROTOCOL_VERSION, ServerCapabilities,
+    ServerCapabilitiesTools,
 };
-
 use rust_mcp_sdk::{
-    error::SdkResult,
-    mcp_server::{server_runtime, ServerRuntime},
-    McpServer, StdioTransport, TransportOptions,
+    McpServer, StdioTransport, TransportOptions, error::SdkResult, mcp_server::server_runtime,
 };
 
 #[tokio::main]
@@ -244,7 +246,7 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     //create the MCP server
-    let server: ServerRuntime = server_runtime::create_server(server_details, transport, handler);
+    let server = server_runtime::create_server(server_details, transport, handler);
 
     // Start the server
     server.start().await
