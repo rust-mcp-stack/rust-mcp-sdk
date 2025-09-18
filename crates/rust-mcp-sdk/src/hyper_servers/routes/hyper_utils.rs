@@ -23,7 +23,8 @@ use axum::{
 use futures::stream;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
-    SessionId, SseTransport, StreamId, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+    EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
+    MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
@@ -36,6 +37,7 @@ async fn create_sse_stream(
     state: Arc<AppState>,
     payload: Option<&str>,
     standalone: bool,
+    last_event_id: Option<EventId>,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let payload_string = payload.map(|p| p.to_string());
 
@@ -53,50 +55,85 @@ async fn create_sse_stream(
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    let transport = Arc::new(
-        SseTransport::<ClientMessage>::new(
-            read_rx,
-            write_tx,
-            read_tx,
-            Arc::clone(&state.transport_options),
-        )
-        .map_err(|err| TransportServerError::TransportError(err.to_string()))?,
-    );
-
-    let stream_id: StreamId = if standalone {
-        DEFAULT_STREAM_ID.to_string()
+    let session_id = Arc::new(session_id);
+    let stream_id: Arc<StreamId> = if standalone {
+        Arc::new(DEFAULT_STREAM_ID.to_string())
     } else {
-        state.stream_id_gen.generate()
+        Arc::new(state.stream_id_gen.generate())
     };
+
+    let event_store = state.event_store.as_ref().map(Arc::clone);
+    let resumability_enabled = event_store.is_some();
+
+    let mut transport = SseTransport::<ClientMessage>::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    )
+    .map_err(|err| TransportServerError::TransportError(err.to_string()))?;
+    if let Some(event_store) = event_store.clone() {
+        transport.make_resumable((*session_id).clone(), (*stream_id).clone(), event_store);
+    }
+    let transport = Arc::new(transport);
+
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
+    let stream_id_clone = stream_id.clone();
+    let transport_clone = transport.clone();
 
     //Start the server runtime
     tokio::spawn(async move {
         match runtime_clone
-            .start_stream(transport, &stream_id, ping_interval, payload_string)
+            .start_stream(
+                transport_clone,
+                &stream_id_clone,
+                ping_interval,
+                payload_string,
+            )
             .await
         {
-            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id),
-            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id, err),
+            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id_clone),
+            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id_clone, err),
         }
-        let _ = runtime.remove_transport(&stream_id).await;
+        let _ = runtime.remove_transport(&stream_id_clone).await;
     });
 
     // Construct SSE stream
     let reader = BufReader::new(write_rx);
 
-    // outgoing messages from server to the client
-    let message_stream = stream::unfold(reader, |mut reader| async move {
-        let mut line = String::new();
+    // send outgoing messages from server to the client over the sse stream
+    let message_stream = stream::unfold(reader, move |mut reader| {
+        async move {
+            let mut line = String::new();
 
-        match reader.read_line(&mut line).await {
-            Ok(0) => None, // EOF
-            Ok(_) => {
-                let trimmed_line = line.trim_end_matches('\n').to_owned();
-                Some((Ok(Event::default().data(trimmed_line)), reader))
+            match reader.read_line(&mut line).await {
+                Ok(0) => None, // EOF
+                Ok(_) => {
+                    let trimmed_line = line.trim_end_matches('\n').to_owned();
+
+                    // empty sse comment to keep-alive
+                    if is_empty_sse_message(&trimmed_line) {
+                        return Some((Ok(Event::default()), reader));
+                    }
+
+                    let (event_id, message) = match (
+                        resumability_enabled,
+                        trimmed_line.split_once(char::from(ID_SEPARATOR)),
+                    ) {
+                        (true, Some((id, msg))) => (Some(id.to_string()), msg.to_string()),
+                        _ => (None, trimmed_line),
+                    };
+
+                    let event = match event_id {
+                        Some(id) => Event::default().data(message).id(id),
+                        None => Event::default().data(message),
+                    };
+
+                    Some((Ok(event), reader))
+                }
+                Err(e) => Some((Err(e), reader)),
             }
-            Err(e) => Some((Err(e), reader)),
         }
     });
 
@@ -110,6 +147,23 @@ async fn create_sse_stream(
         MCP_SESSION_ID_HEADER,
         HeaderValue::from_str(&session_id).unwrap(),
     );
+
+    // if last_event_id exists we replay messages from the event-store
+    tokio::spawn(async move {
+        if let Some(last_event_id) = last_event_id {
+            if let Some(event_store) = state.event_store.as_ref() {
+                if let Some(events) = event_store.events_after(last_event_id).await {
+                    for message_payload in events.messages {
+                        // skip storing replay messages
+                        let error = transport.write_str(&message_payload, true).await;
+                        if let Err(error) = error {
+                            tracing::trace!("Error replaying message: {error}")
+                        }
+                    }
+                }
+            }
+        }
+    });
 
     if !payload_contains_request {
         *response.status_mut() = StatusCode::ACCEPTED;
@@ -148,6 +202,7 @@ fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
 
 pub async fn create_standalone_stream(
     session_id: SessionId,
+    last_event_id: Option<EventId>,
     state: Arc<AppState>,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let runtime = state.session_store.get(&session_id).await.ok_or(
@@ -161,12 +216,20 @@ pub async fn create_standalone_stream(
         return Ok((StatusCode::CONFLICT, Json(error)).into_response());
     }
 
+    if let Some(last_event_id) = last_event_id.as_ref() {
+        tracing::trace!(
+            "SSE stream re-connected with last-event-id: {}",
+            last_event_id
+        );
+    }
+
     let mut response = create_sse_stream(
         runtime.clone(),
         session_id.clone(),
         state.clone(),
         None,
         true,
+        last_event_id,
     )
     .await?;
     *response.status_mut() = StatusCode::OK;
@@ -195,6 +258,7 @@ pub async fn start_new_session(
         state.clone(),
         Some(payload),
         false,
+        None,
     )
     .await;
 
@@ -354,6 +418,7 @@ pub async fn process_incoming_message(
                     state.clone(),
                     Some(payload),
                     false,
+                    None,
                 )
                 .await
             }
@@ -363,6 +428,10 @@ pub async fn process_incoming_message(
             Ok((StatusCode::NOT_FOUND, Json(error)).into_response())
         }
     }
+}
+
+pub fn is_empty_sse_message(sse_payload: &str) -> bool {
+    sse_payload.is_empty() || sse_payload.trim() == ":"
 }
 
 pub async fn delete_session(

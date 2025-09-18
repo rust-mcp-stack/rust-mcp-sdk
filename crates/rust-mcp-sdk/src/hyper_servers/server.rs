@@ -23,7 +23,7 @@ use super::{
 };
 use crate::schema::InitializeResult;
 use axum::Router;
-use rust_mcp_transport::{SessionId, TransportOptions};
+use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
@@ -52,6 +52,10 @@ pub struct HyperServerOptions {
 
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
+
+    /// Event store for resumability support
+    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
+    pub event_store: Option<Arc<dyn EventStore>>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
@@ -225,6 +229,7 @@ impl Default for HyperServerOptions {
             allowed_hosts: None,
             allowed_origins: None,
             dns_rebinding_protection: false,
+            event_store: None,
         }
     }
 }
@@ -271,6 +276,7 @@ impl HyperServer {
             allowed_hosts: server_options.allowed_hosts.take(),
             allowed_origins: server_options.allowed_origins.take(),
             dns_rebinding_protection: server_options.dns_rebinding_protection,
+            event_store: server_options.event_store.as_ref().map(Arc::clone),
         });
         let app = app_routes(Arc::clone(&state), &server_options);
         Self {

@@ -23,7 +23,7 @@ use axum::{
     Json, Router,
 };
 use hyper::{HeaderMap, StatusCode};
-use rust_mcp_transport::{SessionId, MCP_SESSION_ID_HEADER};
+use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
 use std::{collections::HashMap, sync::Arc};
 
 pub fn routes(state: Arc<AppState>, streamable_http_endpoint: &str) -> Router<Arc<AppState>> {
@@ -60,9 +60,14 @@ pub async fn handle_streamable_http_get(
         .and_then(|value| value.to_str().ok())
         .map(|s| s.to_string());
 
+    let last_event_id: Option<SessionId> = headers
+        .get(MCP_LAST_EVENT_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(|s| s.to_string());
+
     match session_id {
         Some(session_id) => {
-            let res = create_standalone_stream(session_id, state).await?;
+            let res = create_standalone_stream(session_id, last_event_id, state).await?;
             Ok(res.into_response())
         }
         None => {

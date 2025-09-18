@@ -153,6 +153,7 @@ let server = hyper_server::create_server(
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
         sse_support: false,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
         ..Default::default()
     },
 );
@@ -191,7 +192,6 @@ impl ServerHandler for MyServerHandler {
     }
 
     /// Handles requests to call a specific tool.
-
     async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer> ) -> Result<CallToolResult, CallToolError> {
 
         if request.tool_name() == SayHelloTool::tool_name() {
@@ -416,6 +416,7 @@ server.start().await?;
 
 Here is a list of available options with descriptions for configuring the HyperServer:
 ```rs
+
 pub struct HyperServerOptions {
     /// Hostname or IP address the server will bind to (default: "127.0.0.1")
     pub host: String,
@@ -431,6 +432,10 @@ pub struct HyperServerOptions {
 
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
+
+    /// Event store for resumability support
+    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
+    pub event_store: Option<Arc<dyn EventStore>>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
@@ -500,8 +505,8 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
-- `stdio`: Enables support for the `standard input/output (stdio)` transport.
 
+- `stdio`: Enables support for the `standard input/output (stdio)` transport.
 - `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
 
 #### MCP Protocol Versions with Corresponding Features

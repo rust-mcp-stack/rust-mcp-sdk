@@ -8,6 +8,7 @@ mod client_sse;
 mod client_streamable_http;
 mod constants;
 pub mod error;
+pub mod event_store;
 mod mcp_stream;
 mod message_dispatcher;
 mod schema;

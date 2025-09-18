@@ -368,16 +368,17 @@ impl ServerRuntime {
         Ok(())
     }
 
+    //TODO: re-visit and simplify unnecessary hashmap
     pub(crate) async fn remove_transport(&self, stream_id: &str) -> SdkResult<()> {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
         }
-        let mut transport_map = self.transport_map.write().await;
+        let transport_map = self.transport_map.read().await;
         tracing::trace!("removing transport for stream id : {}", stream_id);
         if let Some(transport) = transport_map.get(stream_id) {
             transport.shut_down().await?;
         }
-        transport_map.remove(stream_id);
+        // transport_map.remove(stream_id);
         Ok(())
     }
 
@@ -435,6 +436,7 @@ impl ServerRuntime {
         };
 
         // in case there is a payload, we consume it by transport to get processed
+        // payload would be message payload coming from the client
         if let Some(payload) = payload {
             if let Err(err) = transport.consume_string_payload(&payload).await {
                 let _ = self.remove_transport(stream_id).await;

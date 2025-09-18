@@ -1,8 +1,10 @@
 mod handler;
 mod tools;
 
+use std::sync::Arc;
 use std::time::Duration;
 
+use rust_mcp_sdk::event_store::InMemoryEventStore;
 use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
 
 use handler::MyServerHandler;
@@ -57,6 +59,7 @@ async fn main() -> SdkResult<()> {
         HyperServerOptions {
             host: "127.0.0.1".to_string(),
             ping_interval: Duration::from_secs(5),
+            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             ..Default::default()
         },
     );

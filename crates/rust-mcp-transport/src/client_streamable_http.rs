@@ -496,10 +496,10 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
         sender.send_batch(message, request_timeout).await
     }
 
-    async fn write_str(&self, payload: &str) -> TransportResult<()> {
+    async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()> {
         let sender = self.message_sender.read().await;
         let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
-        sender.write_str(payload).await
+        sender.write_str(payload, skip_store).await
     }
 }
 

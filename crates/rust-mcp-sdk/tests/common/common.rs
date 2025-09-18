@@ -11,9 +11,11 @@ use rust_mcp_sdk::mcp_client::ClientHandler;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
 use std::process;
+use std::sync::Once;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
+use tracing_subscriber::EnvFilter;
 use wiremock::{MockServer, Request, ResponseTemplate};
 
 pub use test_client::*;
@@ -23,7 +25,17 @@ pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything
 
 #[cfg(unix)]
 pub const UVX_SERVER_GIT: &str = "mcp-server-git";
+static INIT: Once = Once::new();
 
+pub fn init_tracing() {
+    INIT.call_once(|| {
+        let filter = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("tracing"))
+            .unwrap();
+
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    });
+}
 #[mcp_tool(
     name = "say_hello",
     description = "Accepts a person's name and says a personalized \"Hello\" to that person",
@@ -126,16 +138,18 @@ pub async fn send_get_request(
             );
         }
     }
+
     client.get(url).headers(headers).send().await
 }
 
 use futures::stream::Stream;
 
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
+/// reads sse events and return them as (id, event, data) tuple
 pub async fn read_sse_event_from_stream(
     stream: &mut (impl Stream<Item = Result<hyper::body::Bytes, reqwest::Error>> + Unpin),
     event_count: usize,
-) -> Option<Vec<String>> {
+) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut buffer = String::new();
     let mut events = vec![];
 
@@ -146,27 +160,28 @@ pub async fn read_sse_event_from_stream(
                 buffer.push_str(chunk_str);
 
                 while let Some(pos) = buffer.find("\n\n") {
-                    let data = {
-                        // Scope to limit borrows
-                        let (event_str, rest) = buffer.split_at(pos);
-                        let mut data = None;
+                    let (event_str, rest) = buffer.split_at(pos);
+                    let mut id = None;
+                    let mut event = None;
+                    let mut data = None;
 
-                        // Process the event string
-                        for line in event_str.lines() {
-                            if line.starts_with("data:") {
-                                data = Some(line.trim_start_matches("data:").trim().to_string());
-                                break; // Exit loop after finding data
-                            }
+                    // Process the event string
+                    for line in event_str.lines() {
+                        if line.starts_with("id:") {
+                            id = Some(line.trim_start_matches("id:").trim().to_string());
+                        } else if line.starts_with("event:") {
+                            event = Some(line.trim_start_matches("event:").trim().to_string());
+                        } else if line.starts_with("data:") {
+                            data = Some(line.trim_start_matches("data:").trim().to_string());
                         }
+                    }
 
-                        // Update buffer after processing
-                        buffer = rest[2..].to_string(); // Skip "\n\n"
-                        data
-                    };
+                    // Update buffer after processing
+                    buffer = rest[2..].to_string(); // Skip "\n\n"
 
-                    // Return if data was found
+                    // Only include events with data
                     if let Some(data) = data {
-                        events.push(data);
+                        events.push((id, event, data));
                         if events.len().eq(&event_count) {
                             return Some(events);
                         }
@@ -174,17 +189,26 @@ pub async fn read_sse_event_from_stream(
                 }
             }
             Err(_e) => {
-                // return Err(TransportServerError::HyperError(e));
                 return None;
             }
         }
     }
-    None
+    if !events.is_empty() {
+        Some(events)
+    } else {
+        None
+    }
 }
 
-pub async fn read_sse_event(response: Response, event_count: usize) -> Option<Vec<String>> {
+// return sse event as (id, event, data) tuple
+pub async fn read_sse_event(
+    response: Response,
+    event_count: usize,
+) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut stream = response.bytes_stream();
-    read_sse_event_from_stream(&mut stream, event_count).await
+    let events = read_sse_event_from_stream(&mut stream, event_count).await;
+    // drop(stream);
+    events
 }
 
 pub fn test_client_info() -> InitializeRequestParams {
@@ -280,9 +304,16 @@ pub fn random_port_old() -> u16 {
 }
 
 pub mod sample_tools {
+    use std::{sync::Arc, time::Duration};
+
+    use rust_mcp_schema::{LoggingMessageNotificationParams, TextContent};
     #[cfg(feature = "2025_06_18")]
     use rust_mcp_sdk::macros::{mcp_tool, JsonSchema};
-    use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult};
+    use rust_mcp_sdk::{
+        schema::{schema_utils::CallToolError, CallToolResult},
+        McpServer,
+    };
+    use serde_json::json;
 
     //****************//
     //  SayHelloTool  //
@@ -340,6 +371,43 @@ pub mod sample_tools {
             ]));
             #[cfg(not(feature = "2025_06_18"))]
             return Ok(CallToolResult::text_content(goodbye_message, None));
+        }
+    }
+
+    //****************************//
+    //  StartNotificationStream   //
+    //****************************//
+    #[mcp_tool(
+        name = "start-notification-stream",
+        description = "Accepts a person's name and says a personalized \"Goodbye\" to that person."
+    )]
+    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
+    pub struct StartNotificationStream {
+        /// Interval in milliseconds between notifications
+        interval: u64,
+        /// Number of notifications to send (0 for 100)
+        count: u32,
+    }
+    impl StartNotificationStream {
+        pub async fn call_tool(
+            &self,
+            runtime: Arc<dyn McpServer>,
+        ) -> Result<CallToolResult, CallToolError> {
+            for i in 0..self.count {
+                let _ = runtime
+                    .send_logging_message(LoggingMessageNotificationParams {
+                        data: json!({"id":format!("message {} of {}",i,self.count)}),
+                        level: rust_mcp_sdk::schema::LoggingLevel::Emergency,
+                        logger: None,
+                    })
+                    .await;
+                tokio::time::sleep(Duration::from_millis(self.interval)).await;
+            }
+
+            let message = format!("so many messages sent");
+            Ok(CallToolResult::text_content(vec![TextContent::from(
+                message,
+            )]))
         }
     }
 }
