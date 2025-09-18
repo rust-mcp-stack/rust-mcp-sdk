@@ -38,8 +38,8 @@ This project supports following transports:
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
 - ✅ Streamable HTTP Support for MCP Clients
-- ⬜ Resumability
-- ⬜ Authentication / Oauth
+- ✅ Resumability
+- ⬜ Oauth Authentication
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
@@ -50,6 +50,7 @@ This project supports following transports:
   - [MCP Client (stdio)](#mcp-client-stdio)
   - [MCP Client (Streamable HTTP)](#mcp-client_streamable-http))
   - [MCP Client (sse)](#mcp-client-sse)
+- [Macros](#macros)
 - [Getting Started](#getting-started)
 - [HyperServerOptions](#hyperserveroptions)
   - [Security Considerations](#security-considerations)
@@ -386,6 +387,114 @@ Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost
 👉 see [examples/simple-mcp-client-sse](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-sse) for a complete working example.
 
 
+## Macros
+[rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) includes several helpful macros that simplify common tasks when building MCP servers and clients. For example, they can automatically generate tool specifications and tool schemas right from your structs, or assist with elicitation requests and responses making them completely type safe.
+
+> To use these macros, ensure the `macros` feature is enabled in your Cargo.toml.
+
+### mcp_tool
+`mcp_tool` is a procedural macro attribute that helps generating rust_mcp_schema::Tool from a struct.
+
+Usage example:
+```rust
+#[mcp_tool(
+    name = "move_file",
+    title="Move File",
+    description = concat!("Move or rename files and directories. Can move files between directories ",
+"and rename them in a single operation. If the destination exists, the ",
+"operation will fail. Works across different directories and can be used ",
+"for simple renaming within the same directory. ",
+"Both source and destination must be within allowed directories."),
+    destructive_hint = false,
+    idempotent_hint = false,
+    open_world_hint = false,
+    read_only_hint = false
+)]
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, JsonSchema)]
+pub struct MoveFileTool {
+    /// The source path of the file to move.
+    pub source: String,
+    /// The destination path to move the file to.
+    pub destination: String,
+}
+
+// Now we can call `tool()` method on it to get a Tool instance
+let rust_mcp_sdk::schema::Tool = MoveFileTool::tool();
+
+```
+
+💻 For a real-world example, check out any of the tools available at: https://github.com/rust-mcp-stack/rust-mcp-filesystem/tree/main/src/tools
+
+
+### tool_box
+`tool_box` generates an enum from a provided list of tools, making it easier to organize and manage them, especially when your application includes a large number of tools.
+
+It accepts an array of tools and generates an enum where each tool becomes a variant of the enum.
+
+Generated enum has a `tools()` function that returns a `Vec<Tool>` , and a `TryFrom<CallToolRequestParams>` trait implementation that could be used to convert a ToolRequest into a Tool instance.
+
+Usage example:
+```rust
+    // Accepts an array of tools and generates an enum named `FileSystemTools`,
+    // where each tool becomes a variant of the enum.
+    tool_box!(FileSystemTools, [ReadFileTool, MoveFileTool, SearchFilesTool]);
+
+    // now in the app, we can use the FileSystemTools, like:
+    let all_tools: Vec<Tool> = FileSystemTools::tools();
+```
+
+💻 To see a real-world example of that please see :
+- `tool_box` macro usage:  [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/tools.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/tools.rs)
+- using `tools()` in list tools request :  [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L67)
+- using `try_from` in call tool_request: [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L100)
+
+
+
+### mcp_elicit
+The `mcp_elicit` macro generates implementations for the annotated struct to facilitate data elicitation. It enables struct to generate `ElicitRequestedSchema` and also parsing a map of field names to `ElicitResultContentValue` values back into the struct, supporting both required and optional fields. The generated implementation includes:
+
+- A `message()` method returning the elicitation message as a string.
+- A `requested_schema()` method returning an `ElicitRequestedSchema` based on the struct’s JSON schema.
+- A `from_content_map()` method to convert a map of `ElicitResultContentValue` values into a struct instance.
+
+### Attributes
+
+- `message` - An optional string (or `concat!(...)` expression) to prompt the user or system for input. Defaults to an empty string if not provided.
+
+Usage example:
+```rust
+// A struct that could be used to send elicit request and get the input from the user
+#[mcp_elicit(message = "Please enter your info")]
+#[derive(JsonSchema)]
+pub struct UserInfo {
+    #[json_schema(
+        title = "Name",
+        description = "The user's full name",
+        min_length = 5,
+        max_length = 100
+    )]
+    pub name: String,
+    /// Is user a student?
+    #[json_schema(title = "Is student?", default = true)]
+    pub is_student: Option<bool>,
+
+    /// User's favorite color
+    pub favorate_color: Colors,
+}
+
+// send a Elicit Request , ask for UserInfo data and convert the result back to a valid UserInfo instance
+let result: ElicitResult = server
+    .elicit_input(UserInfo::message(), UserInfo::requested_schema())
+    .await?;
+
+// Create a UserInfo instance using data provided by the user on the client side
+let user_info = UserInfo::from_content_map(result.content)?;
+
+```
+
+💻 For mre info please see :
+- https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-macros
+
 ## Getting Started
 
 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
@@ -432,7 +541,6 @@ pub struct HyperServerOptions {
 
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
-
 
     /// Event store for resumability support
     /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
@@ -509,6 +617,7 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 
 - `stdio`: Enables support for the `standard input/output (stdio)` transport.
 - `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
+
 
 #### MCP Protocol Versions with Corresponding Features
 
@@ -612,11 +721,16 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 | <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
 | <a href="https://github.com/EricLBuehler/mistral.rs"><img src="https://avatars.githubusercontent.com/u/65165915?s=64" width="64"/></a> | [mistral.rs](https://github.com/EricLBuehler/mistral.rs) | Blazingly fast LLM inference. | [GitHub](https://github.com/EricLBuehler/mistral.rs) |
 | <a href="https://github.com/moonrepo/moon"><img src="https://avatars.githubusercontent.com/u/102833400?s=64" width="64"/></a> | [moon](https://github.com/moonrepo/moon) | moon is a repository management, organization, orchestration, and notification tool for the web ecosystem, written in Rust. | [GitHub](https://github.com/moonrepo/moon) |
+| <a href="https://github.com/LepistaBioinformatics/mycelium"><img src="https://avatars.githubusercontent.com/u/79392252?s=64" width="64"/></a> | [mycelium](https://github.com/LepistaBioinformatics/mycelium) | `mycelium` is a modern, open-source platform for secure, flexible, and scalable API management. | [GitHub](https://github.com/LepistaBioinformatics/mycelium) |
 | <a href="https://github.com/angreal/angreal"><img src="https://avatars.githubusercontent.com/u/45580675?s=64" width="64"/></a> | [angreal](https://github.com/angreal/angreal) | Angreal provides a way to template the structure of projects and a way of executing methods for interacting with that project in a consistent manner. | [GitHub](https://github.com/angreal/angreal) |
 | <a href="https://github.com/FalkorDB/text-to-cypher"><img src="https://avatars.githubusercontent.com/u/140048192?s=64" width="64"/></a> | [text-to-cypher](https://github.com/FalkorDB/text-to-cypher) | A high-performance Rust-based API service that translates natural language text to Cypher queries for graph databases. | [GitHub](https://github.com/FalkorDB/text-to-cypher) |
 | <a href="https://github.com/Tuurlijk/notify-mcp"><img src="https://avatars.githubusercontent.com/u/790979?s=64" width="64"/></a> | [notify-mcp](https://github.com/Tuurlijk/notify-mcp) | A Model Context Protocol (MCP) server that provides desktop notification functionality. | [GitHub](https://github.com/Tuurlijk/notify-mcp) |
 | <a href="https://github.com/WismutHansen/lst"><img src="https://avatars.githubusercontent.com/u/86825018?s=64" width="64"/></a> | [lst](https://github.com/WismutHansen/lst) | `lst` is a personal lists, notes, and blog posts management application with a focus on plain-text storage, offline-first functionality, and multi-device synchronization. | [GitHub](https://github.com/WismutHansen/lst) |
 | <a href="https://github.com/Vaiz/rust-mcp-server"><img src="https://avatars.githubusercontent.com/u/4908982?s=64" width="64"/></a> | [rust-mcp-server](https://github.com/Vaiz/rust-mcp-server) | `rust-mcp-server` allows the model to perform actions on your behalf, such as building, testing, and analyzing your Rust code. | [GitHub](https://github.com/Vaiz/rust-mcp-server) |
+
+
+
+
 
 
 

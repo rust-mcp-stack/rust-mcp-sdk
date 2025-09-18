@@ -99,10 +99,10 @@ fn main() {
 
 ## mcp_elicit Macro
 
-The `mcp_elicit` macro generates an implementation for the annotated struct to facilitate data elicitation into a `rust_mcp_schema::Tool` instance. It enables parsing a map of field names to `ElicitResultContentValue` values into the struct, supporting both required and optional fields. The generated implementation includes:
+The `mcp_elicit` macro generates implementations for the annotated struct to facilitate data elicitation. It enables struct to generate `ElicitRequestedSchema` and also parsing a map of field names to `ElicitResultContentValue` values back into the struct, supporting both required and optional fields. The generated implementation includes:
 
 - A `message()` method returning the elicitation message as a string.
-- A `requested_schema()` method returning an `ElicitRequestParamsRequestedSchema` based on the struct’s JSON schema.
+- A `requested_schema()` method returning an `ElicitRequestedSchema` based on the struct’s JSON schema.
 - A `from_content_map()` method to convert a map of `ElicitResultContentValue` values into a struct instance.
 
 ### Attributes
