@@ -433,6 +433,7 @@ pub struct HyperServerOptions {
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
 
+
     /// Event store for resumability support
     /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
     pub event_store: Option<Arc<dyn EventStore>>,
@@ -505,8 +506,9 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
-- `stdio`: Enables support for the `standard input/output (stdio)` transport..
 
+- `stdio`: Enables support for the `standard input/output (stdio)` transport.
+- `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
 
 #### MCP Protocol Versions with Corresponding Features
 
