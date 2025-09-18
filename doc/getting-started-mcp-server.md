@@ -40,7 +40,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
-rust-mcp-sdk = "0.4"
+rust-mcp-sdk = "0.7"
 serde = "1.0"
 serde_json = "1.0"
 tokio = "1.4"
