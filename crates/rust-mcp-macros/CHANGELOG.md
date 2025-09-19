@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.5.1...rust-mcp-macros-v0.5.2) (2025-09-19)
+
+
+### 🚀 Features
+
+* Add elicitation macros and add elicit_input() method ([#99](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/99)) ([3ab5fe7](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/3ab5fe73aaa10de2b5b23caee357ac15b37c845f))
+
 ## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.5.0...rust-mcp-macros-v0.5.1) (2025-08-12)
 
 
