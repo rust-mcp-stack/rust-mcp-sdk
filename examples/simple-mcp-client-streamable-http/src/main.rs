@@ -16,7 +16,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::inquiry_utils::InquiryUtils;
 
-const MCP_SERVER_URL: &str = "http://127.0.0.1:8080/mcp";
+const MCP_SERVER_URL: &str = "http://127.0.0.1:3001/mcp";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
