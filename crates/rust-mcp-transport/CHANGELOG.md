@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.5.0...rust-mcp-transport-v0.6.0) (2025-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* add Streamable HTTP Client , multiple refactoring and improvements ([#98](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/98))
+* update ServerHandler and ServerHandlerCore traits ([#96](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/96))
+
+### 🚀 Features
+
+* Add Streamable HTTP Client , multiple refactoring and improvements ([#98](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/98)) ([abb0c36](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/abb0c36126b0a397bc20a1de36c5a5a80924a01e))
+* Event store support for resumability ([#101](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/101)) ([08742bb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/08742bb9636f81ee79eda4edc192b3b8ed4c7287))
+* Update ServerHandler and ServerHandlerCore traits ([#96](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/96)) ([a2d6d23](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/a2d6d23ab59fbc34d04526e2606f747f93a8468c))
+
+
+### 🐛 Bug Fixes
+
+* Correct pending_requests instance ([#94](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/94)) ([9d8c1fb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9d8c1fbdf3ddb7c67ce1fb7dcb8e50b8ba2e1202))
+
 ## [0.5.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.5.0...rust-mcp-transport-v0.5.1) (2025-08-31)
 
 

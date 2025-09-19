@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.3...rust-mcp-sdk-v0.7.0) (2025-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* add Streamable HTTP Client , multiple refactoring and improvements ([#98](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/98))
+* update ServerHandler and ServerHandlerCore traits ([#96](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/96))
+
+### 🚀 Features
+
+* Add elicitation macros and add elicit_input() method ([#99](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/99)) ([3ab5fe7](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/3ab5fe73aaa10de2b5b23caee357ac15b37c845f))
+* Add Streamable HTTP Client , multiple refactoring and improvements ([#98](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/98)) ([abb0c36](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/abb0c36126b0a397bc20a1de36c5a5a80924a01e))
+* Add tls-no-provider feature ([#97](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/97)) ([5dacceb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/5dacceb0c2d18b8334744a13d438c6916bb7244c))
+* Event store support for resumability ([#101](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/101)) ([08742bb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/08742bb9636f81ee79eda4edc192b3b8ed4c7287))
+* Update ServerHandler and ServerHandlerCore traits ([#96](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/96)) ([a2d6d23](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/a2d6d23ab59fbc34d04526e2606f747f93a8468c))
+
 ## [0.6.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.2...rust-mcp-sdk-v0.6.3) (2025-08-31)
 
 ## [0.6.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.1...rust-mcp-sdk-v0.6.2) (2025-08-30)
