@@ -1,9 +1,11 @@
-use crate::mcp_http::{
+use crate::mcp_http::utils::{
     acceptable_content_type, accepts_event_stream, create_standalone_stream, delete_session,
     process_incoming_message, process_incoming_message_return, start_new_session,
-    valid_streaming_http_accept_header, validate_mcp_protocol_version_header, AppState,
+    valid_streaming_http_accept_header, validate_mcp_protocol_version_header,
 };
+use crate::mcp_http::AppState;
 use crate::schema::schema_utils::SdkError;
+use crate::utils::validate_mcp_protocol_version;
 use crate::{
     error::McpSdkError,
     hyper_servers::{
@@ -20,7 +22,9 @@ use axum::{
     Json, Router,
 };
 use hyper::{HeaderMap, StatusCode};
-use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
+use rust_mcp_transport::{
+    SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+};
 use std::{collections::HashMap, sync::Arc};
 
 pub fn routes(state: Arc<AppState>, streamable_http_endpoint: &str) -> Router<Arc<AppState>> {
