@@ -19,6 +19,7 @@ use axum::{
     Json,
 };
 use futures::stream;
+use http::header::ACCEPT;
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
@@ -477,7 +478,7 @@ pub fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkResult<()
 
 pub fn accepts_event_stream(headers: &HeaderMap) -> bool {
     let accept_header = headers
-        .get("accept")
+        .get(ACCEPT)
         .and_then(|val| val.to_str().ok())
         .unwrap_or("");
 
@@ -488,7 +489,7 @@ pub fn accepts_event_stream(headers: &HeaderMap) -> bool {
 
 pub fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
     let accept_header = headers
-        .get("accept")
+        .get(ACCEPT)
         .and_then(|val| val.to_str().ok())
         .unwrap_or("");
 
