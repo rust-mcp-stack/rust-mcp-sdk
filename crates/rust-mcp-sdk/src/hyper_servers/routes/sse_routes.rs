@@ -30,6 +30,9 @@ use tokio_stream::StreamExt;
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
+#[derive(Clone)]
+pub struct SseMessageEndpoint(pub String);
+
 /// Creates an initial SSE event that returns the messages endpoint
 ///
 /// Constructs an SSE event containing the messages endpoint URL with the session ID.
@@ -53,9 +56,17 @@ fn initial_event(endpoint: &str) -> Result<Event, Infallible> {
 ///
 /// # Returns
 /// * `Router<Arc<AppState>>` - An Axum router configured with the SSE route
-pub fn routes(state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>> {
+pub fn routes(
+    state: Arc<AppState>,
+    sse_endpoint: &str,
+    sse_message_endpoint: &str,
+) -> Router<Arc<AppState>> {
+    let sse_message_endpoint = SseMessageEndpoint(sse_message_endpoint.to_string());
     Router::new()
-        .route(sse_endpoint, get(handle_sse))
+        .route(
+            sse_endpoint,
+            get(handle_sse).layer(Extension(sse_message_endpoint)),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             generate_session_id,
@@ -78,10 +89,18 @@ pub fn routes(state: Arc<AppState>, sse_endpoint: &str) -> Router<Arc<AppState>>
 /// * `TransportServerResult<impl IntoResponse>` - The SSE response stream or an error
 pub async fn handle_sse(
     Extension(session_id): Extension<SessionId>,
+    Extension(sse_message_endpoint): Extension<SseMessageEndpoint>,
     State(state): State<Arc<AppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
+    let SseMessageEndpoint(sse_message_endpoint) = sse_message_endpoint;
+    tracing::warn!(
+        ">>>  session_id {:?}, sse_message_endpoint>>> {:?}",
+        session_id,
+        sse_message_endpoint
+    );
+
     let messages_endpoint =
-        SseTransport::<ClientMessage>::message_endpoint(&state.sse_message_endpoint, &session_id);
+        SseTransport::<ClientMessage>::message_endpoint(&sse_message_endpoint, &session_id);
 
     // readable stream of string to be used in transport
     // writing string to read_tx will be received as messages inside the transport and messages will be processed

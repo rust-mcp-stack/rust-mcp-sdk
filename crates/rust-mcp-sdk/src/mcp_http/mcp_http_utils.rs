@@ -1,7 +1,7 @@
 use crate::{
     error::SdkResult,
     hyper_servers::error::{TransportServerError, TransportServerResult},
-    mcp_http::AppState,
+    mcp_http::{AppState, GenericBody},
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
@@ -18,8 +18,10 @@ use axum::{
     },
     Json,
 };
+use bytes::Bytes;
 use futures::stream;
-use http::header::ACCEPT;
+use http::header::{ACCEPT, CONTENT_TYPE};
+use http_body_util::{BodyExt, Full};
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
@@ -498,4 +500,16 @@ pub fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
     let has_event_stream = types.iter().any(|v| v.starts_with("text/event-stream"));
     let has_json = types.iter().any(|v| v.starts_with("application/json"));
     has_event_stream && has_json
+}
+
+pub fn error_response(
+    status_code: StatusCode,
+    error: SdkError,
+) -> Result<http::Response<GenericBody>, http::Error> {
+    let error_string = serde_json::to_string(&error).unwrap_or_default();
+    let body = Full::new(Bytes::from(error_string)).boxed();
+    http::Response::builder()
+        .status(status_code)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body)
 }

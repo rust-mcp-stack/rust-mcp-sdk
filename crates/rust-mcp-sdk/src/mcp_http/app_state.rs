@@ -20,8 +20,6 @@ pub struct AppState {
     pub server_details: Arc<InitializeResult>,
     pub handler: Arc<dyn McpServerHandler>,
     pub ping_interval: Duration,
-    pub sse_message_endpoint: String,
-    pub http_streamable_endpoint: String,
     pub transport_options: Arc<TransportOptions>,
     pub enable_json_response: bool,
     /// List of allowed host header values for DNS rebinding protection.

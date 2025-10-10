@@ -12,9 +12,9 @@ use axum::{
 };
 use std::{collections::HashMap, sync::Arc};
 
-pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+pub fn routes(sse_message_endpoint: &str) -> Router<Arc<AppState>> {
     Router::new().route(
-        remove_query_and_hash(&state.sse_message_endpoint).as_str(),
+        remove_query_and_hash(&sse_message_endpoint).as_str(),
         post(handle_messages),
     )
 }

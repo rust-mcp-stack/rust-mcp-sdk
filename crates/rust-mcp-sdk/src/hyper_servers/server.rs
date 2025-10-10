@@ -268,8 +268,6 @@ impl HyperServer {
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,
-            sse_message_endpoint: server_options.sse_messages_endpoint().to_owned(),
-            http_streamable_endpoint: server_options.streamable_http_endpoint().to_owned(),
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
             allowed_hosts: server_options.allowed_hosts.take(),

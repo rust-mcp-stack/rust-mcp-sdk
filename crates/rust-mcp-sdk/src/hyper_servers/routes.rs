@@ -33,8 +33,11 @@ pub fn app_routes(state: Arc<AppState>, server_options: &HyperServerOptions) -> 
                     .merge(sse_routes::routes(
                         state.clone(),
                         server_options.sse_endpoint(),
+                        server_options.sse_messages_endpoint(),
                     ))
-                    .merge(messages_routes::routes(state.clone()))
+                    .merge(messages_routes::routes(
+                        server_options.sse_messages_endpoint(),
+                    ))
             }
             r
         })
