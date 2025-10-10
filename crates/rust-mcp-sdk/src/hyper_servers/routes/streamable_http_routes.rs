@@ -1,16 +1,13 @@
-use super::hyper_utils::start_new_session;
+use crate::mcp_http::{
+    acceptable_content_type, accepts_event_stream, create_standalone_stream, delete_session,
+    process_incoming_message, process_incoming_message_return, start_new_session,
+    valid_streaming_http_accept_header, validate_mcp_protocol_version_header, AppState,
+};
 use crate::schema::schema_utils::SdkError;
 use crate::{
     error::McpSdkError,
     hyper_servers::{
-        app_state::AppState,
-        error::TransportServerResult,
-        middlewares::protect_dns_rebinding::protect_dns_rebinding,
-        routes::hyper_utils::{
-            acceptable_content_type, accepts_event_stream, create_standalone_stream,
-            delete_session, process_incoming_message, process_incoming_message_return,
-            valid_streaming_http_accept_header, validate_mcp_protocol_version_header,
-        },
+        error::TransportServerResult, middlewares::protect_dns_rebinding::protect_dns_rebinding,
     },
     utils::valid_initialize_method,
 };

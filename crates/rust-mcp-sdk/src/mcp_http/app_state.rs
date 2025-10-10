@@ -8,7 +8,7 @@ use rust_mcp_transport::event_store::EventStore;
 
 use rust_mcp_transport::{SessionId, TransportOptions};
 
-/// Application state struct for the Hyper server
+/// Application state struct for the Hyper ser
 ///
 /// Holds shared, thread-safe references to session storage, ID generator,
 /// server details, handler, ping interval, and transport options.

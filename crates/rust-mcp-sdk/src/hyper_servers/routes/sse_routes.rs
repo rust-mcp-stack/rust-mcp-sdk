@@ -1,8 +1,8 @@
+use crate::mcp_http::AppState;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::ClientMessage;
 use crate::{
     hyper_servers::{
-        app_state::AppState,
         error::TransportServerResult,
         middlewares::{
             protect_dns_rebinding::protect_dns_rebinding, session_id_gen::generate_session_id,

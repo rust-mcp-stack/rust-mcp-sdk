@@ -1,5 +1,4 @@
-use crate::hyper_servers::app_state::AppState;
-use crate::schema::schema_utils::SdkError;
+use crate::{mcp_http::AppState, schema::schema_utils::SdkError};
 use axum::{
     extract::{Request, State},
     middleware::Next,

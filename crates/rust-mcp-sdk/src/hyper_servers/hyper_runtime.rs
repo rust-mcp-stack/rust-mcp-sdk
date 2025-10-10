@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{
+    mcp_http::AppState,
     mcp_server::HyperServer,
     schema::{
         schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
@@ -18,7 +19,6 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     error::SdkResult,
-    hyper_servers::app_state::AppState,
     mcp_server::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,

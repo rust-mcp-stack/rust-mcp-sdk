@@ -2,6 +2,7 @@ pub mod error;
 #[cfg(feature = "hyper-server")]
 mod hyper_servers;
 mod mcp_handlers;
+pub(crate) mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;

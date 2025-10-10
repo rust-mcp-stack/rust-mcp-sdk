@@ -1,8 +1,6 @@
 use crate::{
-    hyper_servers::{
-        app_state::AppState,
-        error::{TransportServerError, TransportServerResult},
-    },
+    hyper_servers::error::{TransportServerError, TransportServerResult},
+    mcp_http::AppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     utils::remove_query_and_hash,
 };

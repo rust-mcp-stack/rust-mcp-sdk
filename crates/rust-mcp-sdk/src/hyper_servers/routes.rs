@@ -1,10 +1,11 @@
 pub mod fallback_routes;
-mod hyper_utils;
 pub mod messages_routes;
 pub mod sse_routes;
 pub mod streamable_http_routes;
 
-use super::{app_state::AppState, HyperServerOptions};
+use crate::mcp_http::AppState;
+
+use super::HyperServerOptions;
 use axum::Router;
 use std::sync::Arc;
 

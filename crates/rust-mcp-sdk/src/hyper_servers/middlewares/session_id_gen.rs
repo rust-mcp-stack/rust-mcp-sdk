@@ -1,5 +1,4 @@
-use std::sync::Arc;
-
+use crate::mcp_http::AppState;
 use axum::{
     extract::{Request, State},
     middleware::Next,
@@ -7,8 +6,7 @@ use axum::{
 };
 use hyper::StatusCode;
 use rust_mcp_transport::SessionId;
-
-use crate::hyper_servers::app_state::AppState;
+use std::sync::Arc;
 
 // Middleware to generate and attach a session ID
 pub async fn generate_session_id(

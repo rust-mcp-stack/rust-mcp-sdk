@@ -1,6 +1,5 @@
-use crate::schema::schema_utils::{ClientMessages, SdkError};
-
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
+use crate::schema::schema_utils::{ClientMessages, SdkError};
 use crate::schema::ProtocolVersion;
 use std::cmp::Ordering;
 

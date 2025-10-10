@@ -1,9 +1,7 @@
 use crate::{
     error::SdkResult,
-    hyper_servers::{
-        app_state::AppState,
-        error::{TransportServerError, TransportServerResult},
-    },
+    hyper_servers::error::{TransportServerError, TransportServerResult},
+    mcp_http::AppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
