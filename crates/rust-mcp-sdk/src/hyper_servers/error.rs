@@ -1,4 +1,4 @@
-use std::net::AddrParseError;
+use std::{net::AddrParseError, path::Display};
 
 use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
@@ -15,6 +15,8 @@ pub enum TransportServerError {
     StreamIoError(String),
     #[error("{0}")]
     AddrParseError(#[from] AddrParseError),
+    #[error("{0}")]
+    HttpError(String),
     #[error("Server start error: {0}")]
     ServerStartError(String),
     #[error("Invalid options: {0}")]

@@ -18,6 +18,8 @@ pub(crate) use http_utils::*;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) use readable_channel::*;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub use sse_parser::SseEvent;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) use sse_parser::*;
 #[cfg(feature = "sse")]
 pub(crate) use sse_stream::*;

@@ -31,6 +31,8 @@ pub use sse::*;
 pub use stdio::*;
 pub use transport::*;
 
+pub use utils::SseEvent;
+
 // Type alias for session identifier, represented as a String
 pub type SessionId = String;
 // Type alias for stream identifier (that will be used at the transport scope), represented as a String

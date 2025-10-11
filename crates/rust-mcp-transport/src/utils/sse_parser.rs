@@ -14,18 +14,90 @@ pub struct SseEvent {
     pub data: Option<Bytes>,
     /// The optional event ID for reconnection or tracking purposes.
     pub id: Option<String>,
+    /// Optional reconnection retry interval (in milliseconds).
+    pub retry: Option<u64>,
+}
+
+impl SseEvent {
+    /// Creates a new `SseEvent` with the given string data.
+    pub fn new<T: Into<String>>(data: T) -> Self {
+        Self {
+            event: None,
+            data: Some(Bytes::from(data.into())),
+            id: None,
+            retry: None,
+        }
+    }
+
+    /// Sets the event name (e.g., "message").
+    pub fn with_event<T: Into<String>>(mut self, event: T) -> Self {
+        self.event = Some(event.into());
+        self
+    }
+
+    /// Sets the ID of the event.
+    pub fn with_id<T: Into<String>>(mut self, id: T) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Sets the retry interval (in milliseconds).
+    pub fn with_retry(mut self, retry: u64) -> Self {
+        self.retry = Some(retry);
+        self
+    }
+
+    /// Sets the data as bytes.
+    pub fn with_data_bytes(mut self, data: Bytes) -> Self {
+        self.data = Some(data);
+        self
+    }
+
+    /// Sets the data.
+    pub fn with_data(mut self, data: String) -> Self {
+        self.data = Some(Bytes::from(data));
+        self
+    }
+
+    /// Converts the event into a string in SSE format (ready for HTTP body).
+    pub fn to_sse_string(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn as_bytes(&self) -> Bytes {
+        Bytes::from(self.to_string())
+    }
+}
+
+impl Default for SseEvent {
+    fn default() -> Self {
+        Self {
+            event: Default::default(),
+            data: Default::default(),
+            id: Default::default(),
+            retry: Default::default(),
+        }
+    }
 }
 
 impl std::fmt::Display for SseEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Emit retry interval
+        if let Some(retry) = self.retry {
+            writeln!(f, "retry: {retry}")?;
+        }
+
+        // Emit ID
         if let Some(id) = &self.id {
             writeln!(f, "id: {id}")?;
         }
 
+        // Emit event type
         if let Some(event) = &self.event {
             writeln!(f, "event: {event}")?;
         }
 
+        // Emit data lines
         if let Some(data) = &self.data {
             match std::str::from_utf8(data) {
                 Ok(text) => {
@@ -39,7 +111,7 @@ impl std::fmt::Display for SseEvent {
             }
         }
 
-        writeln!(f)?; // Trailing newline for SSE message end
+        writeln!(f)?; // Trailing newline for SSE message end, separates events
         Ok(())
     }
 }
@@ -57,6 +129,7 @@ impl fmt::Debug for SseEvent {
             .field("event", &self.event)
             .field("data", &data_str)
             .field("id", &self.id)
+            .field("retry", &self.retry)
             .finish()
     }
 }
@@ -193,11 +266,15 @@ impl SseParser {
         // Get event (default to None)
         let event = fields.get("event").cloned();
         let id = fields.get("id").cloned();
+        let retry = fields
+            .get("retry")
+            .and_then(|r| r.trim().parse::<u64>().ok());
 
         Some(SseEvent {
             event,
             data: Some(data),
             id,
+            retry,
         })
     }
 }
@@ -316,5 +393,21 @@ mod tests {
             events[1].data.as_deref(),
             Some(Bytes::from("second\n").as_ref())
         );
+    }
+
+    #[test]
+    fn test_basic_sse_event() {
+        let mut parser = SseParser::new();
+        let input = Bytes::from("event: message\ndata: Hello\nid: 1\nretry: 5000\n\n");
+
+        let events = parser.process_new_chunk(input);
+
+        assert_eq!(events.len(), 1);
+
+        let event = &events[0];
+        assert_eq!(event.event.as_deref(), Some("message"));
+        assert_eq!(event.data.as_deref(), Some(Bytes::from("Hello\n").as_ref()));
+        assert_eq!(event.id.as_deref(), Some("1"));
+        assert_eq!(event.retry, Some(5000));
     }
 }

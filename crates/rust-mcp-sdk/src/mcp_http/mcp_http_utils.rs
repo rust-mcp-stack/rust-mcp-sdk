@@ -19,18 +19,22 @@ use axum::{
 use bytes::Bytes;
 use futures::stream;
 use http::header::{ACCEPT, CONTENT_TYPE};
+use http_body::Frame;
+use http_body_util::StreamBody;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::{header, HeaderMap, StatusCode};
+use rust_mcp_transport::error::TransportError;
 use rust_mcp_transport::{
-    EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
+    EventId, McpDispatch, SessionId, SseEvent, SseTransport, StreamId, ID_SEPARATOR,
     MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
+use tokio_stream::StreamExt;
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
-pub type GenericBody = BoxBody<Bytes, std::convert::Infallible>;
+pub type GenericBody = BoxBody<Bytes, TransportServerError>;
 
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
@@ -505,11 +509,485 @@ pub fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
 pub fn error_response(
     status_code: StatusCode,
     error: SdkError,
-) -> Result<http::Response<GenericBody>, http::Error> {
+) -> TransportServerResult<http::Response<GenericBody>> {
     let error_string = serde_json::to_string(&error).unwrap_or_default();
-    let body = Full::new(Bytes::from(error_string)).boxed();
+    let body = Full::new(Bytes::from(error_string))
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        .boxed();
+
     http::Response::builder()
         .status(status_code)
         .header(CONTENT_TYPE, "application/json")
         .body(body)
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))
+}
+
+// pub fn error_response(
+//     status_code: StatusCode,
+//     error: SdkError,
+//     headers: Option<HeaderMap>
+// ) -> TransportServerResult<http::Response<GenericBody>> {
+//     let error_string = serde_json::to_string(&error).unwrap_or_default();
+//     let body = Full::new(Bytes::from(error_string))
+//         .map_err(|err| TransportServerError::HttpError(err.to_string()))
+//         .boxed();
+
+//    let mut response = http::Response::builder()
+//         .status(status_code)
+//         .header(CONTENT_TYPE, "application/json")
+//         .body(body)
+//         .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+
+//    if let Some(header_map) = headers {
+//            let response_headers = response.headers_mut();
+//            for (key, value) in header_map.into_iter() {
+//                // Only insert valid headers (Some keys), as `HeaderMap` can contain pseudo-headers
+//                if let Some(key) = key {
+//                    response_headers.insert(key, value);
+//                }
+//            }
+//        }
+
+//     Ok(response)
+// }
+
+pub async fn create_standalone_stream_x(
+    session_id: SessionId,
+    last_event_id: Option<EventId>,
+    state: Arc<McpAppState>,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    let runtime = state.session_store.get(&session_id).await.ok_or(
+        TransportServerError::SessionIdInvalid(session_id.to_string()),
+    )?;
+    let runtime = runtime.lock().await.to_owned();
+
+    if runtime.stream_id_exists(DEFAULT_STREAM_ID).await {
+        let error =
+            SdkError::bad_request().with_message("Only one SSE stream is allowed per session");
+        return error_response(StatusCode::CONFLICT, error)
+            .map_err(|err| TransportServerError::HttpError(err.to_string()));
+    }
+
+    if let Some(last_event_id) = last_event_id.as_ref() {
+        tracing::trace!(
+            "SSE stream re-connected with last-event-id: {}",
+            last_event_id
+        );
+    }
+
+    let mut response = create_sse_stream_x(
+        runtime.clone(),
+        session_id.clone(),
+        state.clone(),
+        None,
+        true,
+        last_event_id,
+    )
+    .await?;
+    *response.status_mut() = StatusCode::OK;
+    Ok(response)
+}
+
+async fn create_sse_stream_x(
+    runtime: Arc<ServerRuntime>,
+    session_id: SessionId,
+    state: Arc<McpAppState>,
+    payload: Option<&str>,
+    standalone: bool,
+    last_event_id: Option<EventId>,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    let payload_string = payload.map(|p| p.to_string());
+
+    // TODO: this logic should be moved out after refactoing the mcp_stream.rs
+    let payload_contains_request = payload_string
+        .as_ref()
+        .map(|json_str| contains_request(json_str))
+        .unwrap_or(Ok(false));
+    let Ok(payload_contains_request) = payload_contains_request else {
+        return error_response(StatusCode::BAD_REQUEST, SdkError::parse_error())
+            .map_err(|err| TransportServerError::HttpError(err.to_string()));
+    };
+
+    // readable stream of string to be used in transport
+    let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
+    // writable stream to deliver message to the client
+    let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
+
+    let session_id = Arc::new(session_id);
+    let stream_id: Arc<StreamId> = if standalone {
+        Arc::new(DEFAULT_STREAM_ID.to_string())
+    } else {
+        Arc::new(state.stream_id_gen.generate())
+    };
+
+    let event_store = state.event_store.as_ref().map(Arc::clone);
+    let resumability_enabled = event_store.is_some();
+
+    let mut transport = SseTransport::<ClientMessage>::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    )
+    .map_err(|err| TransportServerError::TransportError(err.to_string()))?;
+    if let Some(event_store) = event_store.clone() {
+        transport.make_resumable((*session_id).clone(), (*stream_id).clone(), event_store);
+    }
+    let transport = Arc::new(transport);
+
+    let ping_interval = state.ping_interval;
+    let runtime_clone = Arc::clone(&runtime);
+    let stream_id_clone = stream_id.clone();
+    let transport_clone = transport.clone();
+
+    //Start the server runtime
+    tokio::spawn(async move {
+        match runtime_clone
+            .start_stream(
+                transport_clone,
+                &stream_id_clone,
+                ping_interval,
+                payload_string,
+            )
+            .await
+        {
+            Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id_clone),
+            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id_clone, err),
+        }
+        let _ = runtime.remove_transport(&stream_id_clone).await;
+    });
+
+    // Construct SSE stream
+    let reader = BufReader::new(write_rx);
+
+    // send outgoing messages from server to the client over the sse stream
+    let message_stream = stream::unfold(reader, move |mut reader| {
+        async move {
+            let mut line = String::new();
+
+            match reader.read_line(&mut line).await {
+                Ok(0) => None, // EOF
+                Ok(_) => {
+                    let trimmed_line = line.trim_end_matches('\n').to_owned();
+
+                    // empty sse comment to keep-alive
+                    if is_empty_sse_message(&trimmed_line) {
+                        return Some((Ok(SseEvent::default().as_bytes()), reader));
+                    }
+
+                    let (event_id, message) = match (
+                        resumability_enabled,
+                        trimmed_line.split_once(char::from(ID_SEPARATOR)),
+                    ) {
+                        (true, Some((id, msg))) => (Some(id.to_string()), msg.to_string()),
+                        _ => (None, trimmed_line),
+                    };
+
+                    let event = match event_id {
+                        Some(id) => SseEvent::default()
+                            .with_data(message)
+                            .with_id(id)
+                            .as_bytes(),
+                        None => SseEvent::default().with_data(message).as_bytes(),
+                    };
+
+                    Some((Ok(event), reader))
+                }
+                Err(e) => Some((Err(e), reader)),
+            }
+        }
+    });
+
+    let streaming_body: GenericBody =
+        http_body_util::BodyExt::boxed(StreamBody::new(message_stream.map(|res| {
+            res.map(Frame::data)
+                .map_err(|err: std::io::Error| TransportServerError::HttpError(err.to_string()))
+        })));
+
+    let session_id_value = HeaderValue::from_str(&session_id)
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+
+    let status_code = if !payload_contains_request {
+        StatusCode::ACCEPTED
+    } else {
+        StatusCode::OK
+    };
+
+    let response = http::Response::builder()
+        .status(status_code)
+        .header("Content-Type", "text/event-stream")
+        .header(MCP_SESSION_ID_HEADER, session_id_value)
+        .header("Connection", "keep-alive")
+        .body(streaming_body)
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+
+    // if last_event_id exists we replay messages from the event-store
+    tokio::spawn(async move {
+        if let Some(last_event_id) = last_event_id {
+            if let Some(event_store) = state.event_store.as_ref() {
+                if let Some(events) = event_store.events_after(last_event_id).await {
+                    for message_payload in events.messages {
+                        // skip storing replay messages
+                        let error = transport.write_str(&message_payload, true).await;
+                        if let Err(error) = error {
+                            tracing::trace!("Error replaying message: {error}")
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(response)
+}
+
+async fn single_shot_stream_x(
+    runtime: Arc<ServerRuntime>,
+    session_id: SessionId,
+    state: Arc<McpAppState>,
+    payload: Option<&str>,
+    standalone: bool,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    // readable stream of string to be used in transport
+    let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
+    // writable stream to deliver message to the client
+    let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
+
+    let transport = SseTransport::<ClientMessage>::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    )
+    .map_err(|err| TransportServerError::TransportError(err.to_string()))?;
+
+    let stream_id = if standalone {
+        DEFAULT_STREAM_ID.to_string()
+    } else {
+        state.id_generator.generate()
+    };
+    let ping_interval = state.ping_interval;
+    let runtime_clone = Arc::clone(&runtime);
+
+    let payload_string = payload.map(|p| p.to_string());
+
+    tokio::spawn(async move {
+        match runtime_clone
+            .start_stream(
+                Arc::new(transport),
+                &stream_id,
+                ping_interval,
+                payload_string,
+            )
+            .await
+        {
+            Ok(_) => tracing::info!("stream {} exited gracefully.", &stream_id),
+            Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id, err),
+        }
+        let _ = runtime.remove_transport(&stream_id).await;
+    });
+
+    let mut reader = BufReader::new(write_rx);
+    let mut line = String::new();
+    let response = match reader.read_line(&mut line).await {
+        Ok(0) => None, // EOF
+        Ok(_) => {
+            let trimmed_line = line.trim_end_matches('\n').to_owned();
+            Some(Ok(trimmed_line))
+        }
+        Err(e) => Some(Err(e)),
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        MCP_SESSION_ID_HEADER,
+        HeaderValue::from_str(&session_id).unwrap(),
+    );
+
+    match response {
+        Some(response_result) => match response_result {
+            Ok(response_str) => {
+                let body = Full::new(Bytes::from(response_str))
+                    .map_err(|err| TransportServerError::HttpError(err.to_string()))
+                    .boxed(); // Uses BodyExt::boxed
+
+                let response = http::Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .map_err(|err| TransportServerError::HttpError(err.to_string()));
+
+                response
+            }
+            Err(err) => {
+                let body = Full::new(Bytes::from(err.to_string()))
+                    .map_err(|err| TransportServerError::HttpError(err.to_string()))
+                    .boxed();
+                http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body)
+                    .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            }
+        },
+        None => {
+            let body = Full::new(Bytes::from(
+                "End of the transport stream reached.".to_string(),
+            ))
+            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .boxed();
+            http::Response::builder()
+                .status(StatusCode::UNPROCESSABLE_ENTITY)
+                .header(CONTENT_TYPE, "application/json")
+                .body(body)
+                .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        }
+    }
+}
+
+pub async fn process_incoming_message_return_x(
+    session_id: SessionId,
+    state: Arc<McpAppState>,
+    payload: &str,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    match state.session_store.get(&session_id).await {
+        Some(runtime) => {
+            let runtime = runtime.lock().await.to_owned();
+
+            single_shot_stream_x(
+                runtime.clone(),
+                session_id.clone(),
+                state.clone(),
+                Some(payload),
+                false,
+            )
+            .await
+            // Ok(StatusCode::OK.into_response())
+        }
+        None => {
+            let error = SdkError::session_not_found();
+            error_response(StatusCode::NOT_FOUND, error)
+                .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        }
+    }
+}
+
+pub async fn process_incoming_message_x(
+    session_id: SessionId,
+    state: Arc<McpAppState>,
+    payload: &str,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    match state.session_store.get(&session_id).await {
+        Some(runtime) => {
+            let runtime = runtime.lock().await.to_owned();
+            // when receiving a result in a streamable_http server, that means it was sent by the standalone sse transport
+            // it should be processed by the same transport , therefore no need to call create_sse_stream
+            let Ok(is_result) = is_result(payload) else {
+                return error_response(StatusCode::BAD_REQUEST, SdkError::parse_error());
+            };
+
+            if is_result {
+                match runtime
+                    .consume_payload_string(DEFAULT_STREAM_ID, payload)
+                    .await
+                {
+                    Ok(()) => {
+                        let body = Full::new(Bytes::new())
+                            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+                            .boxed();
+                        http::Response::builder()
+                            .status(200)
+                            .header("Content-Type", "application/json")
+                            .body(body)
+                            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+                    }
+                    Err(err) => {
+                        let error =
+                            SdkError::internal_error().with_message(err.to_string().as_ref());
+                        error_response(StatusCode::BAD_REQUEST, error)
+                    }
+                }
+            } else {
+                create_sse_stream_x(
+                    runtime.clone(),
+                    session_id.clone(),
+                    state.clone(),
+                    Some(payload),
+                    false,
+                    None,
+                )
+                .await
+            }
+        }
+        None => {
+            let error = SdkError::session_not_found();
+            error_response(StatusCode::NOT_FOUND, error)
+        }
+    }
+}
+
+pub async fn start_new_session_x(
+    state: Arc<McpAppState>,
+    payload: &str,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    let session_id: SessionId = state.id_generator.generate();
+
+    let h: Arc<dyn McpServerHandler> = state.handler.clone();
+    // create a new server instance with unique session_id and
+    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
+        Arc::clone(&state.server_details),
+        h,
+        session_id.to_owned(),
+    );
+
+    tracing::info!("a new client joined : {}", &session_id);
+
+    let response = create_sse_stream_x(
+        runtime.clone(),
+        session_id.clone(),
+        state.clone(),
+        Some(payload),
+        false,
+        None,
+    )
+    .await;
+
+    if response.is_ok() {
+        state
+            .session_store
+            .set(session_id.to_owned(), runtime.clone())
+            .await;
+    }
+    response
+}
+
+pub async fn delete_session_x(
+    session_id: SessionId,
+    state: Arc<McpAppState>,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    match state.session_store.get(&session_id).await {
+        Some(runtime) => {
+            let runtime = runtime.lock().await.to_owned();
+            runtime.shutdown().await;
+            state.session_store.delete(&session_id).await;
+            tracing::info!("client disconnected : {}", &session_id);
+
+            let body = Full::new(Bytes::from("ok"))
+                .map_err(|err| TransportServerError::HttpError(err.to_string()))
+                .boxed();
+            http::Response::builder()
+                .status(200)
+                .header("Content-Type", "application/json")
+                .body(body)
+                .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        }
+        None => {
+            let error = SdkError::session_not_found();
+            error_response(StatusCode::NOT_FOUND, error)
+        }
+    }
 }
