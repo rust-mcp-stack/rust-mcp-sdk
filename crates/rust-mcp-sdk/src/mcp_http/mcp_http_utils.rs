@@ -1,15 +1,13 @@
+use crate::schema::schema_utils::{ClientMessage, SdkError};
 use crate::{
     error::SdkResult,
     hyper_servers::error::{TransportServerError, TransportServerResult},
-    mcp_http::{AppState, GenericBody},
+    mcp_http::AppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
     utils::validate_mcp_protocol_version,
 };
-
-use crate::schema::schema_utils::{ClientMessage, SdkError};
-
 use axum::{http::HeaderValue, response::IntoResponse};
 use axum::{
     response::{
@@ -21,7 +19,7 @@ use axum::{
 use bytes::Bytes;
 use futures::stream;
 use http::header::{ACCEPT, CONTENT_TYPE};
-use http_body_util::{BodyExt, Full};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::{header, HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseTransport, StreamId, ID_SEPARATOR,
@@ -31,6 +29,8 @@ use std::{sync::Arc, time::Duration};
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 
 const DUPLEX_BUFFER_SIZE: usize = 8192;
+
+pub type GenericBody = BoxBody<Bytes, std::convert::Infallible>;
 
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
