@@ -13,7 +13,7 @@ use rust_mcp_transport::{SessionId, TransportOptions};
 /// Holds shared, thread-safe references to session storage, ID generator,
 /// server details, handler, ping interval, and transport options.
 #[derive(Clone)]
-pub struct AppState {
+pub struct McpAppState {
     pub session_store: Arc<dyn SessionStore>,
     pub id_generator: Arc<dyn IdGenerator<SessionId>>,
     pub stream_id_gen: Arc<FastIdGenerator>,
@@ -36,7 +36,7 @@ pub struct AppState {
     pub event_store: Option<Arc<dyn EventStore>>,
 }
 
-impl AppState {
+impl McpAppState {
     pub fn needs_dns_protection(&self) -> bool {
         self.dns_rebinding_protection
             && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())

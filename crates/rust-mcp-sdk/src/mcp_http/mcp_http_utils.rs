@@ -2,7 +2,7 @@ use crate::schema::schema_utils::{ClientMessage, SdkError};
 use crate::{
     error::SdkResult,
     hyper_servers::error::{TransportServerError, TransportServerResult},
-    mcp_http::AppState,
+    mcp_http::McpAppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
@@ -35,7 +35,7 @@ pub type GenericBody = BoxBody<Bytes, std::convert::Infallible>;
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
     session_id: SessionId,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     payload: Option<&str>,
     standalone: bool,
     last_event_id: Option<EventId>,
@@ -204,7 +204,7 @@ fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
 pub async fn create_standalone_stream(
     session_id: SessionId,
     last_event_id: Option<EventId>,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let runtime = state.session_store.get(&session_id).await.ok_or(
         TransportServerError::SessionIdInvalid(session_id.to_string()),
@@ -238,7 +238,7 @@ pub async fn create_standalone_stream(
 }
 
 pub async fn start_new_session(
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     payload: &str,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
     let session_id: SessionId = state.id_generator.generate();
@@ -275,7 +275,7 @@ pub async fn start_new_session(
 async fn single_shot_stream(
     runtime: Arc<ServerRuntime>,
     session_id: SessionId,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     payload: Option<&str>,
     standalone: bool,
 ) -> TransportServerResult<hyper::Response<axum::body::Body>> {
@@ -362,7 +362,7 @@ async fn single_shot_stream(
 
 pub async fn process_incoming_message_return(
     session_id: SessionId,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     payload: &str,
 ) -> TransportServerResult<impl IntoResponse> {
     match state.session_store.get(&session_id).await {
@@ -388,7 +388,7 @@ pub async fn process_incoming_message_return(
 
 pub async fn process_incoming_message(
     session_id: SessionId,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     payload: &str,
 ) -> TransportServerResult<impl IntoResponse> {
     match state.session_store.get(&session_id).await {
@@ -437,7 +437,7 @@ pub fn is_empty_sse_message(sse_payload: &str) -> bool {
 
 pub async fn delete_session(
     session_id: SessionId,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
 ) -> TransportServerResult<impl IntoResponse> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {

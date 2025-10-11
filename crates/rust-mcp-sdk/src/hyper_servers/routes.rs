@@ -3,7 +3,7 @@ pub mod messages_routes;
 pub mod sse_routes;
 pub mod streamable_http_routes;
 
-use crate::mcp_http::AppState;
+use crate::mcp_http::McpAppState;
 
 use super::HyperServerOptions;
 use axum::Router;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 ///
 /// # Returns
 /// * `Router` - An Axum router configured with all application routes and state
-pub fn app_routes(state: Arc<AppState>, server_options: &HyperServerOptions) -> Router {
+pub fn app_routes(state: Arc<McpAppState>, server_options: &HyperServerOptions) -> Router {
     let router: Router = Router::new()
         .merge(streamable_http_routes::routes(
             state.clone(),

@@ -1,4 +1,4 @@
-use crate::mcp_http::AppState;
+use crate::mcp_http::McpAppState;
 use axum::{
     extract::{Request, State},
     middleware::Next,
@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 // Middleware to generate and attach a session ID
 pub async fn generate_session_id(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {

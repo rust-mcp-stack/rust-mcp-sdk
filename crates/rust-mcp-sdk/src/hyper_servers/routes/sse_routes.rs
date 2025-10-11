@@ -1,4 +1,4 @@
-use crate::mcp_http::AppState;
+use crate::mcp_http::McpAppState;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::ClientMessage;
 use crate::{
@@ -55,12 +55,12 @@ fn initial_event(endpoint: &str) -> Result<Event, Infallible> {
 /// * `sse_endpoint` - The path for the SSE endpoint
 ///
 /// # Returns
-/// * `Router<Arc<AppState>>` - An Axum router configured with the SSE route
+/// * `Router<Arc<McpAppState>>` - An Axum router configured with the SSE route
 pub fn routes(
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     sse_endpoint: &str,
     sse_message_endpoint: &str,
-) -> Router<Arc<AppState>> {
+) -> Router<Arc<McpAppState>> {
     let sse_message_endpoint = SseMessageEndpoint(sse_message_endpoint.to_string());
     Router::new()
         .route(
@@ -90,7 +90,7 @@ pub fn routes(
 pub async fn handle_sse(
     Extension(session_id): Extension<SessionId>,
     Extension(sse_message_endpoint): Extension<SseMessageEndpoint>,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     let SseMessageEndpoint(sse_message_endpoint) = sse_message_endpoint;
     tracing::warn!(

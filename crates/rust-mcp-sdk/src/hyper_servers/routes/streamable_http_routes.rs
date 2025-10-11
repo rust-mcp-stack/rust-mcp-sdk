@@ -3,7 +3,7 @@ use crate::mcp_http::utils::{
     process_incoming_message, process_incoming_message_return, start_new_session,
     valid_streaming_http_accept_header, validate_mcp_protocol_version_header,
 };
-use crate::mcp_http::AppState;
+use crate::mcp_http::McpAppState;
 use crate::schema::schema_utils::SdkError;
 use crate::utils::validate_mcp_protocol_version;
 use crate::{
@@ -27,7 +27,7 @@ use rust_mcp_transport::{
 };
 use std::{collections::HashMap, sync::Arc};
 
-pub fn routes(state: Arc<AppState>, streamable_http_endpoint: &str) -> Router<Arc<AppState>> {
+pub fn routes(state: Arc<McpAppState>, streamable_http_endpoint: &str) -> Router<Arc<McpAppState>> {
     Router::new()
         .route(streamable_http_endpoint, get(handle_streamable_http_get))
         .route(streamable_http_endpoint, post(handle_streamable_http_post))
@@ -43,7 +43,7 @@ pub fn routes(state: Arc<AppState>, streamable_http_endpoint: &str) -> Router<Ar
 
 pub async fn handle_streamable_http_get(
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     if !accepts_event_stream(&headers) {
         let error = SdkError::bad_request().with_message(r#"Client must accept text/event-stream"#);
@@ -80,7 +80,7 @@ pub async fn handle_streamable_http_get(
 
 pub async fn handle_streamable_http_post(
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
     Query(_params): Query<HashMap<String, String>>,
     payload: String,
 ) -> TransportServerResult<impl IntoResponse> {
@@ -137,7 +137,7 @@ pub async fn handle_streamable_http_post(
 
 pub async fn handle_streamable_http_delete(
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     if let Err(parse_error) = validate_mcp_protocol_version_header(&headers) {
         let error =

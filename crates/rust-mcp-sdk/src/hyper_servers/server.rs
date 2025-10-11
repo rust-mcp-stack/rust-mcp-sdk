@@ -1,7 +1,7 @@
 use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{AppState, InMemorySessionStore},
+    mcp_http::{InMemorySessionStore, McpAppState},
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
 };
@@ -236,7 +236,7 @@ impl Default for HyperServerOptions {
 /// Hyper server struct for managing the Axum-based web server
 pub struct HyperServer {
     app: Router,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     pub(crate) options: HyperServerOptions,
     handle: Handle,
 }
@@ -258,7 +258,7 @@ impl HyperServer {
         handler: Arc<dyn McpServerHandler + 'static>,
         mut server_options: HyperServerOptions,
     ) -> Self {
-        let state: Arc<AppState> = Arc::new(AppState {
+        let state: Arc<McpAppState> = Arc::new(McpAppState {
             session_store: Arc::new(InMemorySessionStore::new()),
             id_generator: server_options
                 .session_id_generator
@@ -287,8 +287,8 @@ impl HyperServer {
     /// Returns a shared reference to the application state
     ///
     /// # Returns
-    /// * `Arc<AppState>` - Shared application state
-    pub fn state(&self) -> Arc<AppState> {
+    /// * `Arc<McpAppState>` - Shared application state
+    pub fn state(&self) -> Arc<McpAppState> {
         Arc::clone(&self.state)
     }
 
@@ -448,7 +448,7 @@ impl HyperServer {
 }
 
 // Shutdown signal handler
-async fn shutdown_signal(handle: Handle, state: Arc<AppState>) {
+async fn shutdown_signal(handle: Handle, state: Arc<McpAppState>) {
     // Wait for a Ctrl+C or SIGTERM signal
     let ctrl_c = async {
         signal::ctrl_c()

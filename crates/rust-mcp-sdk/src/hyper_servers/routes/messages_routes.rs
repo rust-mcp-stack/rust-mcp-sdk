@@ -1,6 +1,6 @@
 use crate::{
     hyper_servers::error::{TransportServerError, TransportServerResult},
-    mcp_http::AppState,
+    mcp_http::McpAppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     utils::remove_query_and_hash,
 };
@@ -12,7 +12,7 @@ use axum::{
 };
 use std::{collections::HashMap, sync::Arc};
 
-pub fn routes(sse_message_endpoint: &str) -> Router<Arc<AppState>> {
+pub fn routes(sse_message_endpoint: &str) -> Router<Arc<McpAppState>> {
     Router::new().route(
         remove_query_and_hash(&sse_message_endpoint).as_str(),
         post(handle_messages),
@@ -20,7 +20,7 @@ pub fn routes(sse_message_endpoint: &str) -> Router<Arc<AppState>> {
 }
 
 pub async fn handle_messages(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
     Query(params): Query<HashMap<String, String>>,
     message: String,
 ) -> TransportServerResult<impl IntoResponse> {

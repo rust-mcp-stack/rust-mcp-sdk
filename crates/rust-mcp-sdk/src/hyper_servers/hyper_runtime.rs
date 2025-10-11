@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    mcp_http::AppState,
+    mcp_http::McpAppState,
     mcp_server::HyperServer,
     schema::{
         schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
@@ -26,7 +26,7 @@ use crate::{
 };
 
 pub struct HyperRuntime {
-    pub(crate) state: Arc<AppState>,
+    pub(crate) state: Arc<McpAppState>,
     pub(crate) server_task: JoinHandle<Result<(), TransportServerError>>,
     pub(crate) server_handle: Handle,
 }

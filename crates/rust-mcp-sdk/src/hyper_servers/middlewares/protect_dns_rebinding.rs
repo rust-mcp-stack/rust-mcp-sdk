@@ -1,4 +1,4 @@
-use crate::{mcp_http::AppState, schema::schema_utils::SdkError};
+use crate::{mcp_http::McpAppState, schema::schema_utils::SdkError};
 use axum::{
     extract::{Request, State},
     middleware::Next,
@@ -14,7 +14,7 @@ use std::sync::Arc;
 // Middleware to protect against DNS rebinding attacks by validating Host and Origin headers.
 pub async fn protect_dns_rebinding(
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<McpAppState>>,
     request: Request,
     next: Next,
 ) -> impl IntoResponse {
