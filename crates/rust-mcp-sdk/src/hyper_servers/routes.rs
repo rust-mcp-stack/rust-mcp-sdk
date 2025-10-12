@@ -23,7 +23,6 @@ use std::sync::Arc;
 pub fn app_routes(state: Arc<McpAppState>, server_options: &HyperServerOptions) -> Router {
     let router: Router = Router::new()
         .merge(streamable_http_routes::routes(
-            state.clone(),
             server_options.streamable_http_endpoint(),
         ))
         .merge({

@@ -1,5 +1,6 @@
-use std::{os::macos::raw::stat, sync::Arc};
-
+use crate::mcp_http::utils::{
+    accepts_event_stream, error_response, validate_mcp_protocol_version_header,
+};
 use crate::{
     error::McpSdkError,
     mcp_http::{
@@ -14,14 +15,46 @@ use crate::{
     schema::schema_utils::SdkError,
     utils::valid_initialize_method,
 };
-use http::{self, StatusCode};
+use http::{self, HeaderMap, Method, StatusCode, Uri};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
-
-use crate::mcp_http::utils::{
-    accepts_event_stream, error_response, validate_mcp_protocol_version_header,
-};
+use std::sync::Arc;
 
 pub struct McpHttpHandler {}
+
+impl McpHttpHandler {
+    /// Creates a new HTTP request with the given method, URI, headers, and optional body.
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - The HTTP method to use (e.g., GET, POST).
+    /// * `uri` - The target URI for the request.
+    /// * `headers` - A map of optional header keys and their corresponding values.
+    /// * `body` - An optional string slice representing the request body.
+    ///
+    /// # Returns
+    ///
+    /// An `http::Request<&str>` initialized with the specified method, URI, headers, and body.
+    /// If the `body` is `None`, an empty string is used as the default.
+    ///
+    pub fn create_request(
+        method: Method,
+        uri: Uri,
+        headers: HeaderMap,
+        body: Option<&str>,
+    ) -> http::Request<&str> {
+        let mut request = http::Request::default();
+        *request.method_mut() = method;
+        *request.uri_mut() = uri;
+        *request.body_mut() = body.unwrap_or_default();
+        let req_headers = request.headers_mut();
+        for (key, value) in headers {
+            if let Some(k) = key {
+                req_headers.insert(k, value);
+            }
+        }
+        request
+    }
+}
 
 impl McpHttpHandler {
     pub async fn handle_streamable_http(

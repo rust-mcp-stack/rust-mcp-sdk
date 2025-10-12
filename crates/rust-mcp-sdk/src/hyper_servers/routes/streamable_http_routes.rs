@@ -3,7 +3,6 @@ use crate::mcp_http::{McpAppState, McpHttpHandler};
 use axum::routing::get;
 use axum::{
     extract::{Query, State},
-    middleware,
     response::IntoResponse,
     routing::{delete, post},
     Router,
@@ -11,7 +10,7 @@ use axum::{
 use http::{HeaderMap, Method, Uri};
 use std::{collections::HashMap, sync::Arc};
 
-pub fn routes(state: Arc<McpAppState>, streamable_http_endpoint: &str) -> Router<Arc<McpAppState>> {
+pub fn routes(streamable_http_endpoint: &str) -> Router<Arc<McpAppState>> {
     Router::new()
         .route(streamable_http_endpoint, get(handle_streamable_http_get))
         .route(streamable_http_endpoint, post(handle_streamable_http_post))
@@ -26,19 +25,7 @@ pub async fn handle_streamable_http_get(
     uri: Uri,
     State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
-    let mut request = http::Request::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .body("")
-        .unwrap(); //TODO: error handling
-
-    let req_headers = request.headers_mut();
-    for (key, value) in headers {
-        if let Some(k) = key {
-            req_headers.insert(k, value);
-        }
-    }
-
+    let request = McpHttpHandler::create_request(Method::GET, uri, headers, None);
     let generic_res = McpHttpHandler::handle_streamable_http(request, state).await?;
     let (parts, body) = generic_res.into_parts();
     let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));
@@ -52,19 +39,8 @@ pub async fn handle_streamable_http_post(
     Query(_params): Query<HashMap<String, String>>,
     payload: String,
 ) -> TransportServerResult<impl IntoResponse> {
-    let mut request = http::Request::builder()
-        .method(Method::POST)
-        .uri(uri)
-        .body(payload.as_str())
-        .unwrap(); //TODO: error handling
-
-    let req_headers = request.headers_mut();
-    for (key, value) in headers {
-        if let Some(k) = key {
-            req_headers.insert(k, value);
-        }
-    }
-
+    let request =
+        McpHttpHandler::create_request(Method::POST, uri, headers, Some(payload.as_str()));
     let generic_res = McpHttpHandler::handle_streamable_http(request, state).await?;
     let (parts, body) = generic_res.into_parts();
     let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));
@@ -76,19 +52,7 @@ pub async fn handle_streamable_http_delete(
     uri: Uri,
     State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
-    let mut request = http::Request::builder()
-        .method(Method::DELETE)
-        .uri(uri)
-        .body("")
-        .unwrap(); //TODO: error handling
-
-    let req_headers = request.headers_mut();
-    for (key, value) in headers {
-        if let Some(k) = key {
-            req_headers.insert(k, value);
-        }
-    }
-
+    let request = McpHttpHandler::create_request(Method::DELETE, uri, headers, None);
     let generic_res = McpHttpHandler::handle_streamable_http(request, state).await?;
     let (parts, body) = generic_res.into_parts();
     let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));

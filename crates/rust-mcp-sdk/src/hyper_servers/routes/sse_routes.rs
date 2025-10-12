@@ -9,7 +9,6 @@ use crate::{
 };
 use axum::{
     extract::State,
-    middleware,
     response::{
         sse::{Event, KeepAlive},
         IntoResponse, Sse,
