@@ -1,65 +1,8 @@
-use core::fmt;
+use bytes::{Bytes, BytesMut};
 use std::collections::HashMap;
 
-use bytes::{Bytes, BytesMut};
+use super::SseEvent;
 const BUFFER_CAPACITY: usize = 1024;
-
-/// Represents a single Server-Sent Event (SSE) as defined in the SSE protocol.
-///
-/// Contains the event type, data payload, and optional event ID.
-pub struct SseEvent {
-    /// The optional event type (e.g., "message").
-    pub event: Option<String>,
-    /// The optional data payload of the event, stored as bytes.
-    pub data: Option<Bytes>,
-    /// The optional event ID for reconnection or tracking purposes.
-    pub id: Option<String>,
-}
-
-impl std::fmt::Display for SseEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(id) = &self.id {
-            writeln!(f, "id: {id}")?;
-        }
-
-        if let Some(event) = &self.event {
-            writeln!(f, "event: {event}")?;
-        }
-
-        if let Some(data) = &self.data {
-            match std::str::from_utf8(data) {
-                Ok(text) => {
-                    for line in text.lines() {
-                        writeln!(f, "data: {line}")?;
-                    }
-                }
-                Err(_) => {
-                    writeln!(f, "data: [binary data]")?;
-                }
-            }
-        }
-
-        writeln!(f)?; // Trailing newline for SSE message end
-        Ok(())
-    }
-}
-
-impl fmt::Debug for SseEvent {
-    /// Formats the `SseEvent` for debugging, converting the `data` field to a UTF-8 string
-    /// (with lossy conversion if invalid UTF-8 is encountered).
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let data_str = self
-            .data
-            .as_ref()
-            .map(|b| String::from_utf8_lossy(b).to_string());
-
-        f.debug_struct("SseEvent")
-            .field("event", &self.event)
-            .field("data", &data_str)
-            .field("id", &self.id)
-            .finish()
-    }
-}
 
 /// A parser for Server-Sent Events (SSE) that processes incoming byte chunks into `SseEvent`s.
 /// This Parser is specifically designed for MCP messages and with no multi-line data support
@@ -193,11 +136,15 @@ impl SseParser {
         // Get event (default to None)
         let event = fields.get("event").cloned();
         let id = fields.get("id").cloned();
+        let retry = fields
+            .get("retry")
+            .and_then(|r| r.trim().parse::<u64>().ok());
 
         Some(SseEvent {
             event,
             data: Some(data),
             id,
+            retry,
         })
     }
 }
@@ -316,5 +263,21 @@ mod tests {
             events[1].data.as_deref(),
             Some(Bytes::from("second\n").as_ref())
         );
+    }
+
+    #[test]
+    fn test_basic_sse_event() {
+        let mut parser = SseParser::new();
+        let input = Bytes::from("event: message\ndata: Hello\nid: 1\nretry: 5000\n\n");
+
+        let events = parser.process_new_chunk(input);
+
+        assert_eq!(events.len(), 1);
+
+        let event = &events[0];
+        assert_eq!(event.event.as_deref(), Some("message"));
+        assert_eq!(event.data.as_deref(), Some(Bytes::from("Hello\n").as_ref()));
+        assert_eq!(event.id.as_deref(), Some("1"));
+        assert_eq!(event.retry, Some(5000));
     }
 }

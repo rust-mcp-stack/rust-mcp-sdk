@@ -1,10 +1,12 @@
 pub mod fallback_routes;
-mod hyper_utils;
 pub mod messages_routes;
+#[cfg(feature = "sse")]
 pub mod sse_routes;
 pub mod streamable_http_routes;
 
-use super::{app_state::AppState, HyperServerOptions};
+use crate::mcp_http::McpAppState;
+
+use super::HyperServerOptions;
 use axum::Router;
 use std::sync::Arc;
 
@@ -19,21 +21,23 @@ use std::sync::Arc;
 ///
 /// # Returns
 /// * `Router` - An Axum router configured with all application routes and state
-pub fn app_routes(state: Arc<AppState>, server_options: &HyperServerOptions) -> Router {
+pub fn app_routes(state: Arc<McpAppState>, server_options: &HyperServerOptions) -> Router {
     let router: Router = Router::new()
         .merge(streamable_http_routes::routes(
-            state.clone(),
             server_options.streamable_http_endpoint(),
         ))
         .merge({
             let mut r = Router::new();
+            #[cfg(feature = "sse")]
             if server_options.sse_support {
                 r = r
                     .merge(sse_routes::routes(
-                        state.clone(),
                         server_options.sse_endpoint(),
+                        server_options.sse_messages_endpoint(),
                     ))
-                    .merge(messages_routes::routes(state.clone()))
+                    .merge(messages_routes::routes(
+                        server_options.sse_messages_endpoint(),
+                    ))
             }
             r
         })

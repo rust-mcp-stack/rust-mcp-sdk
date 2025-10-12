@@ -1,6 +1,12 @@
 use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
+    mcp_http::{
+        utils::{
+            DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
+        },
+        InMemorySessionStore, McpAppState,
+    },
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
 };
@@ -16,10 +22,8 @@ use std::{
 use tokio::signal;
 
 use super::{
-    app_state::AppState,
     error::{TransportServerError, TransportServerResult},
     routes::app_routes,
-    InMemorySessionStore,
 };
 use crate::schema::InitializeResult;
 use axum::Router;
@@ -28,12 +32,6 @@ use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
-// Default Server-Sent Events (SSE) endpoint path
-const DEFAULT_SSE_ENDPOINT: &str = "/sse";
-// Default MCP Messages endpoint path
-const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
-// Default Streamable HTTP endpoint path
-const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
@@ -237,7 +235,7 @@ impl Default for HyperServerOptions {
 /// Hyper server struct for managing the Axum-based web server
 pub struct HyperServer {
     app: Router,
-    state: Arc<AppState>,
+    state: Arc<McpAppState>,
     pub(crate) options: HyperServerOptions,
     handle: Handle,
 }
@@ -259,7 +257,7 @@ impl HyperServer {
         handler: Arc<dyn McpServerHandler + 'static>,
         mut server_options: HyperServerOptions,
     ) -> Self {
-        let state: Arc<AppState> = Arc::new(AppState {
+        let state: Arc<McpAppState> = Arc::new(McpAppState {
             session_store: Arc::new(InMemorySessionStore::new()),
             id_generator: server_options
                 .session_id_generator
@@ -269,8 +267,6 @@ impl HyperServer {
             server_details: Arc::new(server_details),
             handler,
             ping_interval: server_options.ping_interval,
-            sse_message_endpoint: server_options.sse_messages_endpoint().to_owned(),
-            http_streamable_endpoint: server_options.streamable_http_endpoint().to_owned(),
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
             allowed_hosts: server_options.allowed_hosts.take(),
@@ -290,8 +286,8 @@ impl HyperServer {
     /// Returns a shared reference to the application state
     ///
     /// # Returns
-    /// * `Arc<AppState>` - Shared application state
-    pub fn state(&self) -> Arc<AppState> {
+    /// * `Arc<McpAppState>` - Shared application state
+    pub fn state(&self) -> Arc<McpAppState> {
         Arc::clone(&self.state)
     }
 
@@ -451,7 +447,7 @@ impl HyperServer {
 }
 
 // Shutdown signal handler
-async fn shutdown_signal(handle: Handle, state: Arc<AppState>) {
+async fn shutdown_signal(handle: Handle, state: Arc<McpAppState>) {
     // Wait for a Ctrl+C or SIGTERM signal
     let ctrl_c = async {
         signal::ctrl_c()
