@@ -1,12 +1,12 @@
-use std::sync::Arc;
+use std::{os::macos::raw::stat, sync::Arc};
 
 use crate::{
     error::McpSdkError,
     mcp_http::{
         utils::{
             acceptable_content_type, create_standalone_stream, delete_session,
-            process_incoming_message, process_incoming_message_return, start_new_session,
-            valid_streaming_http_accept_header, GenericBody,
+            process_incoming_message, process_incoming_message_return, protect_dns_rebinding,
+            start_new_session, valid_streaming_http_accept_header, GenericBody,
         },
         McpAppState,
     },
@@ -28,6 +28,14 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
+        // Enforces DNS rebinding protection if required by state.
+        // If protection fails, respond with HTTP 403 Forbidden.
+        if state.needs_dns_protection() {
+            if let Err(error) = protect_dns_rebinding(&request.headers(), state.clone()).await {
+                return error_response(StatusCode::FORBIDDEN, error);
+            }
+        }
+
         let method = request.method();
         match method {
             &http::Method::GET => return Self::handle_http_get(request, state).await,
@@ -42,32 +50,7 @@ impl McpHttpHandler {
         }
     }
 
-    async fn handle_http_delete(
-        request: http::Request<&str>,
-        state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
-        let headers = request.headers();
-
-        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
-            let error = SdkError::bad_request()
-                .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
-            return error_response(StatusCode::BAD_REQUEST, error);
-        }
-
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
-
-        match session_id {
-            Some(id) => delete_session(id, state).await,
-            None => {
-                let error = SdkError::bad_request().with_message("Bad Request: Session not found");
-                error_response(StatusCode::BAD_REQUEST, error)
-            }
-        }
-    }
-
+    /// Processes POST requests for the Streamable HTTP Protocol
     async fn handle_http_post(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -121,6 +104,7 @@ impl McpHttpHandler {
         }
     }
 
+    /// Processes GET requests for the Streamable HTTP Protocol
     async fn handle_http_get(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -156,6 +140,33 @@ impl McpHttpHandler {
             }
             None => {
                 let error = SdkError::bad_request().with_message("Bad request: session not found");
+                error_response(StatusCode::BAD_REQUEST, error)
+            }
+        }
+    }
+
+    /// Processes DELETE requests for the Streamable HTTP Protocol
+    async fn handle_http_delete(
+        request: http::Request<&str>,
+        state: Arc<McpAppState>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        let headers = request.headers();
+
+        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
+            let error = SdkError::bad_request()
+                .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
+            return error_response(StatusCode::BAD_REQUEST, error);
+        }
+
+        let session_id: Option<SessionId> = headers
+            .get(MCP_SESSION_ID_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .map(|s| s.to_string());
+
+        match session_id {
+            Some(id) => delete_session(id, state).await,
+            None => {
+                let error = SdkError::bad_request().with_message("Bad Request: Session not found");
                 error_response(StatusCode::BAD_REQUEST, error)
             }
         }

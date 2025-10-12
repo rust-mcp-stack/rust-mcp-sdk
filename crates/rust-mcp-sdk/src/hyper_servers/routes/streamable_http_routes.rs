@@ -1,6 +1,4 @@
-use crate::hyper_servers::{
-    error::TransportServerResult, middlewares::protect_dns_rebinding::protect_dns_rebinding,
-};
+use crate::hyper_servers::error::TransportServerResult;
 use crate::mcp_http::{McpAppState, McpHttpHandler};
 use axum::routing::get;
 use axum::{
@@ -10,8 +8,7 @@ use axum::{
     routing::{delete, post},
     Router,
 };
-use http::{Method, Uri};
-use hyper::HeaderMap;
+use http::{HeaderMap, Method, Uri};
 use std::{collections::HashMap, sync::Arc};
 
 pub fn routes(state: Arc<McpAppState>, streamable_http_endpoint: &str) -> Router<Arc<McpAppState>> {
@@ -22,10 +19,6 @@ pub fn routes(state: Arc<McpAppState>, streamable_http_endpoint: &str) -> Router
             streamable_http_endpoint,
             delete(handle_streamable_http_delete),
         )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            protect_dns_rebinding,
-        ))
 }
 
 pub async fn handle_streamable_http_get(

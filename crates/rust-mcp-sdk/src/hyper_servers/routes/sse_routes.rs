@@ -3,10 +3,7 @@ use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::ClientMessage;
 use crate::{
     hyper_servers::{
-        error::TransportServerResult,
-        middlewares::{
-            protect_dns_rebinding::protect_dns_rebinding, session_id_gen::generate_session_id,
-        },
+        error::TransportServerResult, middlewares::session_id_gen::generate_session_id,
     },
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
@@ -70,10 +67,6 @@ pub fn routes(
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             generate_session_id,
-        ))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            protect_dns_rebinding,
         ))
 }
 

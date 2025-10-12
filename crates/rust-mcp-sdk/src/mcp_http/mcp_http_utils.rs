@@ -11,7 +11,7 @@ use crate::{
 use axum::http::HeaderValue;
 use bytes::Bytes;
 use futures::stream;
-use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE};
+use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE, HOST, ORIGIN};
 use http_body::Frame;
 use http_body_util::StreamBody;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
@@ -557,31 +557,49 @@ pub fn error_response(
         .map_err(|err| TransportServerError::HttpError(err.to_string()))
 }
 
-// pub fn error_response(
-//     status_code: StatusCode,
-//     error: SdkError,
-//     headers: Option<HeaderMap>
-// ) -> TransportServerResult<http::Response<GenericBody>> {
-//     let error_string = serde_json::to_string(&error).unwrap_or_default();
-//     let body = Full::new(Bytes::from(error_string))
-//         .map_err(|err| TransportServerError::HttpError(err.to_string()))
-//         .boxed();
+// Protect against DNS rebinding attacks by validating Host and Origin headers.
+pub(crate) async fn protect_dns_rebinding(
+    headers: &http::HeaderMap,
+    state: Arc<McpAppState>,
+) -> Result<(), SdkError> {
+    if !state.needs_dns_protection() {
+        // If protection is not needed, pass the request to the next handler
+        return Ok(());
+    }
 
-//    let mut response = http::Response::builder()
-//         .status(status_code)
-//         .header(CONTENT_TYPE, "application/json")
-//         .body(body)
-//         .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+    if let Some(allowed_hosts) = state.allowed_hosts.as_ref() {
+        if !allowed_hosts.is_empty() {
+            let Some(host) = headers.get(HOST).and_then(|h| h.to_str().ok()) else {
+                return Err(SdkError::bad_request().with_message("Invalid Host header: [unknown] "));
+            };
 
-//    if let Some(header_map) = headers {
-//            let response_headers = response.headers_mut();
-//            for (key, value) in header_map.into_iter() {
-//                // Only insert valid headers (Some keys), as `HeaderMap` can contain pseudo-headers
-//                if let Some(key) = key {
-//                    response_headers.insert(key, value);
-//                }
-//            }
-//        }
+            if !allowed_hosts
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(host))
+            {
+                return Err(SdkError::bad_request()
+                    .with_message(format!("Invalid Host header: \"{host}\" ").as_str()));
+            }
+        }
+    }
 
-//     Ok(response)
-// }
+    if let Some(allowed_origins) = state.allowed_origins.as_ref() {
+        if !allowed_origins.is_empty() {
+            let Some(origin) = headers.get(ORIGIN).and_then(|h| h.to_str().ok()) else {
+                return Err(
+                    SdkError::bad_request().with_message("Invalid Origin header: [unknown] ")
+                );
+            };
+
+            if !allowed_origins
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(origin))
+            {
+                return Err(SdkError::bad_request()
+                    .with_message(format!("Invalid Origin header: \"{origin}\" ").as_str()));
+            }
+        }
+    }
+
+    Ok(())
+}
