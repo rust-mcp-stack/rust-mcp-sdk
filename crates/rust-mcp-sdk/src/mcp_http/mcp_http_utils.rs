@@ -24,9 +24,31 @@ use std::sync::Arc;
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 use tokio_stream::StreamExt;
 
+// Default Server-Sent Events (SSE) endpoint path
+pub(crate) const DEFAULT_SSE_ENDPOINT: &str = "/sse";
+// Default MCP Messages endpoint path
+pub(crate) const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
+// Default Streamable HTTP endpoint path
+pub(crate) const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
 pub type GenericBody = BoxBody<Bytes, TransportServerError>;
+
+/// Creates an initial SSE event that returns the messages endpoint
+///
+/// Constructs an SSE event containing the messages endpoint URL with the session ID.
+///
+/// # Arguments
+/// * `session_id` - The session identifier for the client
+///
+/// # Returns
+/// * `Result<Event, Infallible>` - The constructed SSE event, infallible
+fn initial_sse_event(endpoint: &str) -> Result<Bytes, TransportServerError> {
+    Ok(SseEvent::default()
+        .with_event("endpoint")
+        .with_data(endpoint.to_string())
+        .as_bytes())
+}
 
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
@@ -602,4 +624,123 @@ pub(crate) async fn protect_dns_rebinding(
     }
 
     Ok(())
+}
+
+pub fn query_param<'a>(request: &'a http::Request<&str>, key: &str) -> Option<String> {
+    request.uri().query().and_then(|query| {
+        for pair in query.split('&') {
+            let mut split = pair.splitn(2, '=');
+            let k = split.next()?;
+            let v = split.next().unwrap_or("");
+            if k == key {
+                return Some(v.to_string());
+            }
+        }
+        None
+    })
+}
+
+#[cfg(any(feature = "sse"))]
+pub(crate) async fn handle_sse_connection(
+    state: Arc<McpAppState>,
+    sse_message_endpoint: Option<&str>,
+) -> TransportServerResult<http::Response<GenericBody>> {
+    let session_id: SessionId = state.id_generator.generate();
+
+    let sse_message_endpoint = sse_message_endpoint.unwrap_or(DEFAULT_MESSAGES_ENDPOINT);
+    let messages_endpoint =
+        SseTransport::<ClientMessage>::message_endpoint(sse_message_endpoint, &session_id);
+
+    // readable stream of string to be used in transport
+    // writing string to read_tx will be received as messages inside the transport and messages will be processed
+    let (read_tx, read_rx) = duplex(DUPLEX_BUFFER_SIZE);
+
+    // writable stream to deliver message to the client
+    let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
+
+    // / create a transport for sending/receiving messages
+    let Ok(transport) = SseTransport::new(
+        read_rx,
+        write_tx,
+        read_tx,
+        Arc::clone(&state.transport_options),
+    ) else {
+        return Err(TransportServerError::TransportError(
+            "Failed to create SSE transport".to_string(),
+        ));
+    };
+
+    let h: Arc<dyn McpServerHandler> = state.handler.clone();
+    // create a new server instance with unique session_id and
+    let server: Arc<ServerRuntime> = server_runtime::create_server_instance(
+        Arc::clone(&state.server_details),
+        h,
+        session_id.to_owned(),
+    );
+
+    state
+        .session_store
+        .set(session_id.to_owned(), server.clone())
+        .await;
+
+    tracing::info!("A new client joined : {}", session_id.to_owned());
+
+    // Start the server
+    tokio::spawn(async move {
+        match server
+            .start_stream(
+                Arc::new(transport),
+                DEFAULT_STREAM_ID,
+                state.ping_interval,
+                None,
+            )
+            .await
+        {
+            Ok(_) => tracing::info!("server {} exited gracefully.", session_id.to_owned()),
+            Err(err) => tracing::info!(
+                "server {} exited with error : {}",
+                session_id.to_owned(),
+                err
+            ),
+        };
+
+        state.session_store.delete(&session_id).await;
+    });
+
+    // Initial SSE message to inform the client about the server's endpoint
+    let initial_sse_event = stream::once(async move { initial_sse_event(&messages_endpoint) });
+
+    // Construct SSE stream
+    let reader = BufReader::new(write_rx);
+
+    let message_stream = stream::unfold(reader, |mut reader| async move {
+        let mut line = String::new();
+
+        match reader.read_line(&mut line).await {
+            Ok(0) => None, // EOF
+            Ok(_) => {
+                let trimmed_line = line.trim_end_matches('\n').to_owned();
+                Some((
+                    Ok(SseEvent::default().with_data(trimmed_line).as_bytes()),
+                    reader,
+                ))
+            }
+            Err(_) => None, // Err(e) => Some((Err(e), reader)),
+        }
+    });
+
+    let stream = initial_sse_event.chain(message_stream);
+
+    // create a stream body
+    let streaming_body: GenericBody =
+        http_body_util::BodyExt::boxed(StreamBody::new(stream.map(|res| res.map(Frame::data))));
+
+    let response = http::Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "text/event-stream")
+        .header(CONNECTION, "keep-alive")
+        .body(streaming_body)
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+
+    Ok(response)
 }

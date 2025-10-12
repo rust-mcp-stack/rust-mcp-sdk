@@ -1,7 +1,12 @@
 use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{InMemorySessionStore, McpAppState},
+    mcp_http::{
+        utils::{
+            DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
+        },
+        InMemorySessionStore, McpAppState,
+    },
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
 };
@@ -27,12 +32,6 @@ use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
-// Default Server-Sent Events (SSE) endpoint path
-const DEFAULT_SSE_ENDPOINT: &str = "/sse";
-// Default MCP Messages endpoint path
-const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
-// Default Streamable HTTP endpoint path
-const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.

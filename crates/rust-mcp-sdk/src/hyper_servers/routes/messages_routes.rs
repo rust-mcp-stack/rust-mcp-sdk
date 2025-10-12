@@ -1,16 +1,11 @@
 use crate::{
-    hyper_servers::error::{TransportServerError, TransportServerResult},
-    mcp_http::McpAppState,
-    mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
+    hyper_servers::error::TransportServerResult,
+    mcp_http::{McpAppState, McpHttpHandler},
     utils::remove_query_and_hash,
 };
-use axum::{
-    extract::{Query, State},
-    response::IntoResponse,
-    routing::post,
-    Router,
-};
-use std::{collections::HashMap, sync::Arc};
+use axum::{extract::State, response::IntoResponse, routing::post, Router};
+use http::{HeaderMap, Method, Uri};
+use std::sync::Arc;
 
 pub fn routes(sse_message_endpoint: &str) -> Router<Arc<McpAppState>> {
     Router::new().route(
@@ -20,33 +15,14 @@ pub fn routes(sse_message_endpoint: &str) -> Router<Arc<McpAppState>> {
 }
 
 pub async fn handle_messages(
+    uri: Uri,
+    headers: HeaderMap,
     State(state): State<Arc<McpAppState>>,
-    Query(params): Query<HashMap<String, String>>,
     message: String,
 ) -> TransportServerResult<impl IntoResponse> {
-    let session_id = params
-        .get("sessionId")
-        .ok_or(TransportServerError::SessionIdMissing)?;
-
-    // transmit to the readable stream, that transport is reading from
-    let transmit =
-        state
-            .session_store
-            .get(session_id)
-            .await
-            .ok_or(TransportServerError::SessionIdInvalid(
-                session_id.to_string(),
-            ))?;
-
-    let transmit = transmit.lock().await;
-
-    transmit
-        .consume_payload_string(DEFAULT_STREAM_ID, &message)
-        .await
-        .map_err(|err| {
-            tracing::trace!("{}", err);
-            TransportServerError::StreamIoError(err.to_string())
-        })?;
-
-    Ok(axum::http::StatusCode::ACCEPTED)
+    let request = McpHttpHandler::create_request(Method::POST, uri, headers, Some(&message));
+    let generic_response = McpHttpHandler::handle_sse_message(request, state.clone()).await?;
+    let (parts, body) = generic_response.into_parts();
+    let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));
+    Ok(resp)
 }

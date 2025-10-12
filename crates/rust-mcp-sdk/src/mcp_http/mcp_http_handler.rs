@@ -1,6 +1,11 @@
+#[cfg(any(feature = "sse"))]
+use super::utils::handle_sse_connection;
 use crate::mcp_http::utils::{
-    accepts_event_stream, error_response, validate_mcp_protocol_version_header,
+    accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
 };
+use crate::mcp_runtimes::server_runtime::DEFAULT_STREAM_ID;
+use crate::mcp_server::error::TransportServerError;
+use crate::schema::schema_utils::SdkError;
 use crate::{
     error::McpSdkError,
     mcp_http::{
@@ -12,10 +17,11 @@ use crate::{
         McpAppState,
     },
     mcp_server::error::TransportServerResult,
-    schema::schema_utils::SdkError,
     utils::valid_initialize_method,
 };
+use bytes::Bytes;
 use http::{self, HeaderMap, Method, StatusCode, Uri};
+use http_body_util::{BodyExt, Full};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
 use std::sync::Arc;
 
@@ -57,6 +63,46 @@ impl McpHttpHandler {
 }
 
 impl McpHttpHandler {
+    #[cfg(any(feature = "sse"))]
+    pub async fn handle_sse_connection(
+        state: Arc<McpAppState>,
+        sse_message_endpoint: Option<&str>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        handle_sse_connection(state, sse_message_endpoint).await
+    }
+
+    pub async fn handle_sse_message(
+        request: http::Request<&str>,
+        state: Arc<McpAppState>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        let session_id =
+            query_param(&request, "sessionId").ok_or(TransportServerError::SessionIdMissing)?;
+
+        // transmit to the readable stream, that transport is reading from
+        let transmit = state.session_store.get(&session_id).await.ok_or(
+            TransportServerError::SessionIdInvalid(session_id.to_string()),
+        )?;
+
+        let transmit = transmit.lock().await;
+        let message = *request.body();
+        transmit
+            .consume_payload_string(DEFAULT_STREAM_ID, message)
+            .await
+            .map_err(|err| {
+                tracing::trace!("{}", err);
+                TransportServerError::StreamIoError(err.to_string())
+            })?;
+
+        let body = Full::new(Bytes::new())
+            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .boxed();
+
+        http::Response::builder()
+            .status(StatusCode::ACCEPTED)
+            .body(body)
+            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+    }
+
     pub async fn handle_streamable_http(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -64,7 +110,7 @@ impl McpHttpHandler {
         // Enforces DNS rebinding protection if required by state.
         // If protection fails, respond with HTTP 403 Forbidden.
         if state.needs_dns_protection() {
-            if let Err(error) = protect_dns_rebinding(&request.headers(), state.clone()).await {
+            if let Err(error) = protect_dns_rebinding(request.headers(), state.clone()).await {
                 return error_response(StatusCode::FORBIDDEN, error);
             }
         }
