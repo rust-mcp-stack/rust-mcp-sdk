@@ -2,9 +2,7 @@ use crate::mcp_http::McpAppState;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::ClientMessage;
 use crate::{
-    hyper_servers::{
-        error::TransportServerResult, middlewares::session_id_gen::generate_session_id,
-    },
+    hyper_servers::error::TransportServerResult,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::mcp_handler::McpServerHandler,
@@ -59,15 +57,10 @@ pub fn routes(
     sse_message_endpoint: &str,
 ) -> Router<Arc<McpAppState>> {
     let sse_message_endpoint = SseMessageEndpoint(sse_message_endpoint.to_string());
-    Router::new()
-        .route(
-            sse_endpoint,
-            get(handle_sse).layer(Extension(sse_message_endpoint)),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            generate_session_id,
-        ))
+    Router::new().route(
+        sse_endpoint,
+        get(handle_sse).layer(Extension(sse_message_endpoint)),
+    )
 }
 
 /// Handles Server-Sent Events (SSE) connections
@@ -81,11 +74,12 @@ pub fn routes(
 /// # Returns
 /// * `TransportServerResult<impl IntoResponse>` - The SSE response stream or an error
 pub async fn handle_sse(
-    Extension(session_id): Extension<SessionId>,
     Extension(sse_message_endpoint): Extension<SseMessageEndpoint>,
     State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     let SseMessageEndpoint(sse_message_endpoint) = sse_message_endpoint;
+
+    let session_id: SessionId = state.id_generator.generate();
 
     let messages_endpoint =
         SseTransport::<ClientMessage>::message_endpoint(&sse_message_endpoint, &session_id);
