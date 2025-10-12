@@ -1,42 +1,57 @@
 mod cancellation_token;
+
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod http_utils;
+
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod readable_channel;
+
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+mod sse_event;
+
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod sse_parser;
+
 #[cfg(feature = "sse")]
 mod sse_stream;
+
 #[cfg(feature = "streamable-http")]
 mod streamable_http_stream;
+
+mod time_utils;
+
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod writable_channel;
 
-pub(crate) use cancellation_token::*;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-pub(crate) use http_utils::*;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-pub(crate) use readable_channel::*;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-pub use sse_parser::SseEvent;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-pub(crate) use sse_parser::*;
-#[cfg(feature = "sse")]
-pub(crate) use sse_stream::*;
-#[cfg(feature = "streamable-http")]
-pub(crate) use streamable_http_stream::*;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-pub(crate) use writable_channel::*;
-mod time_utils;
-pub use time_utils::*;
-
-use crate::schema::schema_utils::SdkError;
-use tokio::time::{timeout, Duration};
-
 use crate::error::{TransportError, TransportResult};
+use crate::schema::schema_utils::SdkError;
+pub(crate) use cancellation_token::*;
 
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::SessionId;
+
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub(crate) use http_utils::*;
+
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub(crate) use readable_channel::*;
+
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub use sse_event::*;
+
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub(crate) use sse_parser::*;
+
+#[cfg(feature = "sse")]
+pub(crate) use sse_stream::*;
+
+#[cfg(feature = "streamable-http")]
+pub(crate) use streamable_http_stream::*;
+
+pub use time_utils::*;
+use tokio::time::{timeout, Duration};
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+pub(crate) use writable_channel::*;
 
 pub async fn await_timeout<F, T, E>(operation: F, timeout_duration: Duration) -> TransportResult<T>
 where
