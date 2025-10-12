@@ -626,7 +626,20 @@ pub(crate) async fn protect_dns_rebinding(
     Ok(())
 }
 
-pub fn query_param<'a>(request: &'a http::Request<&str>, key: &str) -> Option<String> {
+/// Extracts the value of a query parameter from an HTTP request by key.
+///
+/// This function parses the query string from the request URI and searches
+/// for the specified key. If found, it returns the corresponding value as a `String`.
+///
+/// # Arguments
+/// * `request` - The HTTP request containing the URI with the query string.
+/// * `key` - The name of the query parameter to retrieve.
+///
+/// # Returns
+/// * `Some(String)` containing the value of the query parameter if found.
+/// * `None` if the query string is missing or the key is not present.
+///
+pub fn query_param(request: &http::Request<&str>, key: &str) -> Option<String> {
     request.uri().query().and_then(|query| {
         for pair in query.split('&') {
             let mut split = pair.splitn(2, '=');
@@ -640,7 +653,7 @@ pub fn query_param<'a>(request: &'a http::Request<&str>, key: &str) -> Option<St
     })
 }
 
-#[cfg(any(feature = "sse"))]
+#[cfg(feature = "sse")]
 pub(crate) async fn handle_sse_connection(
     state: Arc<McpAppState>,
     sse_message_endpoint: Option<&str>,

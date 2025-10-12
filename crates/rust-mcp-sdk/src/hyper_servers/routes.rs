@@ -1,6 +1,6 @@
 pub mod fallback_routes;
 pub mod messages_routes;
-#[cfg(any(feature = "sse"))]
+#[cfg(feature = "sse")]
 pub mod sse_routes;
 pub mod streamable_http_routes;
 
@@ -28,7 +28,7 @@ pub fn app_routes(state: Arc<McpAppState>, server_options: &HyperServerOptions) 
         ))
         .merge({
             let mut r = Router::new();
-            #[cfg(any(feature = "sse"))]
+            #[cfg(feature = "sse")]
             if server_options.sse_support {
                 r = r
                     .merge(sse_routes::routes(

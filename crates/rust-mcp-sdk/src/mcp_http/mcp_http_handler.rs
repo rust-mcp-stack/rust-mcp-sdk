@@ -1,4 +1,4 @@
-#[cfg(any(feature = "sse"))]
+#[cfg(feature = "sse")]
 use super::utils::handle_sse_connection;
 use crate::mcp_http::utils::{
     accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
@@ -63,7 +63,19 @@ impl McpHttpHandler {
 }
 
 impl McpHttpHandler {
-    #[cfg(any(feature = "sse"))]
+    /// Handles an MCP connection using the SSE (Server-Sent Events) transport.
+    ///
+    /// This function serves as the entry point for initializing and managing a client connection
+    /// over SSE when the `sse` feature is enabled.
+    ///
+    /// # Arguments
+    /// * `state` - Shared application state required to manage the MCP session.
+    /// * `sse_message_endpoint` - Optional message endpoint to override the default SSE route (default: `/messages` ).
+    ///
+    ///
+    /// # Features
+    /// This function is only available when the `sse` feature is enabled.
+    #[cfg(feature = "sse")]
     pub async fn handle_sse_connection(
         state: Arc<McpAppState>,
         sse_message_endpoint: Option<&str>,
@@ -71,6 +83,26 @@ impl McpHttpHandler {
         handle_sse_connection(state, sse_message_endpoint).await
     }
 
+    /// Handles incoming MCP messages from the client after an SSE connection is established.
+    ///
+    /// This function processes a message sent by the client as part of an active SSE session. It:
+    /// - Extracts the `sessionId` from the request query parameters.
+    /// - Locates the corresponding session's transmit channel.
+    /// - Forwards the incoming message payload to the MCP transport stream for consumption.
+    /// # Arguments
+    /// * `request` - The HTTP request containing the message body and query parameters (including `sessionId`).
+    /// * `state` - Shared application state, including access to the session store.
+    ///
+    /// # Returns
+    /// * `TransportServerResult<http::Response<GenericBody>>`:
+    ///   - Returns a `202 Accepted` HTTP response if the message is successfully forwarded.
+    ///   - Returns an error if the session ID is missing, invalid, or if any I/O issues occur while processing the message.
+    ///
+    /// # Errors
+    /// - `SessionIdMissing`: if the `sessionId` query parameter is not present.
+    /// - `SessionIdInvalid`: if the session ID does not map to a valid session in the session store.
+    /// - `StreamIoError`: if an error occurs while writing to the stream.
+    /// - `HttpError`: if constructing the HTTP response fails.
     pub async fn handle_sse_message(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -103,6 +135,27 @@ impl McpHttpHandler {
             .map_err(|err| TransportServerError::HttpError(err.to_string()))
     }
 
+    /// Handles incoming MCP messages over the StreamableHTTP transport.
+    ///
+    /// It supports `GET`, `POST`, and `DELETE` methods for handling streaming operations, and performs optional
+    /// DNS rebinding protection if it is configured.
+    ///
+    /// # Arguments
+    /// * `request` - The HTTP request from the client, including method, headers, and optional body.
+    /// * `state` - Shared application state, including configuration and session management.
+    ///
+    /// # Behavior
+    /// - If DNS rebinding protection is enabled via the app state, the function checks the request headers.
+    ///   If dns protection fails, a `403 Forbidden` response is returned.
+    /// - Dispatches the request to method-specific handlers based on the HTTP method:
+    ///     - `GET` → `handle_http_get`
+    ///     - `POST` → `handle_http_post`
+    ///     - `DELETE` → `handle_http_delete`
+    /// - Returns `405 Method Not Allowed` for unsupported methods.
+    ///
+    /// # Returns
+    /// * A `TransportServerResult` wrapping an HTTP response indicating success or failure of the operation.
+    ///
     pub async fn handle_streamable_http(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
