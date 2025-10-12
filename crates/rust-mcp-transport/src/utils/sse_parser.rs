@@ -7,6 +7,7 @@ const BUFFER_CAPACITY: usize = 1024;
 /// Represents a single Server-Sent Event (SSE) as defined in the SSE protocol.
 ///
 /// Contains the event type, data payload, and optional event ID.
+#[derive(Clone, Default)]
 pub struct SseEvent {
     /// The optional event type (e.g., "message").
     pub event: Option<String>,
@@ -66,17 +67,6 @@ impl SseEvent {
 
     pub fn as_bytes(&self) -> Bytes {
         Bytes::from(self.to_string())
-    }
-}
-
-impl Default for SseEvent {
-    fn default() -> Self {
-        Self {
-            event: Default::default(),
-            data: Default::default(),
-            id: Default::default(),
-            retry: Default::default(),
-        }
     }
 }
 

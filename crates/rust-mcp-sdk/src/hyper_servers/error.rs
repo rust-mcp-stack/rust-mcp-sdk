@@ -1,4 +1,4 @@
-use std::{net::AddrParseError, path::Display};
+use std::net::AddrParseError;
 
 use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;

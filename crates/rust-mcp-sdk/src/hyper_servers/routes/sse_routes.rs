@@ -93,11 +93,6 @@ pub async fn handle_sse(
     State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     let SseMessageEndpoint(sse_message_endpoint) = sse_message_endpoint;
-    tracing::warn!(
-        ">>>  session_id {:?}, sse_message_endpoint>>> {:?}",
-        session_id,
-        sse_message_endpoint
-    );
 
     let messages_endpoint =
         SseTransport::<ClientMessage>::message_endpoint(&sse_message_endpoint, &session_id);

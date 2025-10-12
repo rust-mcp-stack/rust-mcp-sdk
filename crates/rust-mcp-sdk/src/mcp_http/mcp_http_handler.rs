@@ -4,10 +4,9 @@ use crate::{
     error::McpSdkError,
     mcp_http::{
         utils::{
-            acceptable_content_type, create_standalone_stream, create_standalone_stream_x,
-            delete_session, delete_session_x, process_incoming_message_return_x,
-            process_incoming_message_x, start_new_session_x, valid_streaming_http_accept_header,
-            GenericBody,
+            acceptable_content_type, create_standalone_stream, delete_session,
+            process_incoming_message, process_incoming_message_return, start_new_session,
+            valid_streaming_http_accept_header, GenericBody,
         },
         McpAppState,
     },
@@ -15,10 +14,7 @@ use crate::{
     schema::schema_utils::SdkError,
     utils::valid_initialize_method,
 };
-use axum::response::ErrorResponse;
-use bytes::Bytes;
-use http::{self, header::CONTENT_TYPE, StatusCode};
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http::{self, StatusCode};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
 
 use crate::mcp_http::utils::{
@@ -41,7 +37,7 @@ impl McpHttpHandler {
                 let error = SdkError::bad_request().with_message(&format!(
                     "'{other}' is not a valid HTTP method for StreamableHTTP transport."
                 ));
-                return error_response(StatusCode::METHOD_NOT_ALLOWED, error);
+                error_response(StatusCode::METHOD_NOT_ALLOWED, error)
             }
         }
     }
@@ -52,7 +48,7 @@ impl McpHttpHandler {
     ) -> TransportServerResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
-        if let Err(parse_error) = validate_mcp_protocol_version_header(&headers) {
+        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
             let error = SdkError::bad_request()
                 .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
             return error_response(StatusCode::BAD_REQUEST, error);
@@ -64,7 +60,7 @@ impl McpHttpHandler {
             .map(|s| s.to_string());
 
         match session_id {
-            Some(id) => delete_session_x(id, state).await,
+            Some(id) => delete_session(id, state).await,
             None => {
                 let error = SdkError::bad_request().with_message("Bad Request: Session not found");
                 error_response(StatusCode::BAD_REQUEST, error)
@@ -90,7 +86,7 @@ impl McpHttpHandler {
             return error_response(StatusCode::UNSUPPORTED_MEDIA_TYPE, error);
         }
 
-        if let Err(parse_error) = validate_mcp_protocol_version_header(&headers) {
+        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
             let error = SdkError::bad_request()
                 .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
             return error_response(StatusCode::BAD_REQUEST, error);
@@ -107,14 +103,14 @@ impl McpHttpHandler {
             // has session-id => write to the existing stream
             Some(id) => {
                 if state.enable_json_response {
-                    process_incoming_message_return_x(id, state, payload).await
+                    process_incoming_message_return(id, state, payload).await
                 } else {
-                    process_incoming_message_x(id, state, &payload).await
+                    process_incoming_message(id, state, payload).await
                 }
             }
-            None => match valid_initialize_method(&payload) {
+            None => match valid_initialize_method(payload) {
                 Ok(_) => {
-                    return start_new_session_x(state, &payload).await;
+                    return start_new_session(state, payload).await;
                 }
                 Err(McpSdkError::SdkError(error)) => error_response(StatusCode::BAD_REQUEST, error),
                 Err(error) => {
@@ -137,7 +133,7 @@ impl McpHttpHandler {
             return error_response(StatusCode::NOT_ACCEPTABLE, error);
         }
 
-        if let Err(parse_error) = validate_mcp_protocol_version_header(&headers) {
+        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
             let error = SdkError::bad_request()
                 .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
             return error_response(StatusCode::BAD_REQUEST, error);
@@ -155,7 +151,7 @@ impl McpHttpHandler {
 
         match session_id {
             Some(session_id) => {
-                let res = create_standalone_stream_x(session_id, last_event_id, state).await;
+                let res = create_standalone_stream(session_id, last_event_id, state).await;
                 res
             }
             None => {

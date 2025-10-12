@@ -31,6 +31,7 @@ pub use sse::*;
 pub use stdio::*;
 pub use transport::*;
 
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub use utils::SseEvent;
 
 // Type alias for session identifier, represented as a String
