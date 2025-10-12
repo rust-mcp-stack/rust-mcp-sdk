@@ -131,6 +131,22 @@ pub trait McpClient: Sync + Send {
             .map(|server_details| server_details.capabilities.logging.is_some())
     }
 
+    /// Checks if the server supports argument autocompletion suggestions.
+    ///
+    /// This function retrieves the server information and checks if the
+    /// server has completions capabilities listed. If the server info has
+    /// not been retrieved yet, it returns `None`. Otherwise, it returns
+    /// `Some(true)` if completions is supported, or `Some(false)` if not.
+    ///
+    /// # Returns
+    /// - `None` if server information is not yet available.
+    /// - `Some(true)` if completions is supported by the server.
+    /// - `Some(false)` if completions is not supported by the server.
+    fn server_supports_completion(&self) -> Option<bool> {
+        self.server_info()
+            .map(|server_details| server_details.capabilities.completions.is_some())
+    }
+
     fn instructions(&self) -> Option<String> {
         self.server_info()?.instructions
     }

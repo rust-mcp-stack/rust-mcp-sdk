@@ -1,19 +1,17 @@
 mod handler;
 mod tools;
 
-use std::sync::Arc;
-
 use handler::MyServerHandler;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
-
 use rust_mcp_sdk::{
     error::SdkResult,
     mcp_server::{server_runtime, ServerRuntime},
     McpServer, StdioTransport, TransportOptions,
 };
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
