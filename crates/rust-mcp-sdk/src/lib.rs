@@ -7,6 +7,7 @@ pub(crate) mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;
+#[cfg(any(feature = "server", feature = "hyper-server"))]
 pub mod session_store;
 mod utils;
 
