@@ -13,7 +13,7 @@ members = [
     "examples/simple-mcp-client-sse",
     "examples/simple-mcp-client-sse-core",
     "examples/simple-mcp-client-streamable-http",
-    "examples/simple-mcp-client-streamable-http-core",
+    "examples/simple-mcp-client-streamable-http-core", "crates/rust-mcp-extra",
 
 ]
 
