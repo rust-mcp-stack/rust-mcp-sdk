@@ -1,15 +1,15 @@
-mod in_memory;
+mod in_memory_session_store;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-pub use in_memory::*;
+pub use in_memory_session_store::*;
 use rust_mcp_transport::SessionId;
 use tokio::sync::Mutex;
 
 use crate::mcp_server::ServerRuntime;
 
 // Type alias for the server-side duplex stream used in sessions
-pub type TxServer = Arc<ServerRuntime>;
+type TxServer = Arc<ServerRuntime>;
 
 /// Trait defining the interface for session storage operations
 ///

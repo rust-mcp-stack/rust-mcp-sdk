@@ -1,4 +1,8 @@
-use crate::schema::{schema_utils::CallToolError, *};
+use crate::{
+    mcp_server::server_runtime::ServerRuntimeInternalHandler,
+    mcp_traits::mcp_handler::McpServerHandler,
+    schema::{schema_utils::CallToolError, *},
+};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
@@ -324,5 +328,16 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())
+    }
+}
+
+// Custom trait for conversion
+pub trait ToMcpServerHandler {
+    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static>;
+}
+
+impl<T: ServerHandler + 'static> ToMcpServerHandler for T {
+    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static> {
+        Arc::new(ServerRuntimeInternalHandler::new(Box::new(self)))
     }
 }
