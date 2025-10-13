@@ -1,12 +1,9 @@
-//! Short, URL-safe, No collisions if length is sufficient
-//! Needs collision handling if critical
-
 //! Medium size ,Globally unique , Time-sortable , Compact (64 bits),
 //! Use case: Distributed systems needing high-throughput, unique IDs without collisions.
 //! [ timestamp (41 bits) | machine id (10 bits) | sequence (12 bits) ]
 
 use once_cell::sync::Lazy;
-use rust_mcp_sdk::{self, id_generator::IdGenerator};
+use rust_mcp_sdk::id_generator::IdGenerator;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
