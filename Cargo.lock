@@ -681,7 +681,7 @@ checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
 
 [[package]]
 name = "hello-world-mcp-server-stdio"
-version = "0.1.29"
+version = "0.1.30"
 dependencies = [
  "async-trait",
  "futures",
@@ -695,7 +695,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-mcp-server-stdio-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-trait",
  "futures",
@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-server-streamable-http"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "async-trait",
  "futures",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "hello-world-server-streamable-http-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-trait",
  "futures",
@@ -1693,7 +1693,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-extra"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "nanoid",
@@ -1727,7 +1727,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-transport"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1951,7 +1951,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-sse"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "async-trait",
  "colored",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-sse-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-trait",
  "colored",
@@ -1983,7 +1983,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-stdio"
-version = "0.1.29"
+version = "0.1.30"
 dependencies = [
  "async-trait",
  "colored",
@@ -1997,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-stdio-core"
-version = "0.1.29"
+version = "0.1.30"
 dependencies = [
  "async-trait",
  "colored",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-streamable-http"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "colored",
@@ -2027,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "simple-mcp-client-streamable-http-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "colored",
