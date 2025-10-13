@@ -115,7 +115,6 @@ impl McpHttpHandler {
             TransportServerError::SessionIdInvalid(session_id.to_string()),
         )?;
 
-        let transmit = transmit.lock().await;
         let message = *request.body();
         transmit
             .consume_payload_string(DEFAULT_STREAM_ID, message)

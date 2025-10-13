@@ -15,7 +15,7 @@ use crate::{
 
 use axum_server::Handle;
 use rust_mcp_transport::SessionId;
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 use crate::{
     error::SdkResult,
@@ -79,7 +79,7 @@ impl HyperRuntime {
     pub async fn runtime_by_session(
         &self,
         session_id: &SessionId,
-    ) -> TransportServerResult<Arc<Mutex<Arc<ServerRuntime>>>> {
+    ) -> TransportServerResult<Arc<ServerRuntime>> {
         self.state.session_store.get(session_id).await.ok_or(
             TransportServerError::SessionIdInvalid(session_id.to_string()),
         )
@@ -92,7 +92,6 @@ impl HyperRuntime {
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromClient> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.request(request, timeout).await
     }
 
@@ -102,7 +101,6 @@ impl HyperRuntime {
         notification: NotificationFromServer,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_notification(notification).await
     }
 
@@ -117,7 +115,6 @@ impl HyperRuntime {
         params: Option<ListRootsRequestParams>,
     ) -> SdkResult<ListRootsResult> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.list_roots(params).await
     }
 
@@ -127,7 +124,6 @@ impl HyperRuntime {
         params: LoggingMessageNotificationParams,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_logging_message(params).await
     }
 
@@ -140,7 +136,6 @@ impl HyperRuntime {
         params: Option<PromptListChangedNotificationParams>,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_prompt_list_changed(params).await
     }
 
@@ -153,7 +148,6 @@ impl HyperRuntime {
         params: Option<ResourceListChangedNotificationParams>,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_resource_list_changed(params).await
     }
 
@@ -166,7 +160,6 @@ impl HyperRuntime {
         params: ResourceUpdatedNotificationParams,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_resource_updated(params).await
     }
 
@@ -179,7 +172,6 @@ impl HyperRuntime {
         params: Option<ToolListChangedNotificationParams>,
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.send_tool_list_changed(params).await
     }
 
@@ -199,7 +191,6 @@ impl HyperRuntime {
         timeout: Option<Duration>,
     ) -> SdkResult<crate::schema::Result> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.ping(timeout).await
     }
 
@@ -214,7 +205,6 @@ impl HyperRuntime {
         params: CreateMessageRequestParams,
     ) -> SdkResult<CreateMessageResult> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         runtime.create_message(params).await
     }
 
@@ -223,7 +213,6 @@ impl HyperRuntime {
         session_id: &SessionId,
     ) -> SdkResult<Option<InitializeRequestParams>> {
         let runtime = self.runtime_by_session(session_id).await?;
-        let runtime = runtime.lock().await.to_owned();
         Ok(runtime.client_info())
     }
 }
