@@ -1,19 +1,16 @@
 mod handler;
 mod tools;
 
-use std::sync::Arc;
-use std::time::Duration;
-
+use handler::MyServerHandler;
 use rust_mcp_sdk::event_store::InMemoryEventStore;
 use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
-
-use handler::MyServerHandler;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
-
 use rust_mcp_sdk::{error::SdkResult, mcp_server::ServerHandler};
+use std::sync::Arc;
+use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub struct AppStateX<H: ServerHandler> {
