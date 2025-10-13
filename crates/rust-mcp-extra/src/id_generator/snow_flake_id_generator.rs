@@ -15,14 +15,22 @@ static SHORTER_EPOCH: Lazy<u64> = Lazy::new(|| {
         .as_millis() as u64
 });
 
-/// Snowflake ID Generator
+/// A Snowflake ID generator implementation producing 64-bit unique IDs.
+///
+/// Snowflake IDs are composed of:
+/// - A timestamp in milliseconds since a custom epoch (usually a fixed past time),
+/// - A machine ID (or worker ID) to differentiate between nodes,
+/// - A sequence number that increments within the same millisecond to avoid collisions.
 ///
 /// Format (64 bits total):
-/// - 41 bits: timestamp (ms since CUSTOM_EPOCH)
+/// - 41 bits: timestamp (ms since SHORTER_EPOCH)
 /// - 10 bits: machine ID (0-1023)
 /// - 12 bits: sequence number (per ms)
 ///
-/// Total: 63 bits used (sign bit unused)
+/// This generator ensures:
+/// - Uniqueness across multiple machines (given unique machine IDs),
+/// - Monotonic increasing IDs when generated in the same process,
+/// - Thread safety with internal locking.
 pub struct SnowflakeIdGenerator {
     machine_id: u16, // 10 bits max
     last_timestamp: AtomicU64,
