@@ -11,7 +11,7 @@
 
 ### ⚡ Performance Improvements
 
-* Remove unnecesarry mutex in the session store ([ea5d580](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ea5d58013ac051f2bbe7e9f5b3a20a3220e66c9b))
+* Remove unnecessary mutex in the session store ([ea5d580](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ea5d58013ac051f2bbe7e9f5b3a20a3220e66c9b))
 
 
 ### 🚜 Code Refactoring
