@@ -1629,6 +1629,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-mcp-extra"
+version = "0.1.0"
+
+[[package]]
 name = "rust-mcp-macros"
 version = "0.5.2"
 dependencies = [

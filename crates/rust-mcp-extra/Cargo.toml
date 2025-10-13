@@ -10,8 +10,11 @@ keywords = ["serverless", "mcp-server", "rust-mcp", "cloud", "lambda"]
 license = "MIT"
 edition = "2024"
 exclude = ["assets/", "tests/"]
+once_cell = "1.21.3"
+rust-mcp-sdk = { version = "^0.7", default-features = false, features=["server","2025_06_18"] }
 
-[dependencies]
+[patch.crates-io]
+rust-mcp-sdk = { path = "../rust-mcp-sdk", default-features = false, features=["server","2025_06_18"] }
 
 [lints]
 workspace = true
