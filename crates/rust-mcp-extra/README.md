@@ -2,9 +2,9 @@
 
 **A companion crate to [`rust-mcp-sdk`](https://github.com/rust-mcp-stack/rust-mcp-sdk) providing additional implementations for core traits like `IdGenerator`, `SessionStore` and `EventStore`.**
 
-
+-----
 ## 🔢 ID Generators
-This crate provides several implementations of the IdGenerator<T> trait (from [rust-mcp-sdk]) for generating unique identifiers.
+Various implementations of the IdGenerator<T> trait (from [rust-mcp-sdk]) for generating unique identifiers.
 
 | **🧩 All ID generators in this crate can be used as `SessionId` generators in [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk)).**
 
@@ -37,3 +37,18 @@ let server = hyper_server::create_server(
 );
 
 ```
+
+-----
+
+## 💾 Session Stores
+
+`SessionStore` implementations are available for managing MCP sessions effectively.
+
+🔜 Coming Soon
+
+-----
+
+## 💽 Event Stores
+`EventStore` implementations to enable resumability on MCP servers by reliably storing and replaying event histories.
+
+🔜 Coming Soon

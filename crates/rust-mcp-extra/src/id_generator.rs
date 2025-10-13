@@ -1,3 +1,5 @@
+//! This module provides implementations of various ID generators,
+//! which can be used for generating `session_id`s in MCP servers.
 #[cfg(feature = "nano_id")]
 mod nano_id_generator;
 #[cfg(feature = "random_62_id")]
