@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.6.0...rust-mcp-transport-v0.6.1) (2025-10-13)
+
+
+### 🚀 Features
+
+* **server:** Decouple core logic from HTTP server for improved architecture ([#106](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/106)) ([d10488b](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/d10488bac739bf28b45d636129eb598d4dd87fd2))
+
 ## [0.6.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.5.0...rust-mcp-transport-v0.6.0) (2025-09-19)
 
 

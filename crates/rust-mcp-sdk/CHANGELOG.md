@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.0...rust-mcp-sdk-v0.7.1) (2025-10-13)
+
+
+### 🚀 Features
+
+* Add server_supports_completion method ([#104](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/104)) ([6268726](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/62687262a30cce0928435c153b6016d56e85b8ee))
+* **server:** Decouple core logic from HTTP server for improved architecture ([#106](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/106)) ([d10488b](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/d10488bac739bf28b45d636129eb598d4dd87fd2))
+
+
+### ⚡ Performance Improvements
+
+* Remove unnecessary mutex in the session store ([ea5d580](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ea5d58013ac051f2bbe7e9f5b3a20a3220e66c9b))
+
+
+### 🚜 Code Refactoring
+
+* Expose Store Traits and add ToMcpServerHandler for Improved Framework Flexibility ([#107](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/107)) ([5bf54d6](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/5bf54d6d442d6cb854242697fa50c29bca0b8483))
+
 ## [0.7.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.6.3...rust-mcp-sdk-v0.7.0) (2025-09-19)
 
 
