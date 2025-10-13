@@ -7,6 +7,7 @@ pub(crate) mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;
+pub mod session_store;
 mod utils;
 
 #[cfg(feature = "client")]
@@ -65,7 +66,7 @@ pub mod mcp_server {
     //!   handle each message based on its type and parameters.
     //!
     //! Refer to [examples/hello-world-mcp-server-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core) for an example.
-    pub use super::mcp_handlers::mcp_server_handler::ServerHandler;
+    pub use super::mcp_handlers::mcp_server_handler::{ServerHandler, ToMcpServerHandler};
     pub use super::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime as server_runtime;
@@ -79,6 +80,9 @@ pub mod mcp_server {
     #[cfg(feature = "hyper-server")]
     pub use super::hyper_servers::*;
     pub use super::utils::enforce_compatible_protocol_version;
+
+    #[cfg(feature = "hyper-server")]
+    pub use super::mcp_http::{McpAppState, McpHttpHandler};
 }
 
 #[cfg(feature = "client")]

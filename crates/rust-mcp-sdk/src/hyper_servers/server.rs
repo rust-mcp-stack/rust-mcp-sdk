@@ -5,10 +5,11 @@ use crate::{
         utils::{
             DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
         },
-        InMemorySessionStore, McpAppState,
+        McpAppState,
     },
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
+    session_store::InMemorySessionStore,
 };
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;

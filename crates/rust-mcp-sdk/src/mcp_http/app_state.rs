@@ -1,12 +1,9 @@
-use std::{sync::Arc, time::Duration};
-
-use super::session_store::SessionStore;
 use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::session_store::SessionStore;
 use crate::{id_generator::FastIdGenerator, mcp_traits::IdGenerator, schema::InitializeResult};
-
 use rust_mcp_transport::event_store::EventStore;
-
 use rust_mcp_transport::{SessionId, TransportOptions};
+use std::{sync::Arc, time::Duration};
 
 /// Application state struct for the Hyper ser
 ///
