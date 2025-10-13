@@ -240,7 +240,6 @@ pub async fn create_standalone_stream(
     let runtime = state.session_store.get(&session_id).await.ok_or(
         TransportServerError::SessionIdInvalid(session_id.to_string()),
     )?;
-    let runtime = runtime.lock().await.to_owned();
 
     if runtime.stream_id_exists(DEFAULT_STREAM_ID).await {
         let error =
@@ -410,8 +409,6 @@ pub async fn process_incoming_message_return(
 ) -> TransportServerResult<http::Response<GenericBody>> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
-            let runtime = runtime.lock().await.to_owned();
-
             single_shot_stream(
                 runtime.clone(),
                 session_id,
@@ -437,7 +434,6 @@ pub async fn process_incoming_message(
 ) -> TransportServerResult<http::Response<GenericBody>> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
-            let runtime = runtime.lock().await.to_owned();
             // when receiving a result in a streamable_http server, that means it was sent by the standalone sse transport
             // it should be processed by the same transport , therefore no need to call create_sse_stream
             let Ok(is_result) = is_result(payload) else {
@@ -494,7 +490,6 @@ pub async fn delete_session(
 ) -> TransportServerResult<http::Response<GenericBody>> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
-            let runtime = runtime.lock().await.to_owned();
             runtime.shutdown().await;
             state.session_store.delete(&session_id).await;
             tracing::info!("client disconnected : {}", &session_id);

@@ -1,112 +1,110 @@
 {
-    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-    "release-type": "rust",
-    "release-as": "",
-    "include-component-in-tag": true,
-    "changelog-sections": [
-        {
-            "type": "feature",
-            "section": "🚀 Features"
-        },
-        {
-            "type": "feat",
-            "section": "🚀 Features"
-        },
-        {
-            "type": "fix",
-            "section": "🐛 Bug Fixes"
-        },
-        {
-            "type": "perf",
-            "section": "⚡ Performance Improvements"
-        },
-        {
-            "type": "revert",
-            "section": "◀️ Reverts"
-        },
-        {
-            "type": "docs",
-            "section": "📚 Documentation",
-            "hidden": false
-        },
-        {
-            "type": "style",
-            "section": "🎨 Styles",
-            "hidden": true
-        },
-        {
-            "type": "chore",
-            "section": "⚙️ Miscellaneous Chores",
-            "hidden": true
-        },
-        {
-            "type": "refactor",
-            "section": "🚜 Code Refactoring",
-            "hidden": true
-        },
-        {
-            "type": "test",
-            "section": "🧪 Tests",
-            "hidden": true
-        },
-        {
-            "type": "build",
-            "section": "🛠️ Build System",
-            "hidden": true
-        },
-        {
-            "type": "ci",
-            "section": "🥏 Continuous Integration",
-            "hidden": true
-        }
-    ],
-    "plugins": [
-        "cargo-workspace",
-        "sentence-case"
-    ],
-    "pull-request-header": ":robot: Auto-generated release PR",
-    "packages": {
-        "crates/rust-mcp-macros": {
-            "release-type": "rust",
-            "draft": false,
-            "prerelease": false,
-            "bump-minor-pre-major": true,
-            "bump-patch-for-minor-pre-major": true,
-            "changelogPath": "CHANGELOG.md",
-            "extra-files": [
-                {
-                    "type": "generic",
-                    "path": "CHANGELOG.md"
-                }
-            ]
-        },
-        "crates/rust-mcp-transport": {
-            "release-type": "rust",
-            "draft": false,
-            "prerelease": false,
-            "bump-minor-pre-major": true,
-            "bump-patch-for-minor-pre-major": true,
-            "changelogPath": "CHANGELOG.md",
-            "extra-files": [
-                {
-                    "type": "generic",
-                    "path": "CHANGELOG.md"
-                }
-            ]
-        },
-        "crates/rust-mcp-sdk": {
-            "release-type": "rust",
-            "draft": false,
-            "prerelease": false,
-            "bump-minor-pre-major": true,
-            "bump-patch-for-minor-pre-major": true,
-            "changelogPath": "CHANGELOG.md",
-            "extra-files": [
-                {
-                    "type": "generic",
-                    "path": "CHANGELOG.md"
-                }
-            ]
-        }
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "rust",
+  "release-as": "",
+  "include-component-in-tag": true,
+  "changelog-sections": [
+    {
+      "type": "feature",
+      "section": "🚀 Features"
+    },
+    {
+      "type": "feat",
+      "section": "🚀 Features"
+    },
+    {
+      "type": "fix",
+      "section": "🐛 Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "⚡ Performance Improvements",
+      "hidden": false
+    },
+    {
+      "type": "revert",
+      "section": "◀️ Reverts"
+    },
+    {
+      "type": "docs",
+      "section": "📚 Documentation",
+      "hidden": false
+    },
+    {
+      "type": "style",
+      "section": "🎨 Styles",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "⚙️ Miscellaneous Chores",
+      "hidden": true
+    },
+    {
+      "type": "refactor",
+      "section": "🚜 Code Refactoring",
+      "hidden": false
+    },
+    {
+      "type": "test",
+      "section": "🧪 Tests",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "🛠️ Build System",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "🥏 Continuous Integration",
+      "hidden": true
     }
+  ],
+  "plugins": ["cargo-workspace", "sentence-case"],
+  "pull-request-header": ":robot: Auto-generated release PR",
+  "packages": {
+    "crates/rust-mcp-macros": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    },
+    "crates/rust-mcp-transport": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    },
+    "crates/rust-mcp-sdk": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    }
+  }
 }
