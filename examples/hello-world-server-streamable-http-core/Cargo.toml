@@ -11,6 +11,7 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "server",
     "macros",
     "streamable-http",
+    "sse",
     "hyper-server",
     "2025_06_18",
 ] }
