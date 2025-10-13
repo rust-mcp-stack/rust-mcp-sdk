@@ -49,6 +49,7 @@ jobs:
           echo "Updating root Cargo.toml"
           sed -i -e "s/rust-mcp-macros = { version = \"[^\"]*\",/rust-mcp-macros = { version = \"$(grep '^version = ' crates/rust-mcp-macros/Cargo.toml | cut -d' ' -f3 | tr -d '\"')\",/" \
           -e "s/rust-mcp-transport = { version = \"[^\"]*\",/rust-mcp-transport = { version = \"$(grep '^version = ' crates/rust-mcp-transport/Cargo.toml | cut -d' ' -f3 | tr -d '\"')\",/" \
+          -e "s/rust-mcp-extra = { version = \"[^\"]*\",/rust-mcp-extra = { version = \"$(grep '^version = ' crates/rust-mcp-extra/Cargo.toml | cut -d' ' -f3 | tr -d '\"')\",/" \
           Cargo.toml
 
           git add ./Cargo.toml
