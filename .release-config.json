@@ -92,6 +92,20 @@
         }
       ]
     },
+    "crates/rust-mcp-extra": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    },
     "crates/rust-mcp-sdk": {
       "release-type": "rust",
       "draft": false,
