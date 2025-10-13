@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static SHORTER_EPOCH: Lazy<u64> = Lazy::new(|| {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
+        .expect("invalid system time!")
         .as_millis() as u64
 });
 
@@ -53,7 +53,7 @@ impl SnowflakeIdGenerator {
     fn current_timestamp(&self) -> u64 {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .expect("invalid system time!")
             .as_millis() as u64;
 
         now - *SHORTER_EPOCH
@@ -98,7 +98,7 @@ where
 {
     fn generate(&self) -> T {
         let id = self.next_id();
-        T::from(id.to_string()) // Optionally, encode to base64 or base62
+        T::from(id.to_string()) // We could optionally encode it to base64 or base62
     }
 }
 

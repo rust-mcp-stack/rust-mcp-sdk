@@ -38,7 +38,9 @@ impl TimeBase64Generator {
     /// Returns current timestamp in milliseconds since UNIX epoch.
     fn current_millis() -> u64 {
         let now = SystemTime::now();
-        let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let duration = now
+            .duration_since(UNIX_EPOCH)
+            .expect("invalid system time!");
         duration.as_millis() as u64
     }
 }
