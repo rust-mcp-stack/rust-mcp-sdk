@@ -216,7 +216,9 @@ use rust_mcp_sdk::schema::{
     ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
-    McpServer, StdioTransport, TransportOptions, error::SdkResult, mcp_server::server_runtime,
+    error::SdkResult,
+    mcp_server::{server_runtime, ServerRuntime, ToMcpServerHandler},
+    McpServer, StdioTransport, TransportOptions,
 };
 
 #[tokio::main]
@@ -246,7 +248,7 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     //create the MCP server
-    let server = server_runtime::create_server(server_details, transport, handler);
+    let server = server_runtime::create_server(server_details, transport, handler.to_mcp_server_handler());
 
     // Start the server
     server.start().await

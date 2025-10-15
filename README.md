@@ -150,7 +150,7 @@ let handler = MyServerHandler {};
 // STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
 let server = hyper_server::create_server(
     server_details,
-    handler,
+    handler.to_mcp_server_handler(),
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
         sse_support: false,
@@ -511,7 +511,7 @@ A typical example of creating a HyperServer that exposes the MCP server via Stre
 
 let server = hyper_server::create_server(
     server_details,
-    handler,
+    handler.to_mcp_server_handler(),
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
         enable_ssl: true,

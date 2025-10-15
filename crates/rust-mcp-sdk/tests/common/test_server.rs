@@ -14,6 +14,7 @@ pub mod test_server_common {
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
         InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
+    use rust_mcp_sdk::ToMcpServerHandler;
     use rust_mcp_sdk::{
         mcp_server::{hyper_server, HyperServer, HyperServerOptions, ServerHandler},
         McpServer, SessionId,
@@ -114,7 +115,11 @@ pub mod test_server_common {
     }
 
     pub fn create_test_server(options: HyperServerOptions) -> HyperServer {
-        hyper_server::create_server(test_server_details(), TestServerHandler {}, options)
+        hyper_server::create_server(
+            test_server_details(),
+            TestServerHandler {}.to_mcp_server_handler(),
+            options,
+        )
     }
 
     pub async fn create_start_server(options: HyperServerOptions) -> LaunchedServer {
@@ -123,8 +128,11 @@ pub mod test_server_common {
         let sse_message_url = options.sse_message_url();
 
         let event_store_clone = options.event_store.clone();
-        let server =
-            hyper_server::create_server(test_server_details(), TestServerHandler {}, options);
+        let server = hyper_server::create_server(
+            test_server_details(),
+            TestServerHandler {}.to_mcp_server_handler(),
+            options,
+        );
 
         let hyper_runtime = HyperRuntime::create(server).await.unwrap();
 

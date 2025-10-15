@@ -1,5 +1,5 @@
 use super::{HyperServer, HyperServerOptions};
-use crate::mcp_server::{server_runtime_core::RuntimeCoreInternalHandler, ServerHandlerCore};
+use crate::mcp_traits::mcp_handler::McpServerHandler;
 use crate::schema::InitializeResult;
 use std::sync::Arc;
 
@@ -15,12 +15,8 @@ use std::sync::Arc;
 /// * `HyperServer` - A configured HyperServer instance ready to start
 pub fn create_server(
     server_details: InitializeResult,
-    handler: impl ServerHandlerCore,
+    handler: Arc<dyn McpServerHandler + 'static>,
     server_options: HyperServerOptions,
 ) -> HyperServer {
-    HyperServer::new(
-        server_details,
-        Arc::new(RuntimeCoreInternalHandler::new(Box::new(handler))),
-        server_options,
-    )
+    HyperServer::new(server_details, handler, server_options)
 }
