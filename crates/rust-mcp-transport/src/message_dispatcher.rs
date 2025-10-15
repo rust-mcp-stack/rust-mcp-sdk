@@ -412,16 +412,19 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
                 self.stream_id.as_ref(),
                 self.event_store.as_ref(),
             ) {
-                event_id = Some(
-                    event_store
-                        .store_event(
-                            session_id.clone(),
-                            stream_id.clone(),
-                            current_timestamp(),
-                            payload.to_owned(),
-                        )
-                        .await,
-                )
+                event_id = event_store
+                    .store_event(
+                        session_id.clone(),
+                        stream_id.clone(),
+                        current_timestamp(),
+                        payload.to_owned(),
+                    )
+                    .await
+                    .map(Some)
+                    .unwrap_or_else(|err| {
+                        tracing::error!("{err}");
+                        None
+                    });
             };
         }
 
