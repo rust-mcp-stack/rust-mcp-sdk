@@ -147,7 +147,7 @@ impl EventStore for InMemoryEventStore {
         stream_id: StreamId,
         time_stamp: u128,
         message: String,
-    ) -> EventId {
+    ) -> Option<EventId> {
         let event_id = self.generate_event_id(&session_id, &stream_id, time_stamp);
 
         let mut storage_map = self.storage_map.write().await;
@@ -172,7 +172,7 @@ impl EventStore for InMemoryEventStore {
 
         session_map.push_back(entry);
 
-        event_id
+        Some(event_id)
     }
 
     /// Removes all events associated with a given stream ID within a specific session.
@@ -270,5 +270,10 @@ impl EventStore for InMemoryEventStore {
     async fn clear(&self) {
         let mut storage_map = self.storage_map.write().await;
         storage_map.clear();
+    }
+
+    async fn count(&self) -> usize {
+        let storage_map = self.storage_map.read().await;
+        storage_map.len()
     }
 }
