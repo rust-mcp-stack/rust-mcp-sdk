@@ -187,7 +187,15 @@ async fn create_sse_stream(
     tokio::spawn(async move {
         if let Some(last_event_id) = last_event_id {
             if let Some(event_store) = state.event_store.as_ref() {
-                if let Some(events) = event_store.events_after(last_event_id).await {
+                let events = event_store
+                    .events_after(last_event_id)
+                    .await
+                    .unwrap_or_else(|err| {
+                        tracing::error!("{err}");
+                        None
+                    });
+
+                if let Some(events) = events {
                     for message_payload in events.messages {
                         // skip storing replay messages
                         let error = transport.write_str(&message_payload, true).await;

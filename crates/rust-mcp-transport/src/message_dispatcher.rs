@@ -420,6 +420,11 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
                         payload.to_owned(),
                     )
                     .await
+                    .map(Some)
+                    .unwrap_or_else(|err| {
+                        tracing::error!("{err}");
+                        None
+                    });
             };
         }
 

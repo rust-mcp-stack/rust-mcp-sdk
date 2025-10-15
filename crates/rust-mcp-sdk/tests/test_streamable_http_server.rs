@@ -1428,6 +1428,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
         .unwrap()
         .events_after(first_id)
         .await
+        .unwrap()
         .unwrap();
     assert_eq!(events.messages.len(), 1);
 
