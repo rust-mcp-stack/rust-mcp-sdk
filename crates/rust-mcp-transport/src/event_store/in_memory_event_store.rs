@@ -1,12 +1,12 @@
+use crate::event_store::EventStoreResult;
+use crate::{
+    event_store::{EventStore, EventStoreEntry},
+    EventId, SessionId, StreamId,
+};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use tokio::sync::RwLock;
-
-use crate::{
-    event_store::{EventStore, EventStoreMessages},
-    EventId, SessionId, StreamId,
-};
 
 const MAX_EVENTS_PER_SESSION: usize = 64;
 const ID_SEPARATOR: &str = "-.-";
@@ -101,16 +101,19 @@ impl InMemoryEventStore {
     /// );
     /// assert_eq!(store.parse_event_id("invalid"), None);
     /// ```
-    pub fn parse_event_id<'a>(&self, event_id: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
+    pub fn parse_event_id<'a>(
+        &self,
+        event_id: &'a str,
+    ) -> EventStoreResult<(&'a str, &'a str, u128)> {
         // Check for empty input or invalid characters (e.g., NULL)
         if event_id.is_empty() || event_id.contains('\0') {
-            return None;
+            return Err("Event ID is empty!".into());
         }
 
         // Split into exactly three parts
         let parts: Vec<&'a str> = event_id.split(ID_SEPARATOR).collect();
         if parts.len() != 3 {
-            return None;
+            return Err("Invalid Event ID format.".into());
         }
 
         let session_id = parts[0];
@@ -119,10 +122,14 @@ impl InMemoryEventStore {
 
         // Ensure no part is empty
         if session_id.is_empty() || stream_id.is_empty() || time_stamp.is_empty() {
-            return None;
+            return Err("Invalid Event ID format.".into());
         }
 
-        Some((session_id, stream_id, time_stamp))
+        let time_stamp: u128 = time_stamp
+            .parse()
+            .map_err(|err| format!("Error parsing timestamp: {err}"))?;
+
+        Ok((session_id, stream_id, time_stamp))
     }
 }
 
@@ -147,7 +154,7 @@ impl EventStore for InMemoryEventStore {
         stream_id: StreamId,
         time_stamp: u128,
         message: String,
-    ) -> EventId {
+    ) -> EventStoreResult<EventId> {
         let event_id = self.generate_event_id(&session_id, &stream_id, time_stamp);
 
         let mut storage_map = self.storage_map.write().await;
@@ -172,7 +179,7 @@ impl EventStore for InMemoryEventStore {
 
         session_map.push_back(entry);
 
-        event_id
+        Ok(event_id)
     }
 
     /// Removes all events associated with a given stream ID within a specific session.
@@ -184,7 +191,11 @@ impl EventStore for InMemoryEventStore {
     /// # Arguments
     /// - `session_id`: The session identifier to target.
     /// - `stream_id`: The stream identifier to remove.
-    async fn remove_stream_in_session(&self, session_id: SessionId, stream_id: StreamId) {
+    async fn remove_stream_in_session(
+        &self,
+        session_id: SessionId,
+        stream_id: StreamId,
+    ) -> EventStoreResult<()> {
         let mut storage_map = self.storage_map.write().await;
 
         // Check if session exists
@@ -194,9 +205,10 @@ impl EventStore for InMemoryEventStore {
             // Remove session if empty
             if events.is_empty() {
                 storage_map.remove(&session_id);
-            }
+            };
         }
         // No action if session_id doesn’t exist (idempotent)
+        Ok(())
     }
 
     /// Removes all events associated with a given session ID.
@@ -205,9 +217,10 @@ impl EventStore for InMemoryEventStore {
     ///
     /// # Arguments
     /// - `session_id`: The session identifier to remove.
-    async fn remove_by_session_id(&self, session_id: SessionId) {
+    async fn remove_by_session_id(&self, session_id: SessionId) -> EventStoreResult<()> {
         let mut storage_map = self.storage_map.write().await;
         storage_map.remove(&session_id);
+        Ok(())
     }
 
     /// Retrieves events after a given `event_id` for a specific session and stream.
@@ -221,23 +234,20 @@ impl EventStore for InMemoryEventStore {
     /// - `last_event_id`: The event ID (format: `session-.-stream-.-timestamp`) to start after.
     ///
     /// # Returns
-    /// An `Option` containing `EventStoreMessages` with the session ID, stream ID, and sorted messages,
+    /// An `Option` containing `EventStoreEntry` with the session ID, stream ID, and sorted messages,
     /// or `None` if no events are found or the input is invalid.
-    async fn events_after(&self, last_event_id: EventId) -> Option<EventStoreMessages> {
-        let Some((session_id, stream_id, time_stamp)) = self.parse_event_id(&last_event_id) else {
-            tracing::warn!("error parsing last event id: '{last_event_id}'");
-            return None;
-        };
+    async fn events_after(
+        &self,
+        last_event_id: EventId,
+    ) -> EventStoreResult<Option<EventStoreEntry>> {
+        let (session_id, stream_id, time_stamp) = self.parse_event_id(&last_event_id)?;
 
         let storage_map = self.storage_map.read().await;
+
+        // fail silently if session id does not exists
         let Some(events) = storage_map.get(session_id) else {
             tracing::warn!("could not find the session_id in the store : '{session_id}'");
-            return None;
-        };
-
-        let Ok(time_stamp) = time_stamp.parse::<u128>() else {
-            tracing::warn!("could not parse the timestamp: '{time_stamp}'");
-            return None;
+            return Ok(None);
         };
 
         let events = match events
@@ -260,15 +270,21 @@ impl EventStore for InMemoryEventStore {
 
         tracing::trace!("{} messages after '{last_event_id}'", events.len());
 
-        Some(EventStoreMessages {
+        Ok(Some(EventStoreEntry {
             session_id: session_id.to_string(),
             stream_id: stream_id.to_string(),
             messages: events,
-        })
+        }))
     }
 
-    async fn clear(&self) {
+    async fn clear(&self) -> EventStoreResult<()> {
         let mut storage_map = self.storage_map.write().await;
         storage_map.clear();
+        Ok(())
+    }
+
+    async fn count(&self) -> EventStoreResult<usize> {
+        let storage_map = self.storage_map.read().await;
+        Ok(storage_map.len())
     }
 }
