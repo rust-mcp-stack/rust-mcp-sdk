@@ -14,9 +14,10 @@ pub mod test_server_common {
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
         InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
-    use rust_mcp_sdk::ToMcpServerHandler;
     use rust_mcp_sdk::{
-        mcp_server::{hyper_server, HyperServer, HyperServerOptions, ServerHandler},
+        mcp_server::{
+            hyper_server, HyperServer, HyperServerOptions, ServerHandler, ToMcpServerHandler,
+        },
         McpServer, SessionId,
     };
     use std::sync::{Arc, RwLock};
