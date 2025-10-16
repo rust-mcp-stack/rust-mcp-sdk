@@ -17,7 +17,8 @@ To disable the SSE transport, set the `sse_support` value in the `HyperServerOpt
 
 ```rs
 let server =
-    hyper_server_core::create_server(server_details, handler,
+    hyper_server_core::create_server(server_details,
+        handler.to_mcp_server_handler(),
         HyperServerOptions{
             sse_support: false, // Disable SSE support
             Default::default()

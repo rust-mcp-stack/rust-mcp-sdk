@@ -11,7 +11,7 @@ use rust_mcp_sdk::schema::{
 };
 use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_server::{hyper_server_core, HyperServerOptions},
+    mcp_server::{hyper_server_core, HyperServerOptions, ToMcpServerHandlerCore},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -48,7 +48,7 @@ async fn main() -> SdkResult<()> {
     // STEP 3: create a MCP server
     let server = hyper_server_core::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
             sse_support: true,
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
