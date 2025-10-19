@@ -109,3 +109,6 @@ macros = ["rust-mcp-macros/sdk"]
 
 [lints]
 workspace = true
+
+[package.metadata.typos]
+default.extend-ignore-re = ["clonable"]

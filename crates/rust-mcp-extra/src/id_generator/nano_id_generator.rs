@@ -64,7 +64,7 @@ mod tests {
 
         for _ in 0..1000 {
             let id: String = generator.generate();
-            assert!(seen.insert(id.clone()), "Duplicate ID: {}", id);
+            assert!(seen.insert(id.clone()), "Duplicate ID: {id}");
         }
     }
 }
