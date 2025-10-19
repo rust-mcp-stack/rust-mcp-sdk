@@ -55,7 +55,6 @@ pub trait Middleware: Send + Sync + 'static {
 ///
 /// `MiddlewareChain` allows multiple middleware instances to be registered and
 /// executed in order for requests (forward order) and responses (reverse order).
-/// It is clonable to allow sharing across threads or components.
 #[derive(Clone)]
 pub struct MiddlewareChain {
     middlewares: Vec<Arc<dyn Middleware>>,

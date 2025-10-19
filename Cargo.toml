@@ -99,3 +99,6 @@ todo = "deny"
 
 [workspace.metadata.cargo-machete]
 ignored = ["bindgen", "cbindgen", "prost_build", "serde"]
+
+[workspace.metadata.typos]
+default.extend-ignore-re = ["clonable"]
