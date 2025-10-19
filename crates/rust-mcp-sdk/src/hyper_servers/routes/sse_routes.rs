@@ -36,11 +36,13 @@ pub fn routes(sse_endpoint: &str, sse_message_endpoint: &str) -> Router<Arc<McpA
 /// * `TransportServerResult<impl IntoResponse>` - The SSE response stream or an error
 pub async fn handle_sse(
     Extension(sse_message_endpoint): Extension<SseMessageEndpoint>,
+    Extension(http_handler): Extension<Arc<McpHttpHandler>>,
     State(state): State<Arc<McpAppState>>,
 ) -> TransportServerResult<impl IntoResponse> {
     let SseMessageEndpoint(sse_message_endpoint) = sse_message_endpoint;
-    let generic_response =
-        McpHttpHandler::handle_sse_connection(state.clone(), Some(&sse_message_endpoint)).await?;
+    let generic_response = http_handler
+        .handle_sse_connection(state.clone(), Some(&sse_message_endpoint))
+        .await?;
     let (parts, body) = generic_response.into_parts();
     let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));
     Ok(resp)

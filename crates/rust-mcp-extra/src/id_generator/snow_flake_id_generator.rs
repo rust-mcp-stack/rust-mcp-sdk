@@ -133,9 +133,7 @@ mod tests {
             let current_id: u64 = id.parse().expect("ID should be a valid u64");
             assert!(
                 current_id > prev_id,
-                "ID not strictly increasing: {} <= {}",
-                current_id,
-                prev_id
+                "ID not strictly increasing: {current_id} <= {prev_id}"
             );
             prev_id = current_id;
         }

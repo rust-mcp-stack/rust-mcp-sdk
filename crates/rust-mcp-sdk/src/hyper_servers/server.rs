@@ -5,7 +5,7 @@ use crate::{
         utils::{
             DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
         },
-        McpAppState,
+        McpAppState, McpHttpHandler,
     },
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
@@ -275,7 +275,9 @@ impl HyperServer {
             dns_rebinding_protection: server_options.dns_rebinding_protection,
             event_store: server_options.event_store.as_ref().map(Arc::clone),
         });
-        let app = app_routes(Arc::clone(&state), &server_options);
+
+        let http_handler = McpHttpHandler::new(); //TODO: add auth handlers
+        let app = app_routes(Arc::clone(&state), &server_options, http_handler);
         Self {
             app,
             state,

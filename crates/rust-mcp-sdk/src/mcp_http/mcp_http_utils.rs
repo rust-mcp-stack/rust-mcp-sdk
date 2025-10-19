@@ -34,6 +34,17 @@ const DUPLEX_BUFFER_SIZE: usize = 8192;
 
 pub type GenericBody = BoxBody<Bytes, TransportServerError>;
 
+/// Creates an empty HTTP response body.
+///
+/// This function constructs a `GenericBody` containing an empty `Bytes` buffer,
+/// The body is wrapped in a `BoxBody` to ensure type erasure and compatibility
+/// with the HTTP framework.
+pub fn empty_response() -> GenericBody {
+    Full::new(Bytes::new())
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        .boxed()
+}
+
 /// Creates an initial SSE event that returns the messages endpoint
 ///
 /// Constructs an SSE event containing the messages endpoint URL with the session ID.
