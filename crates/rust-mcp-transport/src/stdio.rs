@@ -6,7 +6,6 @@ use crate::schema::RequestId;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
@@ -136,12 +135,9 @@ where
         *lock = Some(sender);
     }
 
-    pub(crate) async fn set_error_stream(
-        &self,
-        error_stream: Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>,
-    ) {
+    pub(crate) async fn set_error_stream(&self, error_stream: IoStream) {
         let mut lock = self.error_stream.write().await;
-        *lock = Some(IoStream::Writable(error_stream));
+        *lock = Some(error_stream);
     }
 }
 
@@ -230,10 +226,7 @@ where
             );
 
             self.set_message_sender(sender).await;
-
-            if let IoStream::Writable(error_stream) = error_stream {
-                self.set_error_stream(error_stream).await;
-            }
+            self.set_error_stream(error_stream).await;
 
             Ok(stream)
         } else {
@@ -247,10 +240,7 @@ where
             );
 
             self.set_message_sender(sender).await;
-
-            if let IoStream::Writable(error_stream) = error_stream {
-                self.set_error_stream(error_stream).await;
-            }
+            self.set_error_stream(error_stream).await;
             Ok(stream)
         }
     }
