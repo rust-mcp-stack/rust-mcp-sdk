@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.1...rust-mcp-sdk-v0.7.2) (2025-10-20)
+
+
+### 🚀 Features
+
+* Add middleware support to mcp_http_handler ([#112](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/112)) ([18b1e6f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/18b1e6f3e9671bfffa4bd59f64dc12fc2e44d818))
+
+
+### 🚜 Code Refactoring
+
+* Eventstore with better error handling and stability ([#109](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/109)) ([150e3a0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/150e3a02ba593b2e41b16d2d621e770d292cfa23))
+
 ## [0.7.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.0...rust-mcp-sdk-v0.7.1) (2025-10-13)
 
 
