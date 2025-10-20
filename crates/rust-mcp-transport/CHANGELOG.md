@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.6.1...rust-mcp-transport-v0.6.2) (2025-10-20)
+
+
+### 🐛 Bug Fixes
+
+* Mcp client stderr handling ([#113](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/113)) ([84a635e](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/84a635ee445a08c08f4858d7663f2a26a0c79751))
+
+
+### 🚜 Code Refactoring
+
+* Eventstore with better error handling and stability ([#109](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/109)) ([150e3a0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/150e3a02ba593b2e41b16d2d621e770d292cfa23))
+
 ## [0.6.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.6.0...rust-mcp-transport-v0.6.1) (2025-10-13)
 
 
