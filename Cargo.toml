@@ -20,7 +20,7 @@ members = [
 
 [workspace.dependencies]
 # Workspace member crates
-rust-mcp-transport = { version = "0.6.1", path = "crates/rust-mcp-transport", default-features = false }
+rust-mcp-transport = { version = "0.6.2", path = "crates/rust-mcp-transport", default-features = false }
 rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
 rust-mcp-macros = { version = "0.5.2", path = "crates/rust-mcp-macros", default-features = false }
 rust-mcp-extra = { version="0.1.0", path = "crates/rust-mcp-extra", default-features = false }
