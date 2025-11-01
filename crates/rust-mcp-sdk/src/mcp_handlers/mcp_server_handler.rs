@@ -1,6 +1,6 @@
 use crate::{
     mcp_server::server_runtime::ServerRuntimeInternalHandler,
-    mcp_traits::mcp_handler::McpServerHandler,
+    mcp_traits::mcp_handler::{McpServerHandler, ToMcpServerHandler},
     schema::{schema_utils::CallToolError, *},
 };
 use async_trait::async_trait;
@@ -329,11 +329,6 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
-}
-
-// Custom trait for conversion
-pub trait ToMcpServerHandler {
-    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static>;
 }
 
 impl<T: ServerHandler + 'static> ToMcpServerHandler for T {

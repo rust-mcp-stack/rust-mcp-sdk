@@ -8,7 +8,7 @@ use rust_mcp_sdk::schema::{
 };
 use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_server::{server_runtime, ServerRuntime},
+    mcp_server::{server_runtime, ServerRuntime, ToMcpServerHandler},
     McpServer, StdioTransport, TransportOptions,
 };
 use std::sync::Arc;
@@ -41,7 +41,7 @@ async fn main() -> SdkResult<()> {
 
     // STEP 4: create a MCP server
     let server: Arc<ServerRuntime> =
-        server_runtime::create_server(server_details, transport, handler);
+        server_runtime::create_server(server_details, transport, handler.to_mcp_server_handler());
 
     // STEP 5: Start the server
     if let Err(start_error) = server.start().await {

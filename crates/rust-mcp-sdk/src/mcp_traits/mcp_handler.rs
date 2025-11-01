@@ -60,3 +60,15 @@ pub trait McpClientHandler: Send + Sync {
         runtime: &dyn McpClient,
     ) -> SdkResult<()>;
 }
+
+// Custom trait for converting ServerHandler
+#[cfg(feature = "server")]
+pub trait ToMcpServerHandler {
+    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static>;
+}
+
+// Custom trait for converting ServerHandlerCore
+#[cfg(feature = "server")]
+pub trait ToMcpServerHandlerCore {
+    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static>;
+}
