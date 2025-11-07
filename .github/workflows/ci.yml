@@ -37,8 +37,6 @@ jobs:
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
-        with:
-          components: rustfmt, clippy
 
       - name: Install cargo-make
         uses: davidB/rust-cargo-make@v1
