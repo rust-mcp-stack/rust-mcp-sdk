@@ -11,7 +11,7 @@
 //!
 //! - If `allowed_hosts` is `Some(vec![..])` and non-empty → `Host` header **must** match (case-insensitive)
 //! - If `allowed_origins` is `Some(vec![..])` and non-empty → `Origin` header **must** match (case-insensitive)
-//! - Missing or unparseable headers → treated as invalid → 403 Forbidden
+//! - Missing or unparsable headers → treated as invalid → 403 Forbidden
 //! - If allowlist is `None` or empty → that check is skipped
 
 use crate::{
