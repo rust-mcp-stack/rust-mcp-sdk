@@ -56,7 +56,7 @@ impl SnowflakeIdGenerator {
             .expect("invalid system time!")
             .as_millis() as u64;
 
-        now - *SHORTER_EPOCH
+        now.saturating_sub(*SHORTER_EPOCH)
     }
 
     fn next_id(&self) -> u64 {

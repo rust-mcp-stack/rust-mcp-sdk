@@ -2,9 +2,10 @@ use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
     mcp_http::{
-        utils::{
+        http_utils::{
             DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
         },
+        middleware::dns_rebind_protector::DnsRebindProtector,
         McpAppState, McpHttpHandler,
     },
     mcp_server::hyper_runtime::HyperRuntime,
@@ -203,6 +204,11 @@ impl HyperServerOptions {
             .as_deref()
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
+
+    pub fn needs_dns_protection(&self) -> bool {
+        self.dns_rebinding_protection
+            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
+    }
 }
 
 /// Default implementation for HyperServerOptions
@@ -270,13 +276,18 @@ impl HyperServer {
             ping_interval: server_options.ping_interval,
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
-            allowed_hosts: server_options.allowed_hosts.take(),
-            allowed_origins: server_options.allowed_origins.take(),
-            dns_rebinding_protection: server_options.dns_rebinding_protection,
             event_store: server_options.event_store.as_ref().map(Arc::clone),
         });
 
-        let http_handler = McpHttpHandler::new(); //TODO: add auth handlers
+        let mut http_handler = McpHttpHandler::new();
+
+        if server_options.needs_dns_protection() {
+            http_handler.add_middleware(DnsRebindProtector::new(
+                server_options.allowed_hosts.take(),
+                server_options.allowed_origins.take(),
+            ));
+        }
+
         let app = app_routes(Arc::clone(&state), &server_options, http_handler);
         Self {
             app,

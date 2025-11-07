@@ -1,3 +1,4 @@
+use crate::mcp_http::types::GenericBody;
 use crate::schema::schema_utils::{ClientMessage, SdkError};
 use crate::{
     error::SdkResult,
@@ -11,10 +12,10 @@ use crate::{
 use axum::http::HeaderValue;
 use bytes::Bytes;
 use futures::stream;
-use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE, HOST, ORIGIN};
+use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::{HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseEvent, SseTransport, StreamId, ID_SEPARATOR,
@@ -32,8 +33,6 @@ pub(crate) const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 pub(crate) const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
-pub type GenericBody = BoxBody<Bytes, TransportServerError>;
-
 /// Creates an empty HTTP response body.
 ///
 /// This function constructs a `GenericBody` containing an empty `Bytes` buffer,
@@ -43,6 +42,20 @@ pub fn empty_response() -> GenericBody {
     Full::new(Bytes::new())
         .map_err(|err| TransportServerError::HttpError(err.to_string()))
         .boxed()
+}
+
+pub fn build_response(
+    status_code: StatusCode,
+    payload: String,
+) -> Result<http::Response<GenericBody>, TransportServerError> {
+    let body = Full::new(Bytes::from(payload))
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        .boxed();
+
+    http::Response::builder()
+        .status(status_code)
+        .body(body)
+        .map_err(|err| TransportServerError::HttpError(err.to_string()))
 }
 
 /// Creates an initial SSE event that returns the messages endpoint
@@ -251,7 +264,7 @@ fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
     }
 }
 
-pub async fn create_standalone_stream(
+pub(crate) async fn create_standalone_stream(
     session_id: SessionId,
     last_event_id: Option<EventId>,
     state: Arc<McpAppState>,
@@ -287,7 +300,7 @@ pub async fn create_standalone_stream(
     Ok(response)
 }
 
-pub async fn start_new_session(
+pub(crate) async fn start_new_session(
     state: Arc<McpAppState>,
     payload: &str,
 ) -> TransportServerResult<http::Response<GenericBody>> {
@@ -421,7 +434,7 @@ async fn single_shot_stream(
     }
 }
 
-pub async fn process_incoming_message_return(
+pub(crate) async fn process_incoming_message_return(
     session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
@@ -446,7 +459,7 @@ pub async fn process_incoming_message_return(
     }
 }
 
-pub async fn process_incoming_message(
+pub(crate) async fn process_incoming_message(
     session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
@@ -499,11 +512,11 @@ pub async fn process_incoming_message(
     }
 }
 
-pub fn is_empty_sse_message(sse_payload: &str) -> bool {
+pub(crate) fn is_empty_sse_message(sse_payload: &str) -> bool {
     sse_payload.is_empty() || sse_payload.trim() == ":"
 }
 
-pub async fn delete_session(
+pub(crate) async fn delete_session(
     session_id: SessionId,
     state: Arc<McpAppState>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
@@ -529,7 +542,7 @@ pub async fn delete_session(
     }
 }
 
-pub fn acceptable_content_type(headers: &HeaderMap) -> bool {
+pub(crate) fn acceptable_content_type(headers: &HeaderMap) -> bool {
     let accept_header = headers
         .get("content-type")
         .and_then(|val| val.to_str().ok())
@@ -539,7 +552,7 @@ pub fn acceptable_content_type(headers: &HeaderMap) -> bool {
         .any(|val| val.trim().starts_with("application/json"))
 }
 
-pub fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkResult<()> {
+pub(crate) fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkResult<()> {
     let protocol_version_header = headers
         .get(MCP_PROTOCOL_VERSION_HEADER)
         .and_then(|val| val.to_str().ok())
@@ -553,7 +566,7 @@ pub fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkResult<()
     validate_mcp_protocol_version(protocol_version_header)
 }
 
-pub fn accepts_event_stream(headers: &HeaderMap) -> bool {
+pub(crate) fn accepts_event_stream(headers: &HeaderMap) -> bool {
     let accept_header = headers
         .get(ACCEPT)
         .and_then(|val| val.to_str().ok())
@@ -564,7 +577,7 @@ pub fn accepts_event_stream(headers: &HeaderMap) -> bool {
         .any(|val| val.trim().starts_with("text/event-stream"))
 }
 
-pub fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
+pub(crate) fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
     let accept_header = headers
         .get(ACCEPT)
         .and_then(|val| val.to_str().ok())
@@ -593,53 +606,6 @@ pub fn error_response(
         .map_err(|err| TransportServerError::HttpError(err.to_string()))
 }
 
-// Protect against DNS rebinding attacks by validating Host and Origin headers.
-pub(crate) async fn protect_dns_rebinding(
-    headers: &http::HeaderMap,
-    state: Arc<McpAppState>,
-) -> Result<(), SdkError> {
-    if !state.needs_dns_protection() {
-        // If protection is not needed, pass the request to the next handler
-        return Ok(());
-    }
-
-    if let Some(allowed_hosts) = state.allowed_hosts.as_ref() {
-        if !allowed_hosts.is_empty() {
-            let Some(host) = headers.get(HOST).and_then(|h| h.to_str().ok()) else {
-                return Err(SdkError::bad_request().with_message("Invalid Host header: [unknown] "));
-            };
-
-            if !allowed_hosts
-                .iter()
-                .any(|allowed| allowed.eq_ignore_ascii_case(host))
-            {
-                return Err(SdkError::bad_request()
-                    .with_message(format!("Invalid Host header: \"{host}\" ").as_str()));
-            }
-        }
-    }
-
-    if let Some(allowed_origins) = state.allowed_origins.as_ref() {
-        if !allowed_origins.is_empty() {
-            let Some(origin) = headers.get(ORIGIN).and_then(|h| h.to_str().ok()) else {
-                return Err(
-                    SdkError::bad_request().with_message("Invalid Origin header: [unknown] ")
-                );
-            };
-
-            if !allowed_origins
-                .iter()
-                .any(|allowed| allowed.eq_ignore_ascii_case(origin))
-            {
-                return Err(SdkError::bad_request()
-                    .with_message(format!("Invalid Origin header: \"{origin}\" ").as_str()));
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Extracts the value of a query parameter from an HTTP request by key.
 ///
 /// This function parses the query string from the request URI and searches
@@ -653,7 +619,7 @@ pub(crate) async fn protect_dns_rebinding(
 /// * `Some(String)` containing the value of the query parameter if found.
 /// * `None` if the query string is missing or the key is not present.
 ///
-pub fn query_param(request: &http::Request<&str>, key: &str) -> Option<String> {
+pub(crate) fn query_param(request: &http::Request<&str>, key: &str) -> Option<String> {
     request.uri().query().and_then(|query| {
         for pair in query.split('&') {
             let mut split = pair.splitn(2, '=');

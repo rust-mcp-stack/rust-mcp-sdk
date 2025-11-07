@@ -131,9 +131,6 @@ pub mod test_client_common {
     }
 }
 
-// Custom responder for SSE with 10 ping messages
-struct SsePingResponder;
-
 // Test handler
 pub struct TestClientHandler {
     message_history: Arc<RwLock<Vec<MessageFromServer>>>,
@@ -151,7 +148,7 @@ impl ClientHandler for TestClientHandler {
     async fn handle_ping_request(
         &self,
         request: PingRequest,
-        runtime: &dyn McpClient,
+        _runtime: &dyn McpClient,
     ) -> std::result::Result<rust_mcp_schema::Result, RpcError> {
         self.register_message(&request.into()).await;
 
