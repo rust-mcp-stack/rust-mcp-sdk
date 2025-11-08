@@ -1,8 +1,8 @@
 //! Short, Fast, Sortable, Shorter than UUID
 //! Not globally unique
 
-use base64::Engine;
 use base64::engine::general_purpose;
+use base64::Engine;
 use rust_mcp_sdk::id_generator::IdGenerator;
 use std::time::{SystemTime, UNIX_EPOCH};
 

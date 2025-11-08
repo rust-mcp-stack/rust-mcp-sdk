@@ -8,7 +8,7 @@ repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
 documentation = "https://docs.rs/rust-mcp-extra"
 keywords = ["serverless", "mcp-server", "rust-mcp", "cloud", "lambda"]
 license = "MIT"
-edition = "2024"
+edition = "2021"
 rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
