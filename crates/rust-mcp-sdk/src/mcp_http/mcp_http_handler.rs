@@ -1,21 +1,20 @@
 #[cfg(feature = "sse")]
-use super::utils::handle_sse_connection;
-use crate::mcp_http::mcp_http_middleware::MiddlewareChain;
-use crate::mcp_http::utils::{
-    accepts_event_stream, empty_response, error_response, query_param,
+use super::http_utils::{
+    accepts_event_stream, empty_response, error_response, handle_sse_connection, query_param,
     validate_mcp_protocol_version_header,
 };
-use crate::mcp_http::Middleware;
+use super::types::GenericBody;
+use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_runtimes::server_runtime::DEFAULT_STREAM_ID;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
 use crate::{
     error::McpSdkError,
     mcp_http::{
-        utils::{
+        http_utils::{
             acceptable_content_type, create_standalone_stream, delete_session,
-            process_incoming_message, process_incoming_message_return, protect_dns_rebinding,
-            start_new_session, valid_streaming_http_accept_header, GenericBody,
+            process_incoming_message, process_incoming_message_return, start_new_session,
+            valid_streaming_http_accept_header,
         },
         McpAppState,
     },
@@ -26,9 +25,31 @@ use http::{self, HeaderMap, Method, StatusCode, Uri};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
 use std::sync::Arc;
 
+/// A helper macro to wrap an async handler method into a `RequestHandler`
+/// and compose it with middlewares.
+///
+/// # Example
+/// ```ignore
+/// let handle = with_middlewares!(self, Self::internal_handle_sse_message);
+/// handle
+/// ```
+#[macro_export]
+macro_rules! with_middlewares {
+    ($self:ident, $handler:path) => {{
+        let final_handler: RequestHandler = std::sync::Arc::new(
+            move |req: http::Request<&str>,
+                  state: std::sync::Arc<McpAppState>|
+                  -> BoxFutureResponse<'_> {
+                Box::pin(async move { $handler(req, state).await })
+            },
+        );
+        $crate::mcp_http::middleware::compose(&$self.middlewares, final_handler)
+    }};
+}
+
 #[derive(Clone)]
 pub struct McpHttpHandler {
-    middleware_chain: MiddlewareChain,
+    middlewares: Vec<Arc<dyn Middleware>>,
 }
 
 impl Default for McpHttpHandler {
@@ -40,12 +61,12 @@ impl Default for McpHttpHandler {
 impl McpHttpHandler {
     pub fn new() -> Self {
         McpHttpHandler {
-            middleware_chain: MiddlewareChain::new(),
+            middlewares: vec![],
         }
     }
-
-    pub fn add_middleware<M: Middleware>(&mut self, middleware: M) {
-        self.middleware_chain.add_middleware(middleware);
+    pub fn add_middleware<M: Middleware + 'static>(&mut self, middleware: M) {
+        let m: Arc<dyn Middleware> = Arc::new(middleware);
+        self.middlewares.push(m);
     }
 
     /// An `http::Request<&str>` initialized with the specified method, URI, headers, and body.
@@ -87,10 +108,17 @@ impl McpHttpHandler {
     #[cfg(feature = "sse")]
     pub async fn handle_sse_connection(
         &self,
+        request: http::Request<&str>,
         state: Arc<McpAppState>,
         sse_message_endpoint: Option<&str>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        handle_sse_connection(state, sse_message_endpoint).await
+        let sse_endpoint = Arc::from(sse_message_endpoint.map(|s| s.to_string()));
+        let final_handler: RequestHandler = Arc::new(move |_req, state| {
+            let sse_endpoint = sse_endpoint.clone();
+            Box::pin(async move { handle_sse_connection(state, sse_endpoint.as_deref()).await })
+        });
+        let handle = compose(&self.middlewares, final_handler);
+        handle(request, state).await
     }
 
     /// Handles incoming MCP messages from the client after an SSE connection is established.
@@ -113,32 +141,14 @@ impl McpHttpHandler {
     /// - `SessionIdInvalid`: if the session ID does not map to a valid session in the session store.
     /// - `StreamIoError`: if an error occurs while writing to the stream.
     /// - `HttpError`: if constructing the HTTP response fails.
+    #[cfg(feature = "sse")]
     pub async fn handle_sse_message(
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let session_id =
-            query_param(&request, "sessionId").ok_or(TransportServerError::SessionIdMissing)?;
-
-        // transmit to the readable stream, that transport is reading from
-        let transmit = state.session_store.get(&session_id).await.ok_or(
-            TransportServerError::SessionIdInvalid(session_id.to_string()),
-        )?;
-
-        let message = *request.body();
-        transmit
-            .consume_payload_string(DEFAULT_STREAM_ID, message)
-            .await
-            .map_err(|err| {
-                tracing::trace!("{}", err);
-                TransportServerError::StreamIoError(err.to_string())
-            })?;
-
-        http::Response::builder()
-            .status(StatusCode::ACCEPTED)
-            .body(empty_response())
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+        let handle = with_middlewares!(self, Self::internal_handle_sse_message);
+        handle(request, state).await
     }
 
     /// Handles incoming MCP messages over the StreamableHTTP transport.
@@ -167,25 +177,47 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let request = self
-            .middleware_chain
-            .process_request(request)
+        let handle = with_middlewares!(self, Self::internal_handle_streamable_http);
+        handle(request, state).await
+    }
+
+    async fn internal_handle_sse_message(
+        request: http::Request<&str>,
+        state: Arc<McpAppState>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        let session_id =
+            query_param(&request, "sessionId").ok_or(TransportServerError::SessionIdMissing)?;
+
+        // transmit to the readable stream, that transport is reading from
+        let transmit = state.session_store.get(&session_id).await.ok_or(
+            TransportServerError::SessionIdInvalid(session_id.to_string()),
+        )?;
+
+        let message = request.body();
+
+        transmit
+            .consume_payload_string(DEFAULT_STREAM_ID, message.as_ref())
             .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))?;
+            .map_err(|err| {
+                tracing::trace!("{}", err);
+                TransportServerError::StreamIoError(err.to_string())
+            })?;
 
-        // Enforces DNS rebinding protection if required by state.
-        // If protection fails, respond with HTTP 403 Forbidden.
-        if state.needs_dns_protection() {
-            if let Err(error) = protect_dns_rebinding(request.headers(), state.clone()).await {
-                return error_response(StatusCode::FORBIDDEN, error);
-            }
-        }
+        http::Response::builder()
+            .status(StatusCode::ACCEPTED)
+            .body(empty_response())
+            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+    }
 
+    async fn internal_handle_streamable_http(
+        request: http::Request<&str>,
+        state: Arc<McpAppState>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
         let method = request.method();
         let response = match method {
-            &http::Method::GET => return self.handle_http_get(request, state).await,
-            &http::Method::POST => return self.handle_http_post(request, state).await,
-            &http::Method::DELETE => return self.handle_http_delete(request, state).await,
+            &http::Method::GET => return Self::handle_http_get(request, state).await,
+            &http::Method::POST => return Self::handle_http_post(request, state).await,
+            &http::Method::DELETE => return Self::handle_http_delete(request, state).await,
             other => {
                 let error = SdkError::bad_request().with_message(&format!(
                     "'{other}' is not a valid HTTP method for StreamableHTTP transport."
@@ -194,24 +226,14 @@ impl McpHttpHandler {
             }
         };
 
-        self.middleware_chain
-            .process_response(response?)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))
+        response
     }
 
     /// Processes POST requests for the Streamable HTTP Protocol
     async fn handle_http_post(
-        &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let request = self
-            .middleware_chain
-            .process_request(request)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))?;
-
         let headers = request.headers();
 
         if !valid_streaming_http_accept_header(headers) {
@@ -237,7 +259,7 @@ impl McpHttpHandler {
             .and_then(|value| value.to_str().ok())
             .map(|s| s.to_string());
 
-        let payload = *request.body();
+        let payload = request.body();
 
         let response = match session_id {
             // has session-id => write to the existing stream
@@ -260,24 +282,14 @@ impl McpHttpHandler {
             },
         };
 
-        self.middleware_chain
-            .process_response(response?)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))
+        response
     }
 
     /// Processes GET requests for the Streamable HTTP Protocol
     async fn handle_http_get(
-        &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let request = self
-            .middleware_chain
-            .process_request(request)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))?;
-
         let headers = request.headers();
 
         if !accepts_event_stream(headers) {
@@ -313,24 +325,14 @@ impl McpHttpHandler {
             }
         };
 
-        self.middleware_chain
-            .process_response(response?)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))
+        response
     }
 
     /// Processes DELETE requests for the Streamable HTTP Protocol
     async fn handle_http_delete(
-        &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let request = self
-            .middleware_chain
-            .process_request(request)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))?;
-
         let headers = request.headers();
 
         if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
@@ -352,9 +354,6 @@ impl McpHttpHandler {
             }
         };
 
-        self.middleware_chain
-            .process_response(response?)
-            .await
-            .map_err(|e| TransportServerError::HttpError(e.to_string()))
+        response
     }
 }
