@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-extra"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Ali Hashemi"]
 categories = ["api-bindings", "development-tools", "asynchronous", "parsing"]
 description = "A companion crate to rust-mcp-sdk offering extra implementations of core traits like SessionStore and EventStore, enabling integration with various database backends and third-party platforms such as AWS Lambda for serverless and cloud-native MCP applications."
@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
 [dependencies]
-rust-mcp-sdk = {  version = "0.7.2" , path = "../rust-mcp-sdk", default-features = false, features=["server","2025_06_18"] }
+rust-mcp-sdk = {  version = "0.7.3" , path = "../rust-mcp-sdk", default-features = false, features=["server","2025_06_18"] }
 
 base64 = {workspace = true, optional=true}
 nanoid = {version="0.4", optional=true}
