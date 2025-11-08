@@ -128,6 +128,7 @@ impl MiddlewareChain {
     }
 }
 
+#[allow(dead_code)]
 // Sample Middleware
 pub struct LoggingMiddleware;
 

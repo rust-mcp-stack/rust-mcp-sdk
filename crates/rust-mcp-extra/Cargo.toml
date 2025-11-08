@@ -9,6 +9,7 @@ documentation = "https://docs.rs/rust-mcp-extra"
 keywords = ["serverless", "mcp-server", "rust-mcp", "cloud", "lambda"]
 license = "MIT"
 edition = "2024"
+rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
 [dependencies]
