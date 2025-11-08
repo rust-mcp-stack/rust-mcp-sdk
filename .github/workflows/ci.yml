@@ -66,17 +66,11 @@ jobs:
         if: matrix.os == 'ubuntu-latest' # Run typos only on Linux
 
       - name: Audit Dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          cargo install cargo-audit --version 0.20.0 --locked --force
-          cargo audit --deny warnings
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # - name: Audit Dependencies
-      #   uses: actions-rust-lang/audit@v1
-      #   with:
-      #     token: ${{ secrets.GITHUB_TOKEN }}
-      #   if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
+        uses: actions-rust-lang/audit@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+        if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
+
       # install nodejs that is required for tests
       - name: Setup Node.js
         uses: actions/setup-node@v4

@@ -1,29 +1,28 @@
+use rust_mcp_sdk::macros::JsonSchema;
 use rust_mcp_sdk::schema::{schema_utils::CallToolError, CallToolResult, TextContent};
 use rust_mcp_sdk::{macros::mcp_tool, tool_box};
+// use rust_mcp_sdk::schema::RpcError;
+// use std::str::FromStr;
 
-use rust_mcp_sdk::macros::JsonSchema;
-use rust_mcp_sdk::schema::RpcError;
-use std::str::FromStr;
+// // Simple enum with FromStr trait implemented
+// #[derive(JsonSchema, Debug)]
+// pub enum Colors {
+//     #[json_schema(title = "Green Color")]
+//     Green,
+//     #[json_schema(title = "Red Color")]
+//     Red,
+// }
+// impl FromStr for Colors {
+//     type Err = RpcError;
 
-// Simple enum with FromStr trait implemented
-#[derive(JsonSchema, Debug)]
-pub enum Colors {
-    #[json_schema(title = "Green Color")]
-    Green,
-    #[json_schema(title = "Red Color")]
-    Red,
-}
-impl FromStr for Colors {
-    type Err = RpcError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "green" => Ok(Colors::Green),
-            "red" => Ok(Colors::Red),
-            _ => Err(RpcError::parse_error().with_message("Invalid color".to_string())),
-        }
-    }
-}
+//     fn from_str(s: &str) -> Result<Self, Self::Err> {
+//         match s.to_lowercase().as_str() {
+//             "green" => Ok(Colors::Green),
+//             "red" => Ok(Colors::Red),
+//             _ => Err(RpcError::parse_error().with_message("Invalid color".to_string())),
+//         }
+//     }
+// }
 
 //****************//
 //  SayHelloTool  //

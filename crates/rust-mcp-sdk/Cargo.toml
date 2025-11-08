@@ -9,6 +9,7 @@ documentation = "https://docs.rs/rust-mcp-sdk"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk"]
 license = "MIT"
 edition = "2021"
+rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
 [dependencies]

@@ -9,6 +9,7 @@ documentation = "https://docs.rs/rust-mcp-macros"
 keywords = ["rust-mcp-stack", "model", "context", "protocol", "macros"]
 license = "MIT"
 edition = "2021"
+rust-version = { workspace = true }
 exclude = ["assets/"]
 
 [package.metadata.docs]

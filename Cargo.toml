@@ -18,6 +18,9 @@ members = [
 
 ]
 
+[workspace.package]
+rust-version = "1.80.0"
+
 [workspace.dependencies]
 # Workspace member crates
 rust-mcp-transport = { version = "0.6.2", path = "crates/rust-mcp-transport", default-features = false }
