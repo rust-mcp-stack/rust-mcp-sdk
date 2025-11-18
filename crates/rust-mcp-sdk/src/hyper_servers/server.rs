@@ -200,7 +200,7 @@ impl HyperServerOptions {
     }
 
     pub fn streamable_http_endpoint(&self) -> &str {
-        self.custom_messages_endpoint
+        self.custom_streamable_http_endpoint
             .as_deref()
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
