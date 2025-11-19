@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.3...rust-mcp-sdk-v0.7.4) (2025-11-19)
+
+
+### 🐛 Bug Fixes
+
+* Issue 116 - custom_streamable_http_endpoint ([#117](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/117)) ([6f70e18](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6f70e18233bee5b56cf32e3fd1932973e1d38c6f))
+
 ## [0.7.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.2...rust-mcp-sdk-v0.7.3) (2025-11-08)
 
 
