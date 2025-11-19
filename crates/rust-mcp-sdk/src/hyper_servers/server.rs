@@ -495,6 +495,8 @@ async fn shutdown_signal(handle: Handle, state: Arc<McpAppState>) {
 mod tests {
     use super::*;
 
+    use tempfile::NamedTempFile;
+
     #[test]
     fn test_server_options_base_url_custom() {
         let options = HyperServerOptions {
@@ -584,7 +586,45 @@ mod tests {
         let options = HyperServerOptions::default();
         assert!(options.validate().is_ok());
 
-        // TODO: validate with ssl
+        // with ssl enabled but no cert or key provided, validate should fail
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ..Default::default()
+        };
+        assert!(options.validate().is_err());
+
+        // with ssl enabled and invalid cert/key paths, validate should fail
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ssl_cert_path: Some(String::from("/invalid/path/to/cert.pem")),
+            ssl_key_path: Some(String::from("/invalid/path/to/key.pem")),
+            ..Default::default()
+        };
+        assert!(options.validate().is_err());
+
+        // with ssl enabled and valid cert/key paths, validate should succeed
+        let cert_file =
+            NamedTempFile::with_suffix(".pem").expect("Expected to create test cert file");
+        let ssl_cert_path = cert_file
+            .path()
+            .to_str()
+            .expect("Expected to get cert path")
+            .to_string();
+        let key_file =
+            NamedTempFile::with_suffix(".pem").expect("Expected to create test key file");
+        let ssl_key_path = key_file
+            .path()
+            .to_str()
+            .expect("Expected to get key path")
+            .to_string();
+
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ssl_cert_path: Some(ssl_cert_path),
+            ssl_key_path: Some(ssl_key_path),
+            ..Default::default()
+        };
+        assert!(options.validate().is_ok());
     }
 
     #[tokio::test]
