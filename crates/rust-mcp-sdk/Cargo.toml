@@ -47,6 +47,7 @@ reqwest = { workspace = true, default-features = false, features = [
     "cookies",
     "multipart",
 ] }
+tempfile = "3.23.0"
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",
