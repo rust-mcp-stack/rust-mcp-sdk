@@ -10,16 +10,6 @@ pub struct JsonWebKeySet {
     pub keys: Vec<Jwk>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Claims {
-    aud: Option<String>, // Optional. Audience
-    exp: usize, // Required (validate_exp defaults to true in validation). Expiration time (as UTC timestamp)
-    iat: Option<usize>, // Optional. Issued at (as UTC timestamp)
-    iss: Option<String>, // Optional. Issuer
-    nbf: Option<usize>, // Optional. Not Before (as UTC timestamp)
-    sub: Option<String>, // Optional. Subject (whom token refers to)
-}
-
 pub fn decode_token_header(token: &str) -> Result<jsonwebtoken::Header, AuthenticationError> {
     let header =
         decode_header(token).map_err(|err| AuthenticationError::TokenVerificationFailed {
