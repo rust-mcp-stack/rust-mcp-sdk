@@ -408,7 +408,7 @@ MCP server can verify tokens issued by other systems, integrate with external id
  ### OAuthProxy  
  OAuthProxy enables authentication with OAuth providers that don’t support Dynamic Client Registration (DCR).It accepts any client registration request, handles the DCR on your server side and then uses your pre-registered app credentials upstream.The proxy also forwards callbacks, allowing dynamic redirect URIs to work with providers that require fixed ones.
  
-> ⚠️ OAuthProxy support is still in development—please use RemoteAuthProvider for now.
+> ⚠️ OAuthProxy support is still in development, please use RemoteAuthProvider for now.
  
 
 ## Macros
@@ -608,6 +608,9 @@ pub struct HyperServerOptions {
     /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     /// Applicable only if sse_support is true
     pub custom_messages_endpoint: Option<String>,
+
+    /// Optional authentication provider for protecting MCP server.
+    pub auth: Option<Arc<dyn AuthProvider>>,
 }
 
 ```

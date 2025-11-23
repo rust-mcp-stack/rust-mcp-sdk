@@ -102,6 +102,8 @@ pub struct HyperServerOptions {
     /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     /// Applicable only if sse_support is true
     pub custom_messages_endpoint: Option<String>,
+
+    /// Optional authentication provider for protecting MCP server.
     #[cfg(feature = "auth")]
     pub auth: Option<Arc<dyn AuthProvider>>,
 }

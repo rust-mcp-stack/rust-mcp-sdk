@@ -243,12 +243,12 @@ pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
 
 #[cfg(feature = "auth")]
 pub fn join_url(base: &Url, segment: &str) -> Result<Url, url::ParseError> {
-    // Fast early check — Url must be absolute
+    // Fast early check - Url must be absolute
     if base.cannot_be_a_base() {
         return Err(url::ParseError::RelativeUrlWithoutBase);
     }
 
-    // We have to clone — there is no way around this when taking &Url
+    // We have to clone - there is no way around this when taking &Url
     let mut url = base.clone();
 
     // This is the official, safe, and correct way
