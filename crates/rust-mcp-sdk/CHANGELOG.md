@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.3...rust-mcp-sdk-v0.7.4) (2025-11-23)
+
+
+### 🚀 Features
+
+* Add authentication flow support to MCP servers ([#119](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/119)) ([fe467d3](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/fe467d3661a60b6bb1f9d5b53697c1a94dc77c12))
+
+
+### 🐛 Bug Fixes
+
+* Issue 116 - custom_streamable_http_endpoint ([#117](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/117)) ([6f70e18](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6f70e18233bee5b56cf32e3fd1932973e1d38c6f))
+
 ## [0.7.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.2...rust-mcp-sdk-v0.7.3) (2025-11-08)
 
 

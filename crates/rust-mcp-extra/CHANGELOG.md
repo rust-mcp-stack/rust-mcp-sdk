@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.1.3...rust-mcp-extra-v0.1.4) (2025-11-23)
+
+
+### 🚀 Features
+
+* Add authentication flow support to MCP servers ([#119](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/119)) ([fe467d3](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/fe467d3661a60b6bb1f9d5b53697c1a94dc77c12))
+
 ## [0.1.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.1.2...rust-mcp-extra-v0.1.3) (2025-11-08)
 
 
