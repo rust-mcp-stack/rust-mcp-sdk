@@ -7,14 +7,14 @@ A companion crate to [`rust-mcp-sdk`](https://github.com/rust-mcp-stack/rust-mcp
   - [Keycloak](#keycloak)
   - [WorkOs Authkit](#workos-authkit)
   - [Scalekit](#scalekit)
-- [ID Generators](#-id-generators)
+- **[ID Generators](#-id-generators)**
   - [NanoIdGenerator](#nanoidgenerator)
   - [TimeBase64Generator](#timebase64generator)
   - [RandomBase62Generator](#randombase62generator)
   - [SnowflakeIdGenerator](#snowflakeidgenerator)
-- [Session Stores](#-session-stores)
+- **[Session Stores](#-session-stores)**
   - 🔜 Coming Soon
-- [Event Stores](#-event-stores)
+- **[Event Stores](#-event-stores)**
   - 🔜 Coming Soon
 
 
