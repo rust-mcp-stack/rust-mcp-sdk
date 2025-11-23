@@ -19,7 +19,7 @@ pub struct AuthorizationServerMetadata {
     /// URL to exchange authorization codes for tokens or refresh tokens.
     pub token_endpoint: Url,
 
-    /// URL of the authorization server's JWK Set [JWK] document
+    /// URL of the authorization server's JWK Set `JWK` document
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub jwks_uri: Option<Url>,
 
@@ -27,7 +27,7 @@ pub struct AuthorizationServerMetadata {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub registration_endpoint: Option<Url>,
 
-    /// List of supported OAuth scopes (e.g., "openid", "profile", "email", mcp:tools) [RECOMMENDED]
+    /// List of supported OAuth scopes (e.g., "openid", "profile", "email", mcp:tools)
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub scopes_supported: Option<Vec<String>>,
 
@@ -58,7 +58,7 @@ pub struct AuthorizationServerMetadata {
     pub token_endpoint_auth_signing_alg_values_supported: Option<Vec<String>>,
 
     /// Link to human-readable docs for developers.
-    /// https://datatracker.ietf.org/doc/html/rfc8414
+    /// <https://datatracker.ietf.org/doc/html/rfc8414>
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub service_documentation: Option<Url>,
 
@@ -171,7 +171,7 @@ impl AuthorizationServerMetadata {
 /// represents metadata about a protected resource in the OAuth 2.0 ecosystem.
 /// It allows clients and authorization servers to discover how to interact with a protected resource (like an MCP endpoint),
 /// including security requirements and supported features.
-/// https://datatracker.ietf.org/doc/rfc9728/
+/// <https://datatracker.ietf.org/doc/rfc9728>
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OauthProtectedResourceMetadata {
     /// The base identifier of the protected resource (e.g., an MCP server's URI).
@@ -185,7 +185,7 @@ pub struct OauthProtectedResourceMetadata {
 
     /// URL where the resource exposes its public keys (JWKS) to verify signed tokens.
     /// Typically used to verify JWT access tokens.
-    /// Example: "https://example.com/.well-known/jwks.json"
+    /// Example: `https://example.com/.well-known/jwks.json`
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub jwks_uri: Option<Url>,
 
@@ -245,7 +245,7 @@ pub struct OauthProtectedResourceMetadata {
 }
 
 impl OauthProtectedResourceMetadata {
-    /// Creates a new [`OAuthProtectedResourceMetadata`] instance with only the
+    /// Creates a new `OAuthProtectedResourceMetadata` instance with only the
     /// minimal required fields populated.
     ///
     /// The `resource` and each entry in `authorization_servers` must be valid URLs.

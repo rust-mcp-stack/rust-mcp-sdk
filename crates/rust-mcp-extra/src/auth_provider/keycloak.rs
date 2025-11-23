@@ -39,7 +39,7 @@ static SCOPES_SUPPORTED: &[&str] = &[
 
 /// Configuration options for the Keycloak OAuth provider.
 pub struct KeycloakAuthOptions<'a> {
-    /// Base URL of the Keycloak server (e.g. https://keycloak.example.com)
+    /// Base URL of the Keycloak server (e.g. `https://keycloak.example.com`)
     pub keycloak_base_url: String,
     /// Public base URL of this MCP server (used for discovery endpoints)
     pub mcp_server_url: String,

@@ -41,8 +41,13 @@ command = "cargo"
 args = ["test", "--doc", "-p", "rust-mcp-macros"]
 
 
+[tasks.doc-strict]
+command = "cargo"
+args = ["doc", "--no-deps"]
+env = { RUSTDOCFLAGS = "-D warnings" }
+
 [tasks.check]
-dependencies = ["fmt", "clippy", "test", "doc-test"]
+dependencies = ["fmt", "clippy", "test", "doc-strict", "doc-test"]
 
 [tasks.clippy-fix]
 command = "cargo"

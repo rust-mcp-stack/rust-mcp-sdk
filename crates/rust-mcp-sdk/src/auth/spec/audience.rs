@@ -11,7 +11,7 @@ pub enum Audience {
 }
 
 impl Audience {
-    /// Converts the audience to a Vec<String> for uniform access.
+    /// Converts the audience to a `Vec<String>` for uniform access.
     pub fn to_vec(&self) -> Vec<String> {
         match self {
             Audience::Single(s) => vec![s.clone()],
