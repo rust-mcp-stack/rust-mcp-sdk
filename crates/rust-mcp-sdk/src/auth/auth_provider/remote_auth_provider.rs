@@ -133,7 +133,7 @@ impl AuthProvider for RemoteAuthProvider {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> Result<http::Response<GenericBody>, TransportServerError> {
-        let Some(endpoint) = self.endpont_type(&request) else {
+        let Some(endpoint) = self.endpoint_type(&request) else {
             return http::Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(GenericBody::empty())

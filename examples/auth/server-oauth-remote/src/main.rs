@@ -19,7 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // this function creates and setup a RemoteAuthProvider , pointing to a local KeyCloak server
 // please refer to the keycloak-setup section of the following blog post for
-// detailed instrctions on how to setup a KeyCloak server for this :
+// detailed instructions on how to setup a KeyCloak server for this :
 // https://modelcontextprotocol.io/docs/tutorials/security/authorization#keycloak-setup
 pub async fn create_oauth_provider() -> SdkResult<RemoteAuthProvider> {
     // build metadata from a oauth discovery url : .well-known/openid-configuration

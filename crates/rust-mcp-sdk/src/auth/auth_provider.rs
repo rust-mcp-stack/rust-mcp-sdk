@@ -47,7 +47,7 @@ pub trait AuthProvider: Send + Sync {
     /// - If your token and revocation endpoints share the same URL path (valid in some implementations),
     ///   you may want to override this method to correctly distinguish the request type
     ///   (e.g., based on request parameters like `grant_type` vs `token`).
-    fn endpont_type(&self, request: &http::Request<&str>) -> Option<&OauthEndpoint> {
+    fn endpoint_type(&self, request: &http::Request<&str>) -> Option<&OauthEndpoint> {
         let endpoints = self.auth_endpoints()?;
         endpoints.get(request.uri().path())
     }

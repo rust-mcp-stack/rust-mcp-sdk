@@ -34,7 +34,7 @@ pub enum AuthMetadateError {
 
 pub struct AuthMetadataEndpoints {
     pub protected_resource_endpoint: String,
-    pub autorization_server_endpoint: String,
+    pub authorization_server_endpoint: String,
 }
 
 // Builder struct to construct both OAuthMetadata and OAuthProtectedResourceMetadata
@@ -101,7 +101,7 @@ impl OauthMetadata {
 
     pub fn endpoints(&self) -> AuthMetadataEndpoints {
         AuthMetadataEndpoints {
-            autorization_server_endpoint: WELL_KNOWN_OAUTH_AUTHORIZATION_SERVER.to_string(),
+            authorization_server_endpoint: WELL_KNOWN_OAUTH_AUTHORIZATION_SERVER.to_string(),
             protected_resource_endpoint: format!(
                 "{OAUTH_PROTECTED_RESOURCE_BASE}{}",
                 match self.protected_resource_metadata.resource.path() {

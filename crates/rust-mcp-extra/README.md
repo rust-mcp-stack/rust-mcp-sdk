@@ -74,7 +74,7 @@ let auth_provider = WorkOsAuthProvider::new(WorkOSAuthOptions {
     })?;
 ```
 
-Before running the [example](../../examples/workos-auth.rs), make sure you enabled DCR (Dynamic Client Regsitration) in your WorkOS Authkit dashboard.
+Before running the [example](../../examples/workos-auth.rs), make sure you enabled DCR (Dynamic Client Registration) in your WorkOS Authkit dashboard.
 
 Set the `AUTH_SERVER` environment variable and start the example:
 
