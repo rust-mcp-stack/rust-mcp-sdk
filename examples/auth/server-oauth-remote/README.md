@@ -60,4 +60,4 @@ npx -y @modelcontextprotocol/inspector@latest
 
 Here you can see it in action :
 
-![mcp-server-remote-oauth](../../../assets/examples/mcp-remote-oauth.gif)
+<img src="../../../assets/examples/mcp-remote-oauth.gif" alt="mcp-server-remote-oauth" width="640" />
