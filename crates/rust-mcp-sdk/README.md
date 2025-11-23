@@ -625,7 +625,7 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `2025_03_26` : Activates MCP Protocol version 2025-03-26
 - `2024_11_05` : Activates MCP Protocol version 2024-11-05
 
-> Note: MCP protocol versions are mutually exclusive—only one can be active at any given time.
+> Note: MCP protocol versions are mutually exclusive-only one can be active at any given time.
 
 ### Default Features
 

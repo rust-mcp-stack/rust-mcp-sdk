@@ -1,8 +1,7 @@
 use super::ServerRuntime;
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
-use crate::mcp_traits::mcp_handler::McpServerHandler;
-use crate::mcp_traits::mcp_server::McpServer;
+use crate::mcp_traits::{McpServer, McpServerHandler};
 use crate::schema::schema_utils::{
     self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
     ResultFromServer, ServerMessage,

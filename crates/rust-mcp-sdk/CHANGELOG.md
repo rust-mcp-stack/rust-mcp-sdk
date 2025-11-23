@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.2...rust-mcp-sdk-v0.7.3) (2025-11-08)
+
+
+### 🚀 Features
+
+* Refactor and improve middleware pipeline ([#114](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/114)) ([cc45f1c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/cc45f1c2e6321ef740dda87d229aa51213a06808))
+
 ## [0.7.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.1...rust-mcp-sdk-v0.7.2) (2025-10-20)
 
 

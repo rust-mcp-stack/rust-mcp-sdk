@@ -1,9 +1,8 @@
 pub mod mcp_server_runtime;
 pub mod mcp_server_runtime_core;
+use crate::auth::AuthInfo;
 use crate::error::SdkResult;
-use crate::mcp_traits::mcp_handler::McpServerHandler;
-use crate::mcp_traits::mcp_server::McpServer;
-use crate::mcp_traits::{RequestIdGen, RequestIdGenNumeric};
+use crate::mcp_traits::{McpServer, McpServerHandler, RequestIdGen, RequestIdGenNumeric};
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
@@ -23,8 +22,7 @@ use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch, RwLock, RwLockReadGuard};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 const TASK_CHANNEL_CAPACITY: usize = 500;
@@ -52,6 +50,7 @@ pub struct ServerRuntime {
     request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
+    auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
 }
 
 #[async_trait]
@@ -65,6 +64,30 @@ impl McpServer for ServerRuntime {
                     .with_message("Failed to set client details".to_string())
                     .into()
             })
+    }
+
+    async fn update_auth_info(&self, new_auth_info: Option<AuthInfo>) {
+        let should_update = {
+            let current = self.auth_info.read().await;
+            match (&*current, &new_auth_info) {
+                (None, Some(_)) => true,
+                (Some(old), Some(new)) => old.token_unique_id != new.token_unique_id,
+                (Some(_), None) => true,
+                (None, None) => false,
+            }
+        };
+
+        if should_update {
+            *self.auth_info.write().await = new_auth_info;
+        }
+    }
+
+    async fn auth_info(&self) -> RwLockReadGuard<'_, Option<AuthInfo>> {
+        self.auth_info.read().await
+    }
+    async fn auth_info_cloned(&self) -> Option<AuthInfo> {
+        let guard = self.auth_info.read().await;
+        guard.clone()
     }
 
     async fn wait_for_initialization(&self) {
@@ -548,7 +571,10 @@ impl ServerRuntime {
         server_details: Arc<InitializeResult>,
         handler: Arc<dyn McpServerHandler>,
         session_id: SessionId,
+        auth_info: Option<AuthInfo>,
     ) -> Arc<Self> {
+        use tokio::sync::RwLock;
+
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
         Arc::new(Self {
@@ -559,6 +585,7 @@ impl ServerRuntime {
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
+            auth_info: RwLock::new(auth_info),
         })
     }
 
@@ -586,6 +613,7 @@ impl ServerRuntime {
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
+            auth_info: RwLock::new(None),
         })
     }
 }

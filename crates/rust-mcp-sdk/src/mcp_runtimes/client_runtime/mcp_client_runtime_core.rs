@@ -9,7 +9,7 @@ use crate::schema::{
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_client_handler_core::ClientHandlerCore,
-    mcp_traits::{mcp_client::McpClient, mcp_handler::McpClientHandler},
+    mcp_traits::{McpClient, McpClientHandler},
 };
 use async_trait::async_trait;
 #[cfg(feature = "streamable-http")]

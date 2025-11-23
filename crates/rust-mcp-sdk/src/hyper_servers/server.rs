@@ -1,19 +1,31 @@
+use super::{
+    error::{TransportServerError, TransportServerResult},
+    routes::app_routes,
+};
+#[cfg(feature = "auth")]
+use crate::auth::AuthProvider;
+#[cfg(feature = "auth")]
+use crate::mcp_http::middleware::AuthMiddleware;
 use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
     mcp_http::{
-        utils::{
+        http_utils::{
             DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
         },
+        middleware::DnsRebindProtector,
         McpAppState, McpHttpHandler,
     },
     mcp_server::hyper_runtime::HyperRuntime,
-    mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
+    mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
 };
+use crate::{mcp_http::Middleware, schema::InitializeResult};
+use axum::Router;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -21,14 +33,6 @@ use std::{
     time::Duration,
 };
 use tokio::signal;
-
-use super::{
-    error::{TransportServerError, TransportServerResult},
-    routes::app_routes,
-};
-use crate::schema::InitializeResult;
-use axum::Router;
-use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
@@ -98,6 +102,8 @@ pub struct HyperServerOptions {
     /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     /// Applicable only if sse_support is true
     pub custom_messages_endpoint: Option<String>,
+    #[cfg(feature = "auth")]
+    pub auth: Option<Arc<dyn AuthProvider>>,
 }
 
 impl HyperServerOptions {
@@ -199,9 +205,14 @@ impl HyperServerOptions {
     }
 
     pub fn streamable_http_endpoint(&self) -> &str {
-        self.custom_messages_endpoint
+        self.custom_streamable_http_endpoint
             .as_deref()
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
+    }
+
+    pub fn needs_dns_protection(&self) -> bool {
+        self.dns_rebinding_protection
+            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
     }
 }
 
@@ -229,6 +240,8 @@ impl Default for HyperServerOptions {
             allowed_origins: None,
             dns_rebinding_protection: false,
             event_store: None,
+            #[cfg(feature = "auth")]
+            auth: None,
         }
     }
 }
@@ -270,14 +283,35 @@ impl HyperServer {
             ping_interval: server_options.ping_interval,
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
-            allowed_hosts: server_options.allowed_hosts.take(),
-            allowed_origins: server_options.allowed_origins.take(),
-            dns_rebinding_protection: server_options.dns_rebinding_protection,
             event_store: server_options.event_store.as_ref().map(Arc::clone),
         });
 
-        let http_handler = McpHttpHandler::new(); //TODO: add auth handlers
+        // populate middlewares
+        let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
+        if server_options.needs_dns_protection() {
+            //dns pritection middleware
+            middlewares.push(Arc::new(DnsRebindProtector::new(
+                server_options.allowed_hosts.take(),
+                server_options.allowed_origins.take(),
+            )));
+        }
+
+        let http_handler = {
+            #[cfg(feature = "auth")]
+            {
+                let auth_provider = server_options.auth.take();
+                // add auth middleware if there is a auth_provider
+                if let Some(auth_provider) = auth_provider.as_ref() {
+                    middlewares.push(Arc::new(AuthMiddleware::new(auth_provider.clone())))
+                }
+                McpHttpHandler::new(auth_provider, middlewares)
+            }
+            #[cfg(not(feature = "auth"))]
+            McpHttpHandler::new(middlewares)
+        };
+
         let app = app_routes(Arc::clone(&state), &server_options, http_handler);
+
         Self {
             app,
             state,
@@ -478,4 +512,171 @@ async fn shutdown_signal(handle: Handle, state: Arc<McpAppState>) {
     state.session_store.clear().await;
     // Trigger graceful shutdown with a timeout
     handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_server_options_base_url_custom() {
+        let options = HyperServerOptions {
+            host: String::from("127.0.0.1"),
+            port: 8081,
+            enable_ssl: true,
+            ..Default::default()
+        };
+        assert_eq!(options.base_url(), "https://127.0.0.1:8081");
+    }
+
+    #[test]
+    fn test_server_options_streamable_http_custom() {
+        let options = HyperServerOptions {
+            custom_streamable_http_endpoint: Some(String::from("/abcd/mcp")),
+            host: String::from("127.0.0.1"),
+            port: 8081,
+            enable_ssl: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            options.streamable_http_url(),
+            "https://127.0.0.1:8081/abcd/mcp"
+        );
+        assert_eq!(options.streamable_http_endpoint(), "/abcd/mcp");
+    }
+
+    #[test]
+    fn test_server_options_sse_custom() {
+        let options = HyperServerOptions {
+            custom_sse_endpoint: Some(String::from("/abcd/sse")),
+            host: String::from("127.0.0.1"),
+            port: 8081,
+            enable_ssl: true,
+            ..Default::default()
+        };
+        assert_eq!(options.sse_url(), "https://127.0.0.1:8081/abcd/sse");
+        assert_eq!(options.sse_endpoint(), "/abcd/sse");
+    }
+
+    #[test]
+    fn test_server_options_sse_messages_custom() {
+        let options = HyperServerOptions {
+            custom_messages_endpoint: Some(String::from("/abcd/messages")),
+            ..Default::default()
+        };
+        assert_eq!(
+            options.sse_message_url(),
+            "http://127.0.0.1:8080/abcd/messages"
+        );
+        assert_eq!(options.sse_messages_endpoint(), "/abcd/messages");
+    }
+
+    #[test]
+    fn test_server_options_needs_dns_protection() {
+        let options = HyperServerOptions::default();
+
+        // should be false by default
+        assert!(!options.needs_dns_protection());
+
+        // should still be false unless allowed_hosts or allowed_origins are also provided
+        let options = HyperServerOptions {
+            dns_rebinding_protection: true,
+            ..Default::default()
+        };
+        assert!(!options.needs_dns_protection());
+
+        // should be true when dns_rebinding_protection is true and allowed_hosts is provided
+        let options = HyperServerOptions {
+            dns_rebinding_protection: true,
+            allowed_hosts: Some(vec![String::from("127.0.0.1")]),
+            ..Default::default()
+        };
+        assert!(options.needs_dns_protection());
+
+        // should be true when dns_rebinding_protection is true and allowed_origins is provided
+        let options = HyperServerOptions {
+            dns_rebinding_protection: true,
+            allowed_origins: Some(vec![String::from("http://127.0.0.1:8080")]),
+            ..Default::default()
+        };
+        assert!(options.needs_dns_protection());
+    }
+
+    #[test]
+    fn test_server_options_validate() {
+        let options = HyperServerOptions::default();
+        assert!(options.validate().is_ok());
+
+        // with ssl enabled but no cert or key provided, validate should fail
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ..Default::default()
+        };
+        assert!(options.validate().is_err());
+
+        // with ssl enabled and invalid cert/key paths, validate should fail
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ssl_cert_path: Some(String::from("/invalid/path/to/cert.pem")),
+            ssl_key_path: Some(String::from("/invalid/path/to/key.pem")),
+            ..Default::default()
+        };
+        assert!(options.validate().is_err());
+
+        // with ssl enabled and valid cert/key paths, validate should succeed
+        let cert_file =
+            NamedTempFile::with_suffix(".pem").expect("Expected to create test cert file");
+        let ssl_cert_path = cert_file
+            .path()
+            .to_str()
+            .expect("Expected to get cert path")
+            .to_string();
+        let key_file =
+            NamedTempFile::with_suffix(".pem").expect("Expected to create test key file");
+        let ssl_key_path = key_file
+            .path()
+            .to_str()
+            .expect("Expected to get key path")
+            .to_string();
+
+        let options = HyperServerOptions {
+            enable_ssl: true,
+            ssl_cert_path: Some(ssl_cert_path),
+            ssl_key_path: Some(ssl_key_path),
+            ..Default::default()
+        };
+        assert!(options.validate().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_server_options_resolve_server_address() {
+        let options = HyperServerOptions::default();
+        assert!(options.resolve_server_address().await.is_ok());
+
+        // valid host should still work
+        let options = HyperServerOptions {
+            host: String::from("8.6.7.5"),
+            port: 309,
+            ..Default::default()
+        };
+        assert!(options.resolve_server_address().await.is_ok());
+
+        // valid host (prepended with http://) should still work
+        let options = HyperServerOptions {
+            host: String::from("http://8.6.7.5"),
+            port: 309,
+            ..Default::default()
+        };
+        assert!(options.resolve_server_address().await.is_ok());
+
+        // invalid host should raise an error
+        let options = HyperServerOptions {
+            host: String::from("invalid-host"),
+            port: 309,
+            ..Default::default()
+        };
+        assert!(options.resolve_server_address().await.is_err());
+    }
 }

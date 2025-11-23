@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+#[cfg(feature = "hyper-server")]
+use crate::auth::AuthInfo;
 use crate::schema::{
     schema_utils::{
         self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
@@ -18,7 +20,7 @@ use rust_mcp_transport::SessionId;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
-    mcp_traits::{mcp_handler::McpServerHandler, mcp_server::McpServer},
+    mcp_traits::{McpServer, McpServerHandler},
 };
 
 /// Creates a new MCP server runtime with the specified configuration.
@@ -62,8 +64,9 @@ pub(crate) fn create_server_instance(
     server_details: Arc<InitializeResult>,
     handler: Arc<dyn McpServerHandler>,
     session_id: SessionId,
+    auth_info: Option<AuthInfo>,
 ) -> Arc<ServerRuntime> {
-    ServerRuntime::new_instance(server_details, handler, session_id)
+    ServerRuntime::new_instance(server_details, handler, session_id, auth_info)
 }
 
 pub(crate) struct ServerRuntimeInternalHandler<H> {

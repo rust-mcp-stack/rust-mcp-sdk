@@ -1,13 +1,14 @@
 mod app_state;
+pub(crate) mod http_utils;
 mod mcp_http_handler;
-pub(crate) mod mcp_http_utils;
 
-mod mcp_http_middleware; //TODO:
+pub mod middleware;
+mod types;
 
 pub use app_state::*;
+pub use http_utils::*;
 pub use mcp_http_handler::*;
-pub use mcp_http_middleware::Middleware;
 
-pub(crate) mod utils {
-    pub use super::mcp_http_utils::*;
-}
+pub use types::*;
+
+pub use middleware::Middleware;

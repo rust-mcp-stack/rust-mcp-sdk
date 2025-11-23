@@ -2,7 +2,7 @@ use crate::schema::schema_utils::*;
 use crate::schema::*;
 use async_trait::async_trait;
 
-use crate::mcp_traits::mcp_client::McpClient;
+use crate::mcp_traits::McpClient;
 
 /// Defines the `ClientHandlerCore` trait for handling Model Context Protocol (MCP) client operations.
 /// Unlike `ClientHandler`, this trait offers no default implementations, providing full control over MCP message handling

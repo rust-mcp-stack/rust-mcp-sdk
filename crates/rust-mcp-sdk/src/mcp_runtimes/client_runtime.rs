@@ -2,9 +2,7 @@ pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
-use crate::mcp_traits::mcp_client::McpClient;
-use crate::mcp_traits::mcp_handler::McpClientHandler;
-use crate::mcp_traits::IdGenerator;
+use crate::mcp_traits::{IdGenerator, McpClient, McpClientHandler};
 use crate::utils::ensure_server_protocole_compatibility;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},

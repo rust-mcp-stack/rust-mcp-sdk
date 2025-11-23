@@ -1,13 +1,13 @@
 use crate::{
     mcp_server::server_runtime::ServerRuntimeInternalHandler,
-    mcp_traits::mcp_handler::McpServerHandler,
+    mcp_traits::McpServerHandler,
     schema::{schema_utils::CallToolError, *},
 };
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{mcp_traits::mcp_server::McpServer, utils::enforce_compatible_protocol_version};
+use crate::{mcp_traits::McpServer, utils::enforce_compatible_protocol_version};
 
 /// Defines the `ServerHandler` trait for handling Model Context Protocol (MCP) operations on a server.
 /// This trait provides default implementations for request and notification handlers in an MCP server,

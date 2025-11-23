@@ -3,6 +3,9 @@ use std::net::AddrParseError;
 use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
+#[cfg(feature = "auth")]
+use crate::auth::AuthenticationError;
+
 pub type TransportServerResult<T> = core::result::Result<T, TransportServerError>;
 
 #[derive(Debug, Error, Clone)]
@@ -25,6 +28,9 @@ pub enum TransportServerError {
     SslCertError(String),
     #[error("{0}")]
     TransportError(String),
+    #[cfg(feature = "auth")]
+    #[error("{0}")]
+    AuthenticationError(#[from] AuthenticationError),
 }
 
 impl IntoResponse for TransportServerError {

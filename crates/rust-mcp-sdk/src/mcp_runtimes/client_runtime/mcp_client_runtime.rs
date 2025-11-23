@@ -13,10 +13,7 @@ use async_trait::async_trait;
 use rust_mcp_transport::StreamableTransportOptions;
 use rust_mcp_transport::TransportDispatcher;
 
-use crate::{
-    error::SdkResult, mcp_client::ClientHandler, mcp_traits::mcp_handler::McpClientHandler,
-    McpClient,
-};
+use crate::{error::SdkResult, mcp_client::ClientHandler, mcp_traits::McpClientHandler, McpClient};
 
 use super::ClientRuntime;
 

@@ -46,7 +46,7 @@ impl SseParser {
     pub fn process_new_chunk(&mut self, bytes: Bytes) -> Vec<SseEvent> {
         self.buffer.extend_from_slice(&bytes);
 
-        // Collect complete lines (ending in \n)—keep ALL lines, including empty ones for \n\n detection
+        // Collect complete lines (ending in \n)-keep ALL lines, including empty ones for \n\n detection
         let mut lines = Vec::new();
         while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
             let line = self.buffer.split_to(pos + 1).freeze();

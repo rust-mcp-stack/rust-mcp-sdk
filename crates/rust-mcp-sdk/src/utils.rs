@@ -2,6 +2,9 @@ use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
 use crate::schema::schema_utils::{ClientMessages, SdkError};
 use crate::schema::ProtocolVersion;
 use std::cmp::Ordering;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(feature = "auth")]
+use url::Url;
 
 /// A guard type that automatically aborts a Tokio task when dropped.
 ///
@@ -40,6 +43,11 @@ impl Drop for AbortTaskOnDrop {
 /// ```
 pub fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {
     format!("{entity} does not support {capability} (required for {method_name})")
+}
+
+// Function to convert Unix timestamp to SystemTime
+pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
+    UNIX_EPOCH + Duration::from_secs(timestamp)
 }
 
 /// Checks if the client and server protocol versions are compatible by ensuring they are equal.
@@ -233,6 +241,30 @@ pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "auth")]
+pub fn join_url(base: &Url, segment: &str) -> Result<Url, url::ParseError> {
+    // Fast early check — Url must be absolute
+    if base.cannot_be_a_base() {
+        return Err(url::ParseError::RelativeUrlWithoutBase);
+    }
+
+    // We have to clone — there is no way around this when taking &Url
+    let mut url = base.clone();
+
+    // This is the official, safe, and correct way
+    url.path_segments_mut()
+        .map_err(|_| url::ParseError::RelativeUrlWithoutBase)?
+        .pop_if_empty() // makes it act like a directory
+        .extend(
+            segment
+                .trim_start_matches('/')
+                .split('/')
+                .filter(|s| !s.is_empty()),
+        );
+
+    Ok(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,5 +281,37 @@ mod tests {
             "/messages"
         );
         assert_eq!(remove_query_and_hash("/"), "/");
+    }
+
+    #[test]
+    fn test_join_url() {
+        let expect = "http://example.com/api/user/userinfo";
+        let result = join_url(
+            &Url::parse("http://example.com/api").unwrap(),
+            "/user/userinfo",
+        )
+        .unwrap();
+        assert_eq!(result.to_string(), expect);
+
+        let result = join_url(
+            &Url::parse("http://example.com/api").unwrap(),
+            "user/userinfo",
+        )
+        .unwrap();
+        assert_eq!(result.to_string(), expect);
+
+        let result = join_url(
+            &Url::parse("http://example.com/api/").unwrap(),
+            "/user/userinfo",
+        )
+        .unwrap();
+        assert_eq!(result.to_string(), expect);
+
+        let result = join_url(
+            &Url::parse("http://example.com/api/").unwrap(),
+            "user/userinfo",
+        )
+        .unwrap();
+        assert_eq!(result.to_string(), expect);
     }
 }

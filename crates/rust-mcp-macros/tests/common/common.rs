@@ -1,7 +1,6 @@
-use std::str::FromStr;
-
 use rust_mcp_macros::JsonSchema;
 use rust_mcp_schema::RpcError;
+use std::str::FromStr;
 
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, JsonSchema)]
 /// Represents a text replacement operation.
