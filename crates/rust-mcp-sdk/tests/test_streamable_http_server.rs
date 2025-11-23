@@ -1,5 +1,12 @@
-use std::{collections::HashMap, error::Error, sync::Arc, time::Duration, vec};
-
+use crate::common::{
+    random_port, read_sse_event, read_sse_event_from_stream, send_delete_request, send_get_request,
+    send_option_request, send_post_request,
+    test_server_common::{
+        create_start_server, initialize_request, LaunchedServer, TestIdGenerator,
+    },
+    TestTokenVerifier,
+};
+use http::header::{ACCEPT, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE};
 use hyper::StatusCode;
 use rust_mcp_schema::{
     schema_utils::{
@@ -12,36 +19,89 @@ use rust_mcp_schema::{
     LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
     ServerRequest, ServerResult,
 };
-use rust_mcp_sdk::{event_store::InMemoryEventStore, mcp_server::HyperServerOptions};
-use serde_json::{json, Map, Value};
-
-use crate::common::{
-    random_port, read_sse_event, read_sse_event_from_stream, send_delete_request, send_get_request,
-    send_post_request,
-    test_server_common::{
-        create_start_server, initialize_request, LaunchedServer, TestIdGenerator,
-    },
+use rust_mcp_sdk::{
+    auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
+    event_store::InMemoryEventStore,
+    mcp_server::HyperServerOptions,
 };
+use serde_json::{json, Map, Value};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::Arc,
+    time::{Duration, SystemTime},
+    vec,
+};
+use url::Url;
 
 #[path = "common/common.rs"]
 pub mod common;
 
 const ONE_MILLISECOND: Option<Duration> = Some(Duration::from_millis(1));
+pub const VALID_ACCESS_TOKEN: &str = "valid-access-token";
 
 async fn initialize_server(
     enable_json_response: Option<bool>,
+    auth_token_map: Option<HashMap<&str, AuthInfo>>,
 ) -> Result<(LaunchedServer, String), Box<dyn Error>> {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
+    let port = random_port();
+
+    let auth = auth_token_map.and_then(|token_map| {
+        let mut token_map: HashMap<String, AuthInfo> = token_map
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+
+        token_map.insert(
+            VALID_ACCESS_TOKEN.to_string(),
+            AuthInfo {
+                token_unique_id: VALID_ACCESS_TOKEN.to_string(),
+                client_id: Some("valid-client-id".to_string()),
+                scopes: Some(vec!["mcp".to_string(), "mcp:tools".to_string()]),
+                expires_at: Some(SystemTime::now() + Duration::from_secs(90)),
+                audience: None,
+                extra: None,
+                user_id: None,
+            },
+        );
+
+        let (auth_server_meta, protected_resource_met) =
+            AuthMetadataBuilder::new("http://127.0.0.1:3000/mcp")
+                .issuer("http://localhost:3030")
+                .authorization_servers(vec!["http://localhost:3030"])
+                .authorization_endpoint("/authorize")
+                .token_endpoint("/token")
+                .scopes_supported(vec!["mcp:tools".to_string()])
+                .introspection_endpoint("/introspect")
+                .resource_name("MCP Test Server".to_string())
+                .build()
+                .unwrap();
+
+        let token_verifier = TestTokenVerifier::new(token_map);
+
+        Some(RemoteAuthProvider::new(
+            auth_server_meta,
+            protected_resource_met,
+            Box::new(token_verifier),
+            None,
+        ))
+    });
+
+    let oauth_metadata_provider = auth.map(|v| -> Arc<dyn AuthProvider> { Arc::new(v) });
+
     let server_options = HyperServerOptions {
-        port: random_port(),
+        port,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
         enable_json_response,
         ping_interval: Duration::from_secs(1),
         event_store: Some(Arc::new(InMemoryEventStore::default())),
+        auth: oauth_metadata_provider,
+
         ..Default::default()
     };
 
@@ -52,7 +112,14 @@ async fn initialize_server(
         &server.streamable_url,
         &serde_json::to_string(&json_rpc_message).unwrap(),
         None,
-        None,
+        Some(HashMap::from([
+            (
+                AUTHORIZATION.as_str(),
+                format!("Bearer {VALID_ACCESS_TOKEN}").as_str(),
+            ),
+            (CONTENT_TYPE.as_str(), "application/json"),
+            (ACCEPT.as_str(), "application/json, text/event-stream"),
+        ])),
     )
     .await
     .expect("Request failed");
@@ -154,7 +221,7 @@ async fn should_reject_batch_initialize_request() {
 // should handle post requests via sse response correctly
 #[tokio::test]
 async fn should_handle_post_requests_via_sse_response_correctly() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -196,7 +263,7 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
 // should call a tool and return the result
 #[tokio::test]
 async fn should_call_a_tool_and_return_the_result() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut map = Map::new();
     map.insert("name".to_string(), Value::String("Ali".to_string()));
@@ -244,7 +311,7 @@ async fn should_call_a_tool_and_return_the_result() {
 // should reject requests without a valid session ID
 #[tokio::test]
 async fn should_reject_requests_without_a_valid_session_id() {
-    let (server, _session_id) = initialize_server(None).await.unwrap();
+    let (server, _session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -269,7 +336,7 @@ async fn should_reject_requests_without_a_valid_session_id() {
 // should reject invalid session ID
 #[tokio::test]
 async fn should_reject_invalid_session_id() {
-    let (server, _session_id) = initialize_server(None).await.unwrap();
+    let (server, _session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -315,7 +382,7 @@ async fn get_standalone_stream(
 // should establish standalone SSE stream and receive server-initiated messages
 #[tokio::test]
 async fn should_establish_standalone_stream_and_receive_server_messages() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
@@ -377,7 +444,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
 // should establish standalone SSE stream and receive server-initiated requests
 #[tokio::test]
 async fn should_establish_standalone_stream_and_receive_server_requests() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
@@ -462,7 +529,7 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
 // should not close GET SSE stream after sending multiple server notifications
 #[tokio::test]
 async fn should_not_close_get_sse_stream() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
@@ -533,7 +600,7 @@ async fn should_not_close_get_sse_stream() {
 //should reject second SSE stream for the same session
 #[tokio::test]
 async fn should_reject_second_sse_stream_for_the_same_session() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -550,7 +617,7 @@ async fn should_reject_second_sse_stream_for_the_same_session() {
 // should reject GET requests without Accept: text/event-stream header
 #[tokio::test]
 async fn should_reject_get_requests() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Accept", "application/json");
@@ -573,7 +640,7 @@ async fn should_reject_get_requests() {
 // should reject POST requests without proper Accept header
 #[tokio::test]
 async fn reject_post_requests_without_accept_header() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -607,7 +674,7 @@ async fn reject_post_requests_without_accept_header() {
 //should reject unsupported Content-Type
 #[tokio::test]
 async fn should_reject_unsupported_content_type() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -642,7 +709,7 @@ async fn should_reject_unsupported_content_type() {
 // should handle JSON-RPC batch notification messages with 202 response
 #[tokio::test]
 async fn should_handle_batch_notification_messages_with_202_response() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let batch_notification = ClientMessages::Batch(vec![
         ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
@@ -663,7 +730,7 @@ async fn should_handle_batch_notification_messages_with_202_response() {
 // should properly handle invalid JSON data
 #[tokio::test]
 async fn should_properly_handle_invalid_json_data() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let response = send_post_request(
         &server.streamable_url,
@@ -684,7 +751,7 @@ async fn should_properly_handle_invalid_json_data() {
 // should send response messages to the connection that sent the request
 #[tokio::test]
 async fn should_send_response_messages_to_the_connection_that_sent_the_request() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message_1: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -764,7 +831,7 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
 // should properly handle DELETE requests and close session
 #[tokio::test]
 async fn should_properly_handle_delete_requests_and_close_session() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "text/plain");
@@ -785,7 +852,7 @@ async fn should_properly_handle_delete_requests_and_close_session() {
 // should reject DELETE requests with invalid session ID
 #[tokio::test]
 async fn should_reject_delete_requests_with_invalid_session_id() {
-    let (server, _session_id) = initialize_server(None).await.unwrap();
+    let (server, _session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "text/plain");
@@ -819,7 +886,7 @@ async fn should_reject_delete_requests_with_invalid_session_id() {
 // should accept requests without protocol version header
 #[tokio::test]
 async fn should_accept_requests_without_protocol_version_header() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "application/json");
@@ -846,7 +913,7 @@ async fn should_accept_requests_without_protocol_version_header() {
 // should reject requests with unsupported protocol version
 #[tokio::test]
 async fn should_reject_requests_with_unsupported_protocol_version() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "application/json");
@@ -878,7 +945,7 @@ async fn should_reject_requests_with_unsupported_protocol_version() {
 // should handle protocol version validation for get requests
 #[tokio::test]
 async fn should_handle_protocol_version_validation_for_get_requests() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "application/json");
@@ -903,7 +970,7 @@ async fn should_handle_protocol_version_validation_for_get_requests() {
 // should handle protocol version validation for DELETE requests
 #[tokio::test]
 async fn should_handle_protocol_version_validation_for_delete_requests() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "application/json");
@@ -931,7 +998,7 @@ async fn should_handle_protocol_version_validation_for_delete_requests() {
 // should return JSON response for a single request
 #[tokio::test]
 async fn should_return_json_response_for_a_single_request() {
-    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let (server, session_id) = initialize_server(Some(true), None).await.unwrap();
 
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
@@ -975,7 +1042,7 @@ async fn should_return_json_response_for_a_single_request() {
 // should return JSON response for batch requests
 #[tokio::test]
 async fn should_return_json_response_for_a_batch_request() {
-    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let (server, session_id) = initialize_server(Some(true), None).await.unwrap();
 
     let json_rpc_message_1: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_1".to_string()),
@@ -1053,7 +1120,7 @@ async fn should_return_json_response_for_a_batch_request() {
 // should handle batch request messages with SSE stream for responses
 #[tokio::test]
 async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
-    let (server, session_id) = initialize_server(None).await.unwrap();
+    let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let json_rpc_message_1: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_1".to_string()),
@@ -1131,18 +1198,18 @@ async fn should_accept_requests_with_allowed_host_headers() {
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
     let server_options = HyperServerOptions {
-        port: 8090,
+        port: 9090,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["127.0.0.1:8090".to_string()]),
+        allowed_hosts: Some(vec!["127.0.0.1:9090".to_string()]),
         dns_rebinding_protection: true,
         ..Default::default()
     };
 
     let server = create_start_server(server_options).await;
 
-    tokio::time::sleep(Duration::from_millis(250)).await;
+    tokio::time::sleep(Duration::from_millis(350)).await;
     let response = send_post_request(
         &server.streamable_url,
         &serde_json::to_string(&json_rpc_message).unwrap(),
@@ -1372,7 +1439,7 @@ async fn should_skip_all_validations_when_false() {
 #[tokio::test]
 async fn should_store_and_include_event_ids_in_server_sse_messages() {
     common::init_tracing();
-    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let (server, session_id) = initialize_server(Some(true), None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
@@ -1447,7 +1514,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 #[tokio::test]
 async fn should_store_and_replay_mcp_server_tool_notifications() {
     common::init_tracing();
-    let (server, session_id) = initialize_server(Some(true)).await.unwrap();
+    let (server, session_id) = initialize_server(Some(true), None).await.unwrap();
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -1517,6 +1584,130 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     assert_eq!(notification1.params.data.as_str().unwrap(), "notification2");
 }
 
+#[tokio::test]
+async fn metadata_requires_get_method() {
+    common::init_tracing();
+    let auth_map = HashMap::new();
+    let (server, _session_id) = initialize_server(Some(true), Some(auth_map)).await.unwrap();
+
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Accept", "application/json, text/event-stream");
+
+    let url = Url::parse(&server.streamable_url).unwrap();
+    let url = url.join("/.well-known/oauth-authorization-server").unwrap();
+    let response = send_post_request(&url.to_string(), "", None, Some(headers))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
+async fn should_return_the_metadata_object_with_cors() {
+    common::init_tracing();
+    let auth_map = HashMap::new();
+    let (server, _session_id) = initialize_server(Some(true), Some(auth_map)).await.unwrap();
+
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Accept", "application/json, text/event-stream");
+    headers.insert("Origin", "https://example.com");
+
+    let url = Url::parse(&server.streamable_url).unwrap();
+    let url = url.join("/.well-known/oauth-authorization-server").unwrap();
+    let response = send_get_request(&url.to_string(), Some(headers))
+        .await
+        .unwrap();
+
+    let allow_origin = response.headers().get(ACCESS_CONTROL_ALLOW_ORIGIN).unwrap();
+    assert_eq!(allow_origin, "*");
+
+    let metadata = response.json::<Value>().await.unwrap();
+    let issuer = metadata.get("issuer").unwrap().as_str().unwrap();
+    assert_eq!(issuer, "http://localhost:3030/");
+}
+
+#[tokio::test]
+// supports OPTIONS preflight requests
+async fn should_support_options_preflight_requests() {
+    common::init_tracing();
+    let auth_map = HashMap::new();
+    let (server, _session_id) = initialize_server(Some(true), Some(auth_map)).await.unwrap();
+
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Access-Control-Request-Method", "GET");
+    headers.insert("Origin", "https://example.com");
+
+    let url = Url::parse(&server.streamable_url).unwrap();
+    let url = url.join("/.well-known/oauth-authorization-server").unwrap();
+    let response = send_option_request(&url.to_string(), Some(headers))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let allow_origin = response.headers().get(ACCESS_CONTROL_ALLOW_ORIGIN).unwrap();
+    assert_eq!(allow_origin, "*");
+}
+
+#[tokio::test]
+// should call a tool with authInfo when authenticated
+async fn should_call_a_tool_with_auth_info_when_authenticated() {
+    common::init_tracing();
+    let auth_map = HashMap::new();
+    let (server, session_id) = initialize_server(Some(false), Some(auth_map))
+        .await
+        .unwrap();
+
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        CallToolRequest::new(CallToolRequestParams {
+            arguments: None,
+            name: "display_auth_info".to_string(),
+        })
+        .into(),
+    );
+
+    let response = send_post_request(
+        &server.streamable_url,
+        &serde_json::to_string(&json_rpc_message).unwrap(),
+        Some(&session_id),
+        Some(HashMap::from([
+            (
+                AUTHORIZATION.as_str(),
+                format!("Bearer {VALID_ACCESS_TOKEN}").as_str(),
+            ),
+            (CONTENT_TYPE.as_str(), "application/json"),
+            (ACCEPT.as_str(), "application/json, text/event-stream"),
+        ])),
+    )
+    .await
+    .expect("Request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let events = read_sse_event(response, 1).await.unwrap();
+    let message: ServerJsonrpcResponse = serde_json::from_str(&events[0].2).unwrap();
+
+    assert!(matches!(message.id, RequestId::Integer(1)));
+
+    let ResultFromServer::ServerResult(ServerResult::CallToolResult(result)) = message.result
+    else {
+        panic!("invalid CallToolResult")
+    };
+
+    let response_json: Value =
+        serde_json::from_str(&result.content[0].as_text_content().unwrap().text).unwrap();
+
+    assert_eq!(response_json["client_id"], "valid-client-id");
+    assert_eq!(response_json["token_unique_id"], "valid-access-token");
+
+    assert!(response_json["scopes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| ["mcp", "mcp:tools"].contains(&s.as_str().unwrap())),);
+}
 // should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
 // NA: should reject second initialization request
@@ -1525,8 +1716,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
 // should reject requests to uninitialized server
 // should accept requests with matching protocol version
 // should accept when protocol version differs from negotiated version
-// should call a tool with authInfo
-// should calls tool without authInfo when it is optional
+
 // should accept pre-parsed request body
 // should handle pre-parsed batch messages
 // should prefer pre-parsed body over request body

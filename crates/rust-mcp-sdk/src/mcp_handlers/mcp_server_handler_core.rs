@@ -1,4 +1,4 @@
-use crate::mcp_traits::mcp_server::McpServer;
+use crate::mcp_traits::McpServer;
 use crate::schema::schema_utils::*;
 use crate::schema::*;
 use async_trait::async_trait;

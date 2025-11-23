@@ -1,3 +1,5 @@
+#[cfg(feature = "auth")]
+pub mod auth_routes;
 pub mod fallback_routes;
 pub mod messages_routes;
 #[cfg(feature = "sse")]
@@ -5,7 +7,8 @@ pub mod sse_routes;
 pub mod streamable_http_routes;
 
 use super::HyperServerOptions;
-use crate::mcp_http::{McpAppState, McpHttpHandler};
+use crate::mcp_http::McpAppState;
+use crate::mcp_http::McpHttpHandler;
 use axum::{Extension, Router};
 use std::sync::Arc;
 
@@ -20,33 +23,41 @@ use std::sync::Arc;
 ///
 /// # Returns
 /// * `Router` - An Axum router configured with all application routes and state
+///
 pub fn app_routes(
     state: Arc<McpAppState>,
     server_options: &HyperServerOptions,
     http_handler: McpHttpHandler,
 ) -> Router {
-    let router: Router = Router::new()
-        .merge(streamable_http_routes::routes(
+    let http_handler = Arc::new(http_handler);
+
+    let router = {
+        let mut router = Router::new();
+
+        #[cfg(feature = "auth")]
+        {
+            router = router.merge(auth_routes::routes(http_handler.clone()));
+        }
+
+        router = router.merge(streamable_http_routes::routes(
             server_options.streamable_http_endpoint(),
-        ))
-        .merge({
-            let mut r = Router::new();
-            #[cfg(feature = "sse")]
-            if server_options.sse_support {
-                r = r
-                    .merge(sse_routes::routes(
-                        server_options.sse_endpoint(),
-                        server_options.sse_messages_endpoint(),
-                    ))
-                    .merge(messages_routes::routes(
-                        server_options.sse_messages_endpoint(),
-                    ))
-            }
-            r
-        })
-        .with_state(state)
-        .merge(fallback_routes::routes())
-        .layer(Extension(Arc::new(http_handler)));
+        ));
+
+        #[cfg(feature = "sse")]
+        {
+            router = router
+                .merge(sse_routes::routes(
+                    server_options.sse_endpoint(),
+                    server_options.sse_messages_endpoint(),
+                ))
+                .merge(messages_routes::routes(
+                    server_options.sse_messages_endpoint(),
+                ));
+        }
+
+        router = router.merge(fallback_routes::routes());
+        router.with_state(state).layer(Extension(http_handler))
+    };
 
     router
 }

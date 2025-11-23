@@ -5,7 +5,7 @@
 //! responses. In a real-world application, you might extend this to
 //! include structured logging, tracing, timing, or error reporting.
 use crate::{
-    mcp_http::{middleware::BoxFutureResponse, types::GenericBody, McpAppState, Middleware},
+    mcp_http::{types::GenericBody, McpAppState, Middleware, MiddlewareNext},
     mcp_server::error::TransportServerResult,
 };
 use async_trait::async_trait;
@@ -24,9 +24,7 @@ impl Middleware for LoggingMiddleware {
         &self,
         req: Request<&'req str>,
         state: Arc<McpAppState>,
-        next: Arc<
-            dyn Fn(Request<&'req str>, Arc<McpAppState>) -> BoxFutureResponse<'req> + Send + Sync,
-        >,
+        next: MiddlewareNext<'req>,
     ) -> TransportServerResult<Response<GenericBody>> {
         println!("➡️ Logging request: {}", req.uri());
         let res = next(req, state).await?;

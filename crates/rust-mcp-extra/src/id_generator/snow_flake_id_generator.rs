@@ -65,10 +65,10 @@ impl SnowflakeIdGenerator {
         let last_ts = self.last_timestamp.load(Ordering::Relaxed);
 
         let sequence = if timestamp == last_ts {
-            // same millisecond — increment sequence
+            // same millisecond - increment sequence
             let seq = self.sequence.fetch_add(1, Ordering::Relaxed) & 0xFFF; // 12 bits
             if seq == 0 {
-                // Sequence overflow — wait for next ms
+                // Sequence overflow - wait for next ms
                 while timestamp <= last_ts {
                     timestamp = self.current_timestamp();
                 }

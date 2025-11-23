@@ -1,10 +1,16 @@
-pub mod cors_middleware;
-pub(crate) mod dns_rebind_protector;
+#[cfg(feature = "auth")]
+mod auth_middleware;
+mod cors_middleware;
+mod dns_rebind_protector;
 pub mod logging_middleware;
 
-use super::types::{BoxFutureResponse, GenericBody, RequestHandler};
+use super::types::{GenericBody, RequestHandler};
 use crate::mcp_http::{McpAppState, MiddlewareNext};
 use crate::mcp_server::error::TransportServerResult;
+#[cfg(feature = "auth")]
+pub(crate) use auth_middleware::*;
+pub use cors_middleware::*;
+pub(crate) use dns_rebind_protector::*;
 use http::{Request, Response};
 use std::sync::Arc;
 
@@ -19,21 +25,24 @@ pub trait Middleware: Send + Sync + 'static {
 }
 
 /// Build the final handler by folding the middlewares **in reverse**.
-pub fn compose(
-    middlewares: &Vec<Arc<dyn Middleware>>,
-    final_handler: RequestHandler,
-) -> RequestHandler {
+/// Each middleware and handler is consumed exactly once.
+pub fn compose<'a, I>(middlewares: I, final_handler: RequestHandler) -> RequestHandler
+where
+    I: IntoIterator<Item = &'a Arc<dyn Middleware>>,
+    I::IntoIter: DoubleEndedIterator,
+{
+    // Start with the final handler
     let mut handler = final_handler;
 
-    for mw in middlewares.iter().rev() {
-        let mw = mw.clone();
-        let next = handler.clone();
+    // Fold middlewares in reverse order
+    for mw in middlewares.into_iter().rev() {
+        let mw = Arc::clone(mw);
+        let next = handler;
 
-        handler = Arc::new(move |req: Request<&str>, state: Arc<McpAppState>| {
-            let mw = mw.clone();
-            let next = next.clone();
-
-            Box::pin(async move { mw.handle(req, state, next).await }) as BoxFutureResponse<'_>
+        // Each loop iteration consumes `next` and returns a new boxed FnOnce
+        handler = Box::new(move |req: Request<&str>, state: Arc<McpAppState>| {
+            let mw = Arc::clone(&mw);
+            Box::pin(async move { mw.handle(req, state, next).await })
         });
     }
 
@@ -242,7 +251,7 @@ mod tests {
 
     /// Final handler – returns a fixed response
     fn final_handler(body: &'static str, status: StatusCode) -> RequestHandler {
-        Arc::new(move |_req, _| {
+        Box::new(move |_req, _| {
             let resp = Response::builder()
                 .status(status)
                 .body(GenericBody::from_string(body.to_string()))
@@ -261,6 +270,7 @@ mod tests {
         let mw3 = Arc::new(TestMiddleware::new(3));
 
         let middlewares: Vec<Arc<dyn Middleware>> = vec![mw1.clone(), mw2.clone(), mw3.clone()];
+
         let handler = final_handler("final", StatusCode::OK);
         let composed = compose(&middlewares, handler);
 
@@ -440,7 +450,7 @@ mod tests {
         let mw2 = Arc::new(TestMiddleware::new(2));
 
         let middlewares: Vec<Arc<dyn Middleware>> = vec![mw1.clone(), mw2.clone()];
-        let handler: RequestHandler = Arc::new(move |req, _| {
+        let handler: RequestHandler = Box::new(move |req, _| {
             let body = req.into_body().to_string();
             Box::pin(async move {
                 Ok(Response::builder()

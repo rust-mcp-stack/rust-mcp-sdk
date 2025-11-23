@@ -330,7 +330,6 @@ impl MockServerHandle {
         let requests = self.get_history().await;
 
         let len = requests.len();
-        println!("\n>>>  {len} request(s) received <<<");
 
         for (index, (request, response)) in requests.iter().enumerate() {
             println!(

@@ -1,3 +1,6 @@
+use crate::auth::AuthInfo;
+use crate::{error::SdkResult, utils::format_assertion_message};
+
 use crate::schema::{
     schema_utils::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
@@ -14,10 +17,10 @@ use crate::schema::{
     ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
     SetLevelRequest, ToolListChangedNotification, ToolListChangedNotificationParams,
 };
-use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
+use tokio::sync::RwLockReadGuard;
 
 //TODO: support options , such as enforceStrictCapabilities
 #[async_trait]
@@ -26,6 +29,10 @@ pub trait McpServer: Sync + Send {
     async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()>;
     fn server_info(&self) -> &InitializeResult;
     fn client_info(&self) -> Option<InitializeRequestParams>;
+
+    async fn auth_info(&self) -> RwLockReadGuard<'_, Option<AuthInfo>>;
+    async fn auth_info_cloned(&self) -> Option<AuthInfo>;
+    async fn update_auth_info(&self, auth_info: Option<AuthInfo>);
 
     async fn wait_for_initialization(&self);
 

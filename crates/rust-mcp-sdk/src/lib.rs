@@ -2,7 +2,8 @@ pub mod error;
 #[cfg(feature = "hyper-server")]
 mod hyper_servers;
 mod mcp_handlers;
-#[cfg(feature = "hyper-server")]
+
+#[cfg(any(feature = "hyper-server", feature = "auth"))]
 pub mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
@@ -75,23 +76,17 @@ pub mod mcp_server {
     pub use super::mcp_runtimes::server_runtime::ServerRuntime;
 
     #[cfg(feature = "hyper-server")]
-    pub use super::hyper_servers::hyper_server;
-    #[cfg(feature = "hyper-server")]
-    pub use super::hyper_servers::hyper_server_core;
-    #[cfg(feature = "hyper-server")]
     pub use super::hyper_servers::*;
     pub use super::utils::enforce_compatible_protocol_version;
+    #[cfg(feature = "auth")]
+    pub use super::utils::join_url;
 
     #[cfg(feature = "hyper-server")]
     pub use super::mcp_http::{McpAppState, McpHttpHandler};
 }
 
-#[cfg(feature = "client")]
-pub use mcp_traits::mcp_client::*;
-
-#[cfg(feature = "server")]
-pub use mcp_traits::mcp_server::*;
-
+pub mod auth;
+pub use mcp_traits::*;
 pub use rust_mcp_transport::error::*;
 pub use rust_mcp_transport::*;
 

@@ -1,3 +1,11 @@
+use super::{
+    error::{TransportServerError, TransportServerResult},
+    routes::app_routes,
+};
+#[cfg(feature = "auth")]
+use crate::auth::AuthProvider;
+#[cfg(feature = "auth")]
+use crate::mcp_http::middleware::AuthMiddleware;
 use crate::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
@@ -5,16 +13,19 @@ use crate::{
         http_utils::{
             DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
         },
-        middleware::dns_rebind_protector::DnsRebindProtector,
+        middleware::DnsRebindProtector,
         McpAppState, McpHttpHandler,
     },
     mcp_server::hyper_runtime::HyperRuntime,
-    mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
+    mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
 };
+use crate::{mcp_http::Middleware, schema::InitializeResult};
+use axum::Router;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -22,14 +33,6 @@ use std::{
     time::Duration,
 };
 use tokio::signal;
-
-use super::{
-    error::{TransportServerError, TransportServerResult},
-    routes::app_routes,
-};
-use crate::schema::InitializeResult;
-use axum::Router;
-use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
@@ -99,6 +102,10 @@ pub struct HyperServerOptions {
     /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     /// Applicable only if sse_support is true
     pub custom_messages_endpoint: Option<String>,
+
+    /// Optional authentication provider for protecting MCP server.
+    #[cfg(feature = "auth")]
+    pub auth: Option<Arc<dyn AuthProvider>>,
 }
 
 impl HyperServerOptions {
@@ -235,6 +242,8 @@ impl Default for HyperServerOptions {
             allowed_origins: None,
             dns_rebinding_protection: false,
             event_store: None,
+            #[cfg(feature = "auth")]
+            auth: None,
         }
     }
 }
@@ -279,16 +288,32 @@ impl HyperServer {
             event_store: server_options.event_store.as_ref().map(Arc::clone),
         });
 
-        let mut http_handler = McpHttpHandler::new();
-
+        // populate middlewares
+        let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
         if server_options.needs_dns_protection() {
-            http_handler.add_middleware(DnsRebindProtector::new(
+            //dns pritection middleware
+            middlewares.push(Arc::new(DnsRebindProtector::new(
                 server_options.allowed_hosts.take(),
                 server_options.allowed_origins.take(),
-            ));
+            )));
         }
 
+        let http_handler = {
+            #[cfg(feature = "auth")]
+            {
+                let auth_provider = server_options.auth.take();
+                // add auth middleware if there is a auth_provider
+                if let Some(auth_provider) = auth_provider.as_ref() {
+                    middlewares.push(Arc::new(AuthMiddleware::new(auth_provider.clone())))
+                }
+                McpHttpHandler::new(auth_provider, middlewares)
+            }
+            #[cfg(not(feature = "auth"))]
+            McpHttpHandler::new(middlewares)
+        };
+
         let app = app_routes(Arc::clone(&state), &server_options, http_handler);
+
         Self {
             app,
             state,

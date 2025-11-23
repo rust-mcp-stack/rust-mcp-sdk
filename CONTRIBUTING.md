@@ -24,7 +24,7 @@ Anyone can participate at any stage, whether it's discussing, triaging, or revie
 
 ### **Filing a Bug Report**
 
-When reporting a bug, use the provided issue template and fill in as many details as possible. Don’t worry if you can’t answer everything—just provide what you can.
+When reporting a bug, use the provided issue template and fill in as many details as possible. Don’t worry if you can’t answer everything-just provide what you can.
 
 ### **Fixing Issues**
 

@@ -8,6 +8,7 @@ use rust_mcp_macros::{mcp_tool, JsonSchema};
 use rust_mcp_schema::ProtocolVersion;
 use rust_mcp_sdk::mcp_client::ClientHandler;
 
+use rust_mcp_sdk::auth::{AuthInfo, AuthenticationError, OauthTokenVerifier};
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
 use std::process;
@@ -142,6 +143,31 @@ pub async fn send_get_request(
     client.get(url).headers(headers).send().await
 }
 
+pub async fn send_option_request(
+    base_url: &str,
+    extra_headers: Option<HashMap<&str, &str>>,
+) -> Result<Response, reqwest::Error> {
+    let client = Client::new();
+    let url = Url::parse(base_url).expect("Invalid URL");
+
+    let mut headers = reqwest::header::HeaderMap::new();
+
+    if let Some(extra) = extra_headers {
+        for (key, value) in extra {
+            headers.insert(
+                reqwest::header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
+                value.parse().unwrap(),
+            );
+        }
+    }
+
+    client
+        .request(reqwest::Method::OPTIONS, url)
+        .headers(headers)
+        .send()
+        .await
+}
+
 use futures::stream::Stream;
 
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
@@ -260,11 +286,10 @@ impl Xorshift {
     // Generate the next random u64 using Xorshift
     fn next_u64(&mut self) -> u64 {
         let mut x = self.state;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.state = x;
-        x
+        self.state = x.wrapping_add(0x9E3779B97F4A7C15);
+        x = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94D049BB133111EB);
+        x ^ (x >> 31)
     }
 
     // Generate a random u16 within a range [min, max]
@@ -346,6 +371,35 @@ pub mod sample_tools {
     }
 
     //******************//
+    //  AuthInfo Tool   //
+    //******************//
+    #[mcp_tool(
+        name = "display_auth_info",
+        description = "Displays auth_info if user is authenticated",
+        idempotent_hint = false,
+        destructive_hint = false,
+        open_world_hint = false,
+        read_only_hint = false
+    )]
+    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
+    pub struct DisplayAuthInfo {}
+    use rust_mcp_sdk::auth::AuthInfo;
+    impl DisplayAuthInfo {
+        pub fn call_tool(
+            &self,
+            auth_info: Option<AuthInfo>,
+        ) -> Result<CallToolResult, CallToolError> {
+            let message = format!("{}", serde_json::to_string(&auth_info).unwrap());
+            #[cfg(feature = "2025_06_18")]
+            return Ok(CallToolResult::text_content(vec![
+                rust_mcp_sdk::schema::TextContent::from(message),
+            ]));
+            #[cfg(not(feature = "2025_06_18"))]
+            return Ok(CallToolResult::text_content(message, None));
+        }
+    }
+
+    //******************//
     //  SayGoodbyeTool  //
     //******************//
     #[mcp_tool(
@@ -420,7 +474,6 @@ pub async fn wiremock_request(mock_server: &MockServer, index: usize) -> Request
 pub async fn debug_wiremock(mock_server: &MockServer) {
     let requests = mock_server.received_requests().await.unwrap();
     let len = requests.len();
-    println!(">>>  {len} request(s) received <<<");
 
     for (index, request) in requests.iter().enumerate() {
         println!("\n--- #{index} of {len} ---");
@@ -459,4 +512,33 @@ pub async fn wait_for_n_requests(
     })
     .await
     .unwrap();
+}
+
+pub struct TestTokenVerifier {
+    token_map: HashMap<String, AuthInfo>,
+}
+
+impl TestTokenVerifier {
+    pub fn new(token_map: HashMap<String, AuthInfo>) -> Self {
+        Self { token_map }
+    }
+}
+
+#[async_trait]
+impl OauthTokenVerifier for TestTokenVerifier {
+    async fn verify_token(&self, access_token: String) -> Result<AuthInfo, AuthenticationError> {
+        let info = self.token_map.get(&access_token);
+
+        let Some(info) = info else {
+            return Err(AuthenticationError::InactiveToken);
+        };
+
+        if info.expires_at.unwrap() < SystemTime::now() {
+            return Err(AuthenticationError::InvalidOrExpiredToken(
+                "expired".to_string(),
+            ));
+        }
+
+        Ok(info.clone())
+    }
 }

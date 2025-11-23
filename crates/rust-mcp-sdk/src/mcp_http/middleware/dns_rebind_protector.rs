@@ -15,9 +15,7 @@
 //! - If allowlist is `None` or empty → that check is skipped
 
 use crate::{
-    mcp_http::{
-        error_response, middleware::BoxFutureResponse, types::GenericBody, McpAppState, Middleware,
-    },
+    mcp_http::{error_response, types::GenericBody, McpAppState, Middleware, MiddlewareNext},
     mcp_server::error::TransportServerResult,
     schema::schema_utils::SdkError,
 };
@@ -73,9 +71,7 @@ impl Middleware for DnsRebindProtector {
         &self,
         req: Request<&'req str>,
         state: Arc<McpAppState>,
-        next: Arc<
-            dyn Fn(Request<&'req str>, Arc<McpAppState>) -> BoxFutureResponse<'req> + Send + Sync,
-        >,
+        next: MiddlewareNext<'req>,
     ) -> TransportServerResult<Response<GenericBody>> {
         if let Err(error) = self.protect_dns_rebinding(req.headers()).await {
             return error_response(StatusCode::FORBIDDEN, error);

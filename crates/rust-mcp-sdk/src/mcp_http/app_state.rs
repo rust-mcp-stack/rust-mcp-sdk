@@ -1,4 +1,4 @@
-use crate::mcp_traits::mcp_handler::McpServerHandler;
+use crate::mcp_traits::McpServerHandler;
 use crate::session_store::SessionStore;
 use crate::{id_generator::FastIdGenerator, mcp_traits::IdGenerator, schema::InitializeResult};
 use rust_mcp_transport::event_store::EventStore;

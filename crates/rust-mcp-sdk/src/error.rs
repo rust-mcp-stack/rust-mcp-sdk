@@ -1,5 +1,6 @@
+#[cfg(feature = "auth")]
+use crate::auth::AuthenticationError;
 use crate::schema::{ParseProtocolVersionError, RpcError};
-
 use rust_mcp_transport::error::TransportError;
 use thiserror::Error;
 use tokio::task::JoinError;
@@ -27,11 +28,18 @@ pub enum McpSdkError {
     #[error("{0}")]
     HyperServer(#[from] TransportServerError),
 
+    #[cfg(feature = "auth")]
+    #[error("{0}")]
+    AuthenticationError(#[from] AuthenticationError),
+
     #[error("{0}")]
     SdkError(#[from] crate::schema::schema_utils::SdkError),
 
     #[error("Protocol error: {kind}")]
     Protocol { kind: ProtocolErrorKind },
+
+    #[error("Server error: {description}")]
+    Internal { description: String },
 }
 
 // Sub-enum for protocol-related errors

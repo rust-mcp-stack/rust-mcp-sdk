@@ -1,10 +1,14 @@
 #[cfg(feature = "sse")]
+use super::http_utils::handle_sse_connection;
 use super::http_utils::{
-    accepts_event_stream, empty_response, error_response, handle_sse_connection, query_param,
-    validate_mcp_protocol_version_header,
+    accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
 };
 use super::types::GenericBody;
+use crate::auth::AuthInfo;
+#[cfg(feature = "auth")]
+use crate::auth::AuthProvider;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
+use crate::mcp_http::{GenericBodyExt, RequestExt};
 use crate::mcp_runtimes::server_runtime::DEFAULT_STREAM_ID;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
@@ -32,11 +36,14 @@ use std::sync::Arc;
 /// ```ignore
 /// let handle = with_middlewares!(self, Self::internal_handle_sse_message);
 /// handle
+///
+/// // OR
+/// let handler = with_middlewares!(self, Self::internal_handle_sse_message, extra_middlewares1, extra_middlewares2);
 /// ```
 #[macro_export]
 macro_rules! with_middlewares {
     ($self:ident, $handler:path) => {{
-        let final_handler: RequestHandler = std::sync::Arc::new(
+        let final_handler: RequestHandler = Box::new(
             move |req: http::Request<&str>,
                   state: std::sync::Arc<McpAppState>|
                   -> BoxFutureResponse<'_> {
@@ -45,25 +52,43 @@ macro_rules! with_middlewares {
         );
         $crate::mcp_http::middleware::compose(&$self.middlewares, final_handler)
     }};
+
+    // Handler + extra middleware(s)
+    ($self:ident, $handler:path, $($extra:expr),+ $(,)?) => {{
+        let final_handler: RequestHandler = Box::new(
+            move |req: http::Request<&str>,
+                  state: std::sync::Arc<McpAppState>|
+                  -> BoxFutureResponse<'_> {
+                Box::pin(async move { $handler(req, state).await })
+            },
+        );
+
+        // Chain $self.middlewares with any extra middleware iterators
+        let all = $self.middlewares.iter()
+            $(.chain($extra.iter()))+;
+
+        $crate::mcp_http::middleware::compose(all, final_handler)
+    }};
 }
 
 #[derive(Clone)]
 pub struct McpHttpHandler {
+    #[cfg(feature = "auth")]
+    auth: Option<Arc<dyn AuthProvider>>,
     middlewares: Vec<Arc<dyn Middleware>>,
 }
 
-impl Default for McpHttpHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl McpHttpHandler {
-    pub fn new() -> Self {
-        McpHttpHandler {
-            middlewares: vec![],
-        }
+    #[cfg(feature = "auth")]
+    pub fn new(auth: Option<Arc<dyn AuthProvider>>, middlewares: Vec<Arc<dyn Middleware>>) -> Self {
+        McpHttpHandler { auth, middlewares }
     }
+
+    #[cfg(not(feature = "auth"))]
+    pub fn new(middlewares: Vec<Arc<dyn Middleware>>) -> Self {
+        McpHttpHandler { middlewares }
+    }
+
     pub fn add_middleware<M: Middleware + 'static>(&mut self, middleware: M) {
         let m: Arc<dyn Middleware> = Arc::new(middleware);
         self.middlewares.push(m);
@@ -92,6 +117,42 @@ impl McpHttpHandler {
     }
 }
 
+// auth related methods
+#[cfg(feature = "auth")]
+impl McpHttpHandler {
+    pub fn oauth_endppoints(&self) -> Option<Vec<&String>> {
+        self.auth
+            .as_ref()
+            .and_then(|a| a.auth_endpoints().map(|e| e.keys().collect::<Vec<_>>()))
+    }
+
+    pub async fn handle_auth_requests(
+        &self,
+        request: http::Request<&str>,
+        state: Arc<McpAppState>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        let Some(auth_provider) = self.auth.as_ref() else {
+            return Err(TransportServerError::HttpError(
+                "Authentication is not supported by this server.".to_string(),
+            ));
+        };
+
+        let auth_provider = auth_provider.clone();
+        let final_handler: RequestHandler = Box::new(move |req, state| {
+            Box::pin(async move {
+                use futures::TryFutureExt;
+                auth_provider
+                    .handle_request(req, state)
+                    .map_err(|e| e)
+                    .await
+            })
+        });
+
+        let handle = compose(&[], final_handler);
+        handle(request, state).await
+    }
+}
+
 impl McpHttpHandler {
     /// Handles an MCP connection using the SSE (Server-Sent Events) transport.
     ///
@@ -112,10 +173,16 @@ impl McpHttpHandler {
         state: Arc<McpAppState>,
         sse_message_endpoint: Option<&str>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
-        let sse_endpoint = Arc::from(sse_message_endpoint.map(|s| s.to_string()));
-        let final_handler: RequestHandler = Arc::new(move |_req, state| {
-            let sse_endpoint = sse_endpoint.clone();
-            Box::pin(async move { handle_sse_connection(state, sse_endpoint.as_deref()).await })
+        use crate::auth::AuthInfo;
+        use crate::mcp_http::RequestExt;
+
+        let (request, auth_info) = request.take::<AuthInfo>();
+
+        let sse_endpoint = sse_message_endpoint.map(|s| s.to_string());
+        let final_handler: RequestHandler = Box::new(move |_req, state| {
+            Box::pin(async move {
+                handle_sse_connection(state, sse_endpoint.as_deref(), auth_info).await
+            })
         });
         let handle = compose(&self.middlewares, final_handler);
         handle(request, state).await
@@ -205,7 +272,7 @@ impl McpHttpHandler {
 
         http::Response::builder()
             .status(StatusCode::ACCEPTED)
-            .body(empty_response())
+            .body(GenericBody::empty())
             .map_err(|err| TransportServerError::HttpError(err.to_string()))
     }
 
@@ -213,10 +280,13 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
+        let (request, auth_info) = request.take::<AuthInfo>();
+
         let method = request.method();
+
         let response = match method {
-            &http::Method::GET => return Self::handle_http_get(request, state).await,
-            &http::Method::POST => return Self::handle_http_post(request, state).await,
+            &http::Method::GET => return Self::handle_http_get(request, state, auth_info).await,
+            &http::Method::POST => return Self::handle_http_post(request, state, auth_info).await,
             &http::Method::DELETE => return Self::handle_http_delete(request, state).await,
             other => {
                 let error = SdkError::bad_request().with_message(&format!(
@@ -233,6 +303,7 @@ impl McpHttpHandler {
     async fn handle_http_post(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
+        auth_info: Option<AuthInfo>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
@@ -265,14 +336,14 @@ impl McpHttpHandler {
             // has session-id => write to the existing stream
             Some(id) => {
                 if state.enable_json_response {
-                    process_incoming_message_return(id, state, payload).await
+                    process_incoming_message_return(id, state, payload, auth_info).await
                 } else {
-                    process_incoming_message(id, state, payload).await
+                    process_incoming_message(id, state, payload, auth_info).await
                 }
             }
             None => match valid_initialize_method(payload) {
                 Ok(_) => {
-                    return start_new_session(state, payload).await;
+                    return start_new_session(state, payload, auth_info).await;
                 }
                 Err(McpSdkError::SdkError(error)) => error_response(StatusCode::BAD_REQUEST, error),
                 Err(error) => {
@@ -289,6 +360,7 @@ impl McpHttpHandler {
     async fn handle_http_get(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
+        auth_info: Option<AuthInfo>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
@@ -316,7 +388,8 @@ impl McpHttpHandler {
 
         let response = match session_id {
             Some(session_id) => {
-                let res = create_standalone_stream(session_id, last_event_id, state).await;
+                let res =
+                    create_standalone_stream(session_id, last_event_id, state, auth_info).await;
                 res
             }
             None => {

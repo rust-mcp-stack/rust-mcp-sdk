@@ -69,6 +69,7 @@ jobs:
         uses: actions-rust-lang/audit@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: RUSTSEC-2023-0071
         if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
 
       # install nodejs that is required for tests

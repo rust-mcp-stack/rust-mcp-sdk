@@ -10,7 +10,7 @@ use crate::schema::{ElicitRequest, ElicitResult};
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::mcp_traits::mcp_client::McpClient;
+use crate::mcp_traits::McpClient;
 
 /// Defines the `ClientHandler` trait for handling Model Context Protocol (MCP) operations on a client.
 /// This trait provides default implementations for request and notification handlers in an MCP client,

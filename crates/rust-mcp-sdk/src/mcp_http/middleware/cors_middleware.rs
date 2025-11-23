@@ -11,11 +11,7 @@
 //! - `Access-Control-Expose-Headers` support
 
 use crate::{
-    mcp_http::{
-        http_utils::{build_response, empty_response},
-        types::GenericBody,
-        McpAppState, Middleware, MiddlewareNext,
-    },
+    mcp_http::{types::GenericBody, GenericBodyExt, McpAppState, Middleware, MiddlewareNext},
     mcp_server::error::TransportServerResult,
 };
 use http::{
@@ -27,6 +23,7 @@ use http::{
     },
     Method, Request, Response, StatusCode,
 };
+use rust_mcp_transport::MCP_SESSION_ID_HEADER;
 use std::{collections::HashSet, sync::Arc};
 
 /// Configuration for CORS behavior.
@@ -45,7 +42,7 @@ pub struct CorsConfig {
 
     /// Whether to allow credentials (cookies, HTTP auth, etc).
     ///
-    /// **Important**: When `true`, `allow_origins` cannot be `Any` — browsers reject `*`.
+    /// **Important**: When `true`, `allow_origins` cannot be `Any` - browsers reject `*`.
     pub allow_credentials: bool,
 
     /// How long (in seconds) the preflight response can be cached.
@@ -60,7 +57,11 @@ impl Default for CorsConfig {
         Self {
             allow_origins: AllowOrigins::Any,
             allow_methods: vec![Method::GET, Method::POST, Method::OPTIONS],
-            allow_headers: vec![header::CONTENT_TYPE, header::AUTHORIZATION],
+            allow_headers: vec![
+                header::CONTENT_TYPE,
+                header::AUTHORIZATION,
+                HeaderName::from_static(MCP_SESSION_ID_HEADER),
+            ],
             allow_credentials: false,
             max_age: Some(86_400), // 24 hours
             expose_headers: vec![],
@@ -87,7 +88,7 @@ pub enum AllowOrigins {
 ///
 /// Handles both **preflight** (`OPTIONS`) and **actual** requests,
 /// adding appropriate CORS headers and rejecting invalid origins/methods/headers.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CorsMiddleware {
     config: Arc<CorsConfig>,
 }
@@ -100,7 +101,7 @@ impl CorsMiddleware {
         }
     }
 
-    /// Create a permissive CORS config — useful for public APIs or local dev.
+    /// Create a permissive CORS config - useful for public APIs or local dev.
     ///
     /// Allows all common methods, credentials, and common headers.
     pub fn permissive() -> Self {
@@ -158,7 +159,7 @@ impl CorsMiddleware {
         let allowed_origin = self.resolve_allowed_origin(origin);
         let mut resp = Response::builder()
             .status(StatusCode::NO_CONTENT)
-            .body(empty_response())
+            .body(GenericBody::empty())
             .expect("preflight response is static");
 
         let headers = resp.headers_mut();
@@ -293,36 +294,38 @@ impl Middleware for CorsMiddleware {
             let origin = match origin {
                 Some(o) => o,
                 None => {
-                    // Some tools send preflight without Origin — allow if Any
+                    // Some tools send preflight without Origin - allow if Any
                     if matches!(self.config.allow_origins, AllowOrigins::Any)
                         && !self.config.allow_credentials
                     {
                         return Ok(self.preflight_response("*"));
                     } else {
-                        let response = build_response(
+                        return Ok(GenericBody::build_response(
                             StatusCode::BAD_REQUEST,
                             "CORS origin missing in preflight".to_string(),
-                        );
-                        return response;
+                            None,
+                        ));
                     }
                 }
             };
 
             // Validate origin
             if self.resolve_allowed_origin(&origin).is_none() {
-                let response =
-                    build_response(StatusCode::FORBIDDEN, "CORS origin not allowed".to_string());
-                return response;
+                return Ok(GenericBody::build_response(
+                    StatusCode::FORBIDDEN,
+                    "CORS origin not allowed".to_string(),
+                    None,
+                ));
             }
 
             // Validate method
             if let Some(m) = requested_method {
                 if !self.config.allow_methods.contains(&m) {
-                    let response = build_response(
+                    return Ok(GenericBody::build_response(
                         StatusCode::METHOD_NOT_ALLOWED,
                         "CORS method not allowed".to_string(),
-                    );
-                    return response;
+                        None,
+                    ));
                 }
             }
 
@@ -335,14 +338,14 @@ impl Middleware for CorsMiddleware {
                 .collect::<HashSet<_>>();
 
             if !requested_headers.is_subset(&allowed) {
-                let response = build_response(
+                return Ok(GenericBody::build_response(
                     StatusCode::BAD_REQUEST,
                     "CORS header not allowed".to_string(),
-                );
-                return response;
+                    None,
+                ));
             }
 
-            // All good — return preflight
+            // All good - return preflight
             return Ok(self.preflight_response(&origin));
         }
 
@@ -404,7 +407,7 @@ mod tests {
     }
 
     fn make_handler<'req>(status: StatusCode, body: &'static str) -> MiddlewareNext<'req> {
-        Arc::new(move |_, _| {
+        Box::new(move |_, _| {
             let resp = Response::builder()
                 .status(status)
                 .body(GenericBody::from_string(body.to_string()))

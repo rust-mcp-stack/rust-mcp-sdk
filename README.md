@@ -21,37 +21,35 @@ Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-sche
 **rust-mcp-sdk**  supports all three official versions of the MCP protocol.
 By default, it uses the **2025-06-18** version, but earlier versions can be enabled via Cargo features.
 
-
-
-This project supports following transports:
-- **Stdio** (Standard Input/Output)
-- **Streamable HTTP**
-- **SSE** (Server-Sent Events)
-
-
 🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `Streamable HTTP` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
 
 
-**MCP Streamable HTTP Support**
-- ✅ Streamable HTTP Support for MCP Servers
+**Features**
+- ✅ Stdio, SSE and Streamable HTTP Support
+- ✅ Supports multiple MCP protocol versions
 - ✅ DNS Rebinding Protection
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
-- ✅ Streamable HTTP Support for MCP Clients
 - ✅ Resumability
-- ⬜ Oauth Authentication
+- ✅ OAuth Authentication for MCP Servers
+  - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
+    - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
+    - ✅ **WorkOS** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#workos-authkit))
+    - ✅ **Scalekit** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#scalekit))
+- ⬜ OAuth Authentication for MCP Clients
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
 ## Table of Contents
+- [Getting Started](#getting-started)
 - [Usage Examples](#usage-examples)
   - [MCP Server (stdio)](#mcp-server-stdio)
   - [MCP Server (Streamable HTTP)](#mcp-server-streamable-http)
   - [MCP Client (stdio)](#mcp-client-stdio)
-  - [MCP Client (Streamable HTTP)](#mcp-client_streamable-http))
+  - [MCP Client (Streamable HTTP)](#mcp-client-streamable-http)
   - [MCP Client (sse)](#mcp-client-sse)
+- [Authentication](#authentication)
 - [Macros](#macros)
-- [Getting Started](#getting-started)
 - [HyperServerOptions](#hyperserveroptions)
   - [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
@@ -67,6 +65,12 @@ This project supports following transports:
 - [Contributing](#contributing)
 - [Development](#development)
 - [License](#license)
+
+
+## Getting Started
+
+If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
+
 
 ## Usage Examples
 
@@ -387,6 +391,26 @@ Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost
 👉 see [examples/simple-mcp-client-sse](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-sse) for a complete working example.
 
 
+## Authentication
+MCP server can verify tokens issued by other systems, integrate with external identity providers, or manage the entire authentication process itself. Each option offers a different balance of simplicity, security, and control.
+
+ ### RemoteAuthProvider
+  [RemoteAuthProvider](src/mcp_http/auth/auth_provider/remote_auth_provider.rs) RemoteAuthProvider enables authentication with identity providers that support Dynamic Client Registration (DCR) such as KeyCloak and WorkOS AuthKit, letting MCP clients auto-register and obtain credentials without manual setup.
+  
+👉 See the [server-oauth-remote](examples/auth/server-oauth-remote) example for how to use RemoteAuthProvider with a DCR-capable remote provider. 
+
+👉 [rust-mcp-extra](https://crates.io/crates/rust-mcp-extra) also offers drop-in auth providers for common identity platforms, working seamlessly with rust-mcp-sdk:
+ - [Keycloack auth example](crates/rust-mcp-extra/README.md#keycloak)
+ - [WorkOS autn example](crates/rust-mcp-extra/README.md#workos-authkit)
+ 
+
+  
+ ### OAuthProxy  
+ OAuthProxy enables authentication with OAuth providers that don’t support Dynamic Client Registration (DCR).It accepts any client registration request, handles the DCR on your server side and then uses your pre-registered app credentials upstream.The proxy also forwards callbacks, allowing dynamic redirect URIs to work with providers that require fixed ones.
+ 
+> ⚠️ OAuthProxy support is still in development, please use RemoteAuthProvider for now.
+ 
+
 ## Macros
 [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) includes several helpful macros that simplify common tasks when building MCP servers and clients. For example, they can automatically generate tool specifications and tool schemas right from your structs, or assist with elicitation requests and responses making them completely type safe.
 
@@ -495,10 +519,6 @@ let user_info = UserInfo::from_content_map(result.content)?;
 💻 For mre info please see :
 - https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-macros
 
-## Getting Started
-
-If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
-
 ## HyperServerOptions
 
 HyperServer is a lightweight Axum-based server that streamlines MCP servers by supporting **Streamable HTTP** and **SSE** transports. It supports simultaneous client connections, internal session management, and includes built-in security features like DNS rebinding protection and more.
@@ -588,6 +608,9 @@ pub struct HyperServerOptions {
     /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
     /// Applicable only if sse_support is true
     pub custom_messages_endpoint: Option<String>,
+
+    /// Optional authentication provider for protecting MCP server.
+    pub auth: Option<Arc<dyn AuthProvider>>,
 }
 
 ```
@@ -625,7 +648,7 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `2025_03_26` : Activates MCP Protocol version 2025-03-26
 - `2024_11_05` : Activates MCP Protocol version 2024-11-05
 
-> Note: MCP protocol versions are mutually exclusive—only one can be active at any given time.
+> Note: MCP protocol versions are mutually exclusive-only one can be active at any given time.
 
 ### Default Features
 

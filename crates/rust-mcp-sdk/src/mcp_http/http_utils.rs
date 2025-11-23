@@ -1,12 +1,14 @@
+use crate::auth::AuthInfo;
 use crate::mcp_http::types::GenericBody;
 use crate::schema::schema_utils::{ClientMessage, SdkError};
+use crate::McpServer;
 use crate::{
     error::SdkResult,
     hyper_servers::error::{TransportServerError, TransportServerResult},
     mcp_http::McpAppState,
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
-    mcp_traits::{mcp_handler::McpServerHandler, IdGenerator},
+    mcp_traits::{IdGenerator, McpServerHandler},
     utils::validate_mcp_protocol_version,
 };
 use axum::http::HeaderValue;
@@ -14,13 +16,13 @@ use bytes::Bytes;
 use futures::stream;
 use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE};
 use http_body::Frame;
-use http_body_util::StreamBody;
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Full, StreamBody};
 use hyper::{HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseEvent, SseTransport, StreamId, ID_SEPARATOR,
     MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
 };
+use serde_json::{Map, Value};
 use std::sync::Arc;
 use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 use tokio_stream::StreamExt;
@@ -32,31 +34,6 @@ pub(crate) const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 // Default Streamable HTTP endpoint path
 pub(crate) const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 const DUPLEX_BUFFER_SIZE: usize = 8192;
-
-/// Creates an empty HTTP response body.
-///
-/// This function constructs a `GenericBody` containing an empty `Bytes` buffer,
-/// The body is wrapped in a `BoxBody` to ensure type erasure and compatibility
-/// with the HTTP framework.
-pub fn empty_response() -> GenericBody {
-    Full::new(Bytes::new())
-        .map_err(|err| TransportServerError::HttpError(err.to_string()))
-        .boxed()
-}
-
-pub fn build_response(
-    status_code: StatusCode,
-    payload: String,
-) -> Result<http::Response<GenericBody>, TransportServerError> {
-    let body = Full::new(Bytes::from(payload))
-        .map_err(|err| TransportServerError::HttpError(err.to_string()))
-        .boxed();
-
-    http::Response::builder()
-        .status(status_code)
-        .body(body)
-        .map_err(|err| TransportServerError::HttpError(err.to_string()))
-}
 
 /// Creates an initial SSE event that returns the messages endpoint
 ///
@@ -72,6 +49,96 @@ fn initial_sse_event(endpoint: &str) -> Result<Bytes, TransportServerError> {
         .with_event("endpoint")
         .with_data(endpoint.to_string())
         .as_bytes())
+}
+
+#[cfg(feature = "auth")]
+pub fn url_base(url: &url::Url) -> String {
+    format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default())
+}
+
+/// Remove the `Bearer` prefix from a `WWW-Authenticate` or `Authorization` header.
+///
+/// This function performs a **case-insensitive** check for the `Bearer`
+/// authentication scheme. If present, the prefix is removed and the
+/// remaining parameter string is returned trimmed.
+fn strip_bearer_prefix(header: &str) -> &str {
+    let lower = header.to_lowercase();
+    if lower.starts_with("bearer ") {
+        header[7..].trim()
+    } else if lower == "bearer" {
+        ""
+    } else {
+        header.trim()
+    }
+}
+
+/// Parse a `WWW-Authenticate` header with Bearer-style key/value parameters
+/// into a JSON object (`serde_json::Map`).
+#[cfg(feature = "auth")]
+pub fn parse_www_authenticate(header: &str) -> Option<Map<String, Value>> {
+    let params_str = strip_bearer_prefix(header);
+
+    let mut result: Option<Map<String, Value>> = None;
+
+    for part in params_str.split(',') {
+        let part = part.trim();
+
+        if let Some((key, value)) = part.split_once('=') {
+            let cleaned = value.trim().trim_matches('"');
+
+            // Create the map only when first key=value is found
+            let map = result.get_or_insert_with(Map::new);
+            map.insert(key.to_string(), Value::String(cleaned.to_string()));
+        }
+    }
+
+    result
+}
+
+/// Extract the most meaningful error message from an HTTP response.
+/// This is useful for handling OAuth2 / OpenID Connect Bearer errors
+///
+/// Extraction order:
+/// 1. If the `WWW-Authenticate` header exists and contains a Bearer error:
+///    - Return `error_description` if present
+///    - Else return `error` if present
+///    - Else join all string values in the header
+/// 2. If no usable info is found in the header:
+///    - Return the response body text
+///    - If body cannot be read, return `default_message`
+#[cfg(feature = "auth")]
+pub async fn error_message_from_response(
+    response: reqwest::Response,
+    default_message: &str,
+) -> String {
+    if let Some(www_authenticate) = response
+        .headers()
+        .get(http::header::WWW_AUTHENTICATE)
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(map) = parse_www_authenticate(www_authenticate) {
+            if let Some(Value::String(s)) = map.get("error_description") {
+                return s.clone();
+            }
+            if let Some(Value::String(s)) = map.get("error") {
+                return s.clone();
+            }
+
+            // Fallback: join all string values
+            let values: Vec<&str> = map
+                .values()
+                .filter_map(|v| match v {
+                    Value::String(s) => Some(s.as_str()),
+                    _ => None,
+                })
+                .collect();
+            if !values.is_empty() {
+                return values.join(", ");
+            }
+        }
+    }
+
+    response.text().await.unwrap_or(default_message.to_owned())
 }
 
 async fn create_sse_stream(
@@ -268,10 +335,13 @@ pub(crate) async fn create_standalone_stream(
     session_id: SessionId,
     last_event_id: Option<EventId>,
     state: Arc<McpAppState>,
+    auth_info: Option<AuthInfo>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
     let runtime = state.session_store.get(&session_id).await.ok_or(
         TransportServerError::SessionIdInvalid(session_id.to_string()),
     )?;
+
+    runtime.update_auth_info(auth_info).await;
 
     if runtime.stream_id_exists(DEFAULT_STREAM_ID).await {
         let error =
@@ -303,6 +373,7 @@ pub(crate) async fn create_standalone_stream(
 pub(crate) async fn start_new_session(
     state: Arc<McpAppState>,
     payload: &str,
+    auth_info: Option<AuthInfo>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
     let session_id: SessionId = state.id_generator.generate();
 
@@ -312,6 +383,7 @@ pub(crate) async fn start_new_session(
         Arc::clone(&state.server_details),
         h,
         session_id.to_owned(),
+        auth_info,
     );
 
     tracing::info!("a new client joined : {}", &session_id);
@@ -438,9 +510,11 @@ pub(crate) async fn process_incoming_message_return(
     session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
+    auth_info: Option<AuthInfo>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
+            runtime.update_auth_info(auth_info).await;
             single_shot_stream(
                 runtime.clone(),
                 session_id,
@@ -463,9 +537,11 @@ pub(crate) async fn process_incoming_message(
     session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
+    auth_info: Option<AuthInfo>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
     match state.session_store.get(&session_id).await {
         Some(runtime) => {
+            runtime.update_auth_info(auth_info).await;
             // when receiving a result in a streamable_http server, that means it was sent by the standalone sse transport
             // it should be processed by the same transport , therefore no need to call create_sse_stream
             let Ok(is_result) = is_result(payload) else {
@@ -637,6 +713,7 @@ pub(crate) fn query_param(request: &http::Request<&str>, key: &str) -> Option<St
 pub(crate) async fn handle_sse_connection(
     state: Arc<McpAppState>,
     sse_message_endpoint: Option<&str>,
+    auth_info: Option<AuthInfo>,
 ) -> TransportServerResult<http::Response<GenericBody>> {
     let session_id: SessionId = state.id_generator.generate();
 
@@ -669,6 +746,7 @@ pub(crate) async fn handle_sse_connection(
         Arc::clone(&state.server_details),
         h,
         session_id.to_owned(),
+        auth_info,
     );
 
     state

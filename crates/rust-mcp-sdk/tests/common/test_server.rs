@@ -1,6 +1,6 @@
 #[cfg(feature = "hyper-server")]
 pub mod test_server_common {
-    use crate::common::sample_tools::SayHelloTool;
+    use crate::common::sample_tools::{DisplayAuthInfo, SayHelloTool};
     use async_trait::async_trait;
     use rust_mcp_schema::schema_utils::CallToolError;
     use rust_mcp_schema::{
@@ -95,20 +95,27 @@ pub mod test_server_common {
             runtime
                 .assert_server_request_capabilities(request.method())
                 .map_err(CallToolError::new)?;
-            if request.params.name != "say_hello" {
-                Ok(
-                    CallToolError::unknown_tool(format!("Unknown tool: {}", request.params.name))
-                        .into(),
-                )
-            } else {
-                let tool = SayHelloTool {
-                    name: request.params.arguments.unwrap()["name"]
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                };
 
-                Ok(tool.call_tool().unwrap())
+            match request.params.name.as_str() {
+                "say_hello" => {
+                    let tool = SayHelloTool {
+                        name: request.params.arguments.unwrap()["name"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                    };
+
+                    Ok(tool.call_tool().unwrap())
+                }
+                "display_auth_info" => {
+                    let tool = DisplayAuthInfo {};
+                    Ok(tool.call_tool(runtime.auth_info_cloned().await).unwrap())
+                }
+                _ => Ok(CallToolError::unknown_tool(format!(
+                    "Unknown tool: {}",
+                    request.params.name
+                ))
+                .into()),
             }
         }
     }
