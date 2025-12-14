@@ -41,13 +41,9 @@ pub fn create_server(
         ServerMessages,
         ServerMessage,
     >,
-    handler: impl ServerHandlerCore,
+    handler: Arc<dyn McpServerHandler>,
 ) -> Arc<ServerRuntime> {
-    ServerRuntime::new(
-        server_details,
-        transport,
-        Arc::new(RuntimeCoreInternalHandler::new(Box::new(handler))),
-    )
+    ServerRuntime::new(server_details, transport, handler)
 }
 
 pub(crate) struct RuntimeCoreInternalHandler<H> {

@@ -3,7 +3,7 @@ pub mod common;
 
 mod protocol_compatibility_on_server {
 
-    use rust_mcp_sdk::mcp_server::ServerHandler;
+    use rust_mcp_sdk::mcp_server::{ServerHandler, ToMcpServerHandler};
     use rust_mcp_sdk::schema::{InitializeResult, RpcError, INTERNAL_ERROR};
 
     use crate::common::{
@@ -26,7 +26,7 @@ mod protocol_compatibility_on_server {
         let runtime = rust_mcp_sdk::mcp_server::server_runtime::create_server(
             test_server_details(),
             transport,
-            TestServerHandler {},
+            TestServerHandler {}.to_mcp_server_handler(),
         );
 
         handler

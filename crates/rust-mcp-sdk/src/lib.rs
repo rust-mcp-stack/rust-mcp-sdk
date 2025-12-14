@@ -68,7 +68,7 @@ pub mod mcp_server {
     //!   handle each message based on its type and parameters.
     //!
     //! Refer to [examples/hello-world-mcp-server-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core) for an example.
-    pub use super::mcp_handlers::mcp_server_handler::{ServerHandler, ToMcpServerHandler};
+    pub use super::mcp_handlers::mcp_server_handler::ServerHandler;
     pub use super::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime as server_runtime;
@@ -83,6 +83,7 @@ pub mod mcp_server {
 
     #[cfg(feature = "hyper-server")]
     pub use super::mcp_http::{McpAppState, McpHttpHandler};
+    pub use super::mcp_traits::{McpServerHandler, ToMcpServerHandler, ToMcpServerHandlerCore};
 }
 
 pub mod auth;

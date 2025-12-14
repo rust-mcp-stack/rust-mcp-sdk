@@ -46,13 +46,9 @@ pub fn create_server(
         ServerMessages,
         ServerMessage,
     >,
-    handler: impl ServerHandler,
+    handler: Arc<dyn McpServerHandler>,
 ) -> Arc<ServerRuntime> {
-    ServerRuntime::new(
-        server_details,
-        transport,
-        Arc::new(ServerRuntimeInternalHandler::new(Box::new(handler))),
-    )
+    ServerRuntime::new(server_details, transport, handler)
 }
 
 #[cfg(feature = "hyper-server")]

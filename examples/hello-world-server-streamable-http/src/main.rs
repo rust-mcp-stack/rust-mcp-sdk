@@ -4,7 +4,7 @@ mod tools;
 use handler::MyServerHandler;
 use rust_mcp_sdk::event_store::InMemoryEventStore;
 use rust_mcp_sdk::mcp_icon;
-use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
+use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions, ToMcpServerHandler};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
@@ -61,7 +61,7 @@ async fn main() -> SdkResult<()> {
     // STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
     let server = hyper_server::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
             host: "127.0.0.1".into(),
             ping_interval: Duration::from_secs(5),

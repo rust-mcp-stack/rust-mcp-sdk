@@ -7,12 +7,12 @@ use rust_mcp_extra::token_verifier::{
 use rust_mcp_sdk::auth::{AuthMetadataBuilder, RemoteAuthProvider};
 use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::event_store::InMemoryEventStore;
-use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
+use rust_mcp_sdk::{mcp_icon, ToMcpServerHandler};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
@@ -123,7 +123,7 @@ async fn main() -> SdkResult<()> {
 
     let server = hyper_server::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
             host: "localhost".into(),
             port: 3000,

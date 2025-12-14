@@ -1,4 +1,6 @@
+use crate::mcp_server::server_runtime_core::RuntimeCoreInternalHandler;
 use crate::mcp_traits::McpServer;
+use crate::mcp_traits::{McpServerHandler, ToMcpServerHandlerCore};
 use crate::schema::*;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -47,4 +49,10 @@ pub trait ServerHandlerCore: Send + Sync + 'static {
         error: &RpcError,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError>;
+}
+
+impl<T: ServerHandlerCore + 'static> ToMcpServerHandlerCore for T {
+    fn to_mcp_server_handler(self) -> Arc<dyn McpServerHandler + 'static> {
+        Arc::new(RuntimeCoreInternalHandler::new(Box::new(self)))
+    }
 }
