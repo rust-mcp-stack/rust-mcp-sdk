@@ -8,9 +8,9 @@ use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::mcp_client::client_runtime;
 use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
-    LATEST_PROTOCOL_VERSION,
+    SetLevelRequestParams, LATEST_PROTOCOL_VERSION,
 };
-use rust_mcp_sdk::{ClientSseTransport, ClientSseTransportOptions, McpClient};
+use rust_mcp_sdk::{mcp_icon, ClientSseTransport, ClientSseTransportOptions, McpClient};
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -32,11 +32,20 @@ async fn main() -> SdkResult<()> {
     let client_details: InitializeRequestParams = InitializeRequestParams {
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
-            name: "simple-rust-mcp-client-sse".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Simple Rust MCP Client (SSE)".to_string()),
+            name: "simple-rust-mcp-client-sse".into(),
+            version: "0.1.0".into(),
+            title: Some("Simple Rust MCP Client (SSE)".into()),
+            description: Some("Simple Rust MCP Client (SSE) by Rust MCP SDK".into()),
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "dark"
+            )],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         protocol_version: LATEST_PROTOCOL_VERSION.into(),
+        meta: None,
     };
 
     // Step2 : Create a transport, with options to launch/connect to a MCP Server
@@ -83,7 +92,14 @@ async fn main() -> SdkResult<()> {
     utils.call_add_tool(100, 25).await?;
 
     // // Set the log level
-    match utils.client.set_logging_level(LoggingLevel::Debug).await {
+    match utils
+        .client
+        .request_set_logging_level(SetLevelRequestParams {
+            level: LoggingLevel::Debug,
+            meta: None,
+        })
+        .await
+    {
         Ok(_) => println!("Log level is set to \"Debug\""),
         Err(err) => eprintln!("Error setting the Log level : {err}"),
     }

@@ -38,7 +38,7 @@ impl Drop for AbortTaskOnDrop {
 ///
 /// # Examples
 /// ```ignore
-/// let msg = format_assertion_message("Server", "tools", rust_mcp_schema::ListResourcesRequest::method_name());
+/// let msg = format_assertion_message("Server", "tools", rust_mcp_schema::ListResourcesRequest::method_value());
 /// assert_eq!(msg, "Server does not support resources (required for resources/list)");
 /// ```
 pub fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {

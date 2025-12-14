@@ -1,28 +1,30 @@
 use crate::auth::AuthInfo;
-use crate::{error::SdkResult, utils::format_assertion_message};
-
 use crate::schema::{
     schema_utils::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
         ResultFromClient, ServerMessage,
     },
     CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
-    ElicitRequest, ElicitRequestParams, ElicitRequestedSchema, ElicitResult, GetPromptRequest,
-    Implementation, InitializeRequestParams, InitializeResult, ListPromptsRequest,
-    ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListRootsRequestParams,
-    ListRootsResult, ListToolsRequest, LoggingMessageNotification,
-    LoggingMessageNotificationParams, PingRequest, PromptListChangedNotification,
-    PromptListChangedNotificationParams, ReadResourceRequest, RequestId,
-    ResourceListChangedNotification, ResourceListChangedNotificationParams,
-    ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
-    SetLevelRequest, ToolListChangedNotification, ToolListChangedNotificationParams,
+    ElicitRequestParams, ElicitResult, GetPromptRequest, Implementation, InitializeRequestParams,
+    InitializeResult, ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest,
+    ListRootsRequest, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
+    LoggingMessageNotificationParams, NotificationParams, PromptListChangedNotification,
+    ReadResourceRequest, RequestId, RequestParams, ResourceUpdatedNotification,
+    ResourceUpdatedNotificationParams, RpcError, ServerCapabilities, SetLevelRequest,
+    ToolListChangedNotification,
 };
+use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
+use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest};
+use rust_mcp_schema::{
+    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, ElicitCompleteParams,
+    GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams,
+    TaskStatusNotificationParams,
+};
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::RwLockReadGuard;
 
-//TODO: support options , such as enforceStrictCapabilities
 #[async_trait]
 pub trait McpServer: Sync + Send {
     async fn start(self: Arc<Self>) -> SdkResult<()>;
@@ -35,191 +37,6 @@ pub trait McpServer: Sync + Send {
     async fn update_auth_info(&self, auth_info: Option<AuthInfo>);
 
     async fn wait_for_initialization(&self);
-
-    async fn send(
-        &self,
-        message: MessageFromServer,
-        request_id: Option<RequestId>,
-        request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<ClientMessage>>;
-
-    async fn send_batch(
-        &self,
-        messages: Vec<ServerMessage>,
-        request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<Vec<ClientMessage>>>;
-
-    /// Checks whether the server has been initialized with client
-    fn is_initialized(&self) -> bool {
-        self.client_info().is_some()
-    }
-
-    /// Returns the client's name and version information once initialization is complete.
-    /// This method retrieves the client details, if available, after successful initialization.
-    fn client_version(&self) -> Option<Implementation> {
-        self.client_info()
-            .map(|client_details| client_details.client_info)
-    }
-
-    /// Returns the server's capabilities.
-    fn capabilities(&self) -> &ServerCapabilities {
-        &self.server_info().capabilities
-    }
-
-    /// Sends an elicitation request to the client to prompt user input and returns the received response.
-    ///
-    /// The requested_schema argument allows servers to define the structure of the expected response using a restricted subset of JSON Schema.
-    /// To simplify client user experience, elicitation schemas are limited to flat objects with primitive properties only
-    async fn elicit_input(
-        &self,
-        message: String,
-        requested_schema: ElicitRequestedSchema,
-    ) -> SdkResult<ElicitResult> {
-        let request: ElicitRequest = ElicitRequest::new(ElicitRequestParams {
-            message,
-            requested_schema,
-        });
-        let response = self.request(request.into(), None).await?;
-        ElicitResult::try_from(response).map_err(|err| err.into())
-    }
-
-    /// Sends a request to the client and processes the response.
-    ///
-    /// This function sends a `RequestFromServer` message to the client, waits for the response,
-    /// and handles the result. If the response is empty or of an invalid type, an error is returned.
-    /// Otherwise, it returns the result from the client.
-    async fn request(
-        &self,
-        request: RequestFromServer,
-        timeout: Option<Duration>,
-    ) -> SdkResult<ResultFromClient> {
-        // Send the request and receive the response.
-        let response = self
-            .send(MessageFromServer::RequestFromServer(request), None, timeout)
-            .await?;
-
-        let client_message = response.ok_or_else(|| {
-            RpcError::internal_error()
-                .with_message("An empty response was received from the client.".to_string())
-        })?;
-
-        if client_message.is_error() {
-            return Err(client_message.as_error()?.error.into());
-        }
-
-        return Ok(client_message.as_response()?.result);
-    }
-
-    /// Sends a notification. This is a one-way message that is not expected
-    /// to return any response. The method asynchronously sends the notification using
-    /// the transport layer and does not wait for any acknowledgement or result.
-    async fn send_notification(&self, notification: NotificationFromServer) -> SdkResult<()> {
-        self.send(
-            MessageFromServer::NotificationFromServer(notification),
-            None,
-            None,
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Request a list of root URIs from the client. Roots allow
-    /// servers to ask for specific directories or files to operate on. A common example
-    /// for roots is providing a set of repositories or directories a server should operate on.
-    /// This request is typically used when the server needs to understand the file system
-    /// structure or access specific locations that the client has permission to read from
-    async fn list_roots(
-        &self,
-        params: Option<ListRootsRequestParams>,
-    ) -> SdkResult<ListRootsResult> {
-        let request: ListRootsRequest = ListRootsRequest::new(params);
-        let response = self.request(request.into(), None).await?;
-        ListRootsResult::try_from(response).map_err(|err| err.into())
-    }
-
-    /// Send log message notification from server to client.
-    /// If no logging/setLevel request has been sent from the client, the server MAY decide which messages to send automatically.
-    async fn send_logging_message(
-        &self,
-        params: LoggingMessageNotificationParams,
-    ) -> SdkResult<()> {
-        let notification = LoggingMessageNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// An optional notification from the server to the client, informing it that
-    /// the list of prompts it offers has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    async fn send_prompt_list_changed(
-        &self,
-        params: Option<PromptListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let notification = PromptListChangedNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// An optional notification from the server to the client,
-    /// informing it that the list of resources it can read from has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    async fn send_resource_list_changed(
-        &self,
-        params: Option<ResourceListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let notification = ResourceListChangedNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// A notification from the server to the client, informing it that
-    /// a resource has changed and may need to be read again.
-    ///  This should only be sent if the client previously sent a resources/subscribe request.
-    async fn send_resource_updated(
-        &self,
-        params: ResourceUpdatedNotificationParams,
-    ) -> SdkResult<()> {
-        let notification = ResourceUpdatedNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// An optional notification from the server to the client, informing it that
-    /// the list of tools it offers has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    async fn send_tool_list_changed(
-        &self,
-        params: Option<ToolListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let notification = ToolListChangedNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// A ping request to check that the other party is still alive.
-    /// The receiver must promptly respond, or else may be disconnected.
-    ///
-    /// This function creates a `PingRequest` with no specific parameters, sends the request and awaits the response
-    /// Once the response is received, it attempts to convert it into the expected
-    /// result type.
-    ///
-    /// # Returns
-    /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
-    /// If the request or conversion fails, an error is returned.
-    async fn ping(&self, timeout: Option<Duration>) -> SdkResult<crate::schema::Result> {
-        let ping_request = PingRequest::new(None);
-        let response = self.request(ping_request.into(), timeout).await?;
-        Ok(response.try_into()?)
-    }
-
-    /// A request from the server to sample an LLM via the client.
-    /// The client has full discretion over which model to select.
-    /// The client should also inform the user before beginning sampling,
-    /// to allow them to inspect the request (human in the loop)
-    /// and decide whether to approve it.
-    async fn create_message(
-        &self,
-        params: CreateMessageRequestParams,
-    ) -> SdkResult<CreateMessageResult> {
-        let ping_request = CreateMessageRequest::new(params);
-        let response = self.request(ping_request.into(), None).await?;
-        Ok(response.try_into()?)
-    }
 
     /// Checks if the client supports sampling.
     ///
@@ -284,7 +101,7 @@ pub trait McpServer: Sync + Send {
         request_method: &String,
     ) -> std::result::Result<(), RpcError> {
         let entity = "Client";
-        if *request_method == CreateMessageRequest::method_name()
+        if *request_method == CreateMessageRequest::method_value()
             && !self.client_supports_sampling().unwrap_or(false)
         {
             return Err(
@@ -295,7 +112,7 @@ pub trait McpServer: Sync + Send {
                 )),
             );
         }
-        if *request_method == ListRootsRequest::method_name()
+        if *request_method == ListRootsRequest::method_value()
             && !self.client_supports_root_list().unwrap_or(false)
         {
             return Err(
@@ -317,7 +134,7 @@ pub trait McpServer: Sync + Send {
 
         let capabilities = &self.server_info().capabilities;
 
-        if *notification_method == LoggingMessageNotification::method_name()
+        if *notification_method == LoggingMessageNotification::method_value()
             && capabilities.logging.is_none()
         {
             return Err(
@@ -328,7 +145,7 @@ pub trait McpServer: Sync + Send {
                 )),
             );
         }
-        if *notification_method == ResourceUpdatedNotification::method_name()
+        if *notification_method == ResourceUpdatedNotification::method_value()
             && capabilities.resources.is_none()
         {
             return Err(
@@ -339,7 +156,7 @@ pub trait McpServer: Sync + Send {
                 )),
             );
         }
-        if *notification_method == ToolListChangedNotification::method_name()
+        if *notification_method == ToolListChangedNotification::method_value()
             && capabilities.tools.is_none()
         {
             return Err(
@@ -350,7 +167,7 @@ pub trait McpServer: Sync + Send {
                 )),
             );
         }
-        if *notification_method == PromptListChangedNotification::method_name()
+        if *notification_method == PromptListChangedNotification::method_value()
             && capabilities.prompts.is_none()
         {
             return Err(
@@ -367,12 +184,12 @@ pub trait McpServer: Sync + Send {
 
     fn assert_server_request_capabilities(
         &self,
-        request_method: &String,
+        request_method: &str,
     ) -> std::result::Result<(), RpcError> {
         let entity = "Server";
         let capabilities = &self.server_info().capabilities;
 
-        if *request_method == SetLevelRequest::method_name() && capabilities.logging.is_none() {
+        if request_method == SetLevelRequest::method_value() && capabilities.logging.is_none() {
             return Err(
                 RpcError::internal_error().with_message(format_assertion_message(
                     entity,
@@ -382,10 +199,10 @@ pub trait McpServer: Sync + Send {
             );
         }
         if [
-            GetPromptRequest::method_name(),
-            ListPromptsRequest::method_name(),
+            GetPromptRequest::method_value(),
+            ListPromptsRequest::method_value(),
         ]
-        .contains(request_method)
+        .contains(&request_method)
             && capabilities.prompts.is_none()
         {
             return Err(
@@ -397,11 +214,11 @@ pub trait McpServer: Sync + Send {
             );
         }
         if [
-            ListResourcesRequest::method_name(),
-            ListResourceTemplatesRequest::method_name(),
-            ReadResourceRequest::method_name(),
+            ListResourcesRequest::method_value(),
+            ListResourceTemplatesRequest::method_value(),
+            ReadResourceRequest::method_value(),
         ]
-        .contains(request_method)
+        .contains(&request_method)
             && capabilities.resources.is_none()
         {
             return Err(
@@ -413,10 +230,10 @@ pub trait McpServer: Sync + Send {
             );
         }
         if [
-            CallToolRequest::method_name(),
-            ListToolsRequest::method_name(),
+            CallToolRequest::method_value(),
+            ListToolsRequest::method_value(),
         ]
-        .contains(request_method)
+        .contains(&request_method)
             && capabilities.tools.is_none()
         {
             return Err(
@@ -432,4 +249,341 @@ pub trait McpServer: Sync + Send {
 
     #[cfg(feature = "hyper-server")]
     fn session_id(&self) -> Option<SessionId>;
+
+    async fn send(
+        &self,
+        message: MessageFromServer,
+        request_id: Option<RequestId>,
+        request_timeout: Option<Duration>,
+    ) -> SdkResult<Option<ClientMessage>>;
+
+    async fn send_batch(
+        &self,
+        messages: Vec<ServerMessage>,
+        request_timeout: Option<Duration>,
+    ) -> SdkResult<Option<Vec<ClientMessage>>>;
+
+    /// Checks whether the server has been initialized with client
+    fn is_initialized(&self) -> bool {
+        self.client_info().is_some()
+    }
+
+    /// Returns the client's name and version information once initialization is complete.
+    /// This method retrieves the client details, if available, after successful initialization.
+    fn client_version(&self) -> Option<Implementation> {
+        self.client_info()
+            .map(|client_details| client_details.client_info)
+    }
+
+    /// Returns the server's capabilities.
+    fn capabilities(&self) -> &ServerCapabilities {
+        &self.server_info().capabilities
+    }
+
+    /*******************
+          Requests
+    *******************/
+
+    /// Sends a request to the client and processes the response.
+    ///
+    /// This function sends a `RequestFromServer` message to the client, waits for the response,
+    /// and handles the result. If the response is empty or of an invalid type, an error is returned.
+    /// Otherwise, it returns the result from the client.
+    async fn request(
+        &self,
+        request: RequestFromServer,
+        timeout: Option<Duration>,
+    ) -> SdkResult<ResultFromClient> {
+        // Send the request and receive the response.
+        let response = self
+            .send(MessageFromServer::RequestFromServer(request), None, timeout)
+            .await?;
+
+        let client_message = response.ok_or_else(|| {
+            RpcError::internal_error()
+                .with_message("An empty response was received from the client.".to_string())
+        })?;
+
+        if client_message.is_error() {
+            return Err(client_message.as_error()?.error.into());
+        }
+
+        return Ok(client_message.as_response()?.result);
+    }
+
+    /// Sends an elicitation request to the client to prompt user input and returns the received response.
+    ///
+    /// The requested_schema argument allows servers to define the structure of the expected response using a restricted subset of JSON Schema.
+    /// To simplify client user experience, elicitation schemas are limited to flat objects with primitive properties only
+    async fn request_elicitation(&self, params: ElicitRequestParams) -> SdkResult<ElicitResult> {
+        let response = self
+            .request(RequestFromServer::ElicitRequest(params), None)
+            .await?;
+        ElicitResult::try_from(response).map_err(|err| err.into())
+    }
+
+    /// Request a list of root URIs from the client. Roots allow
+    /// servers to ask for specific directories or files to operate on. A common example
+    /// for roots is providing a set of repositories or directories a server should operate on.
+    /// This request is typically used when the server needs to understand the file system
+    /// structure or access specific locations that the client has permission to read from
+    async fn request_root_list(&self, params: Option<RequestParams>) -> SdkResult<ListRootsResult> {
+        let response = self
+            .request(RequestFromServer::ListRootsRequest(params), None)
+            .await?;
+        ListRootsResult::try_from(response).map_err(|err| err.into())
+    }
+
+    /// A ping request to check that the other party is still alive.
+    /// The receiver must promptly respond, or else may be disconnected.
+    ///
+    /// This function creates a `PingRequest` with no specific parameters, sends the request and awaits the response
+    /// Once the response is received, it attempts to convert it into the expected
+    /// result type.
+    ///
+    /// # Returns
+    /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
+    /// If the request or conversion fails, an error is returned.
+    async fn ping(
+        &self,
+        params: Option<RequestParams>,
+        timeout: Option<Duration>,
+    ) -> SdkResult<crate::schema::Result> {
+        let response = self
+            .request(RequestFromServer::PingRequest(params), timeout)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// A request from the server to sample an LLM via the client.
+    /// The client has full discretion over which model to select.
+    /// The client should also inform the user before beginning sampling,
+    /// to allow them to inspect the request (human in the loop)
+    /// and decide whether to approve it.
+    async fn request_message_creation(
+        &self,
+        params: CreateMessageRequestParams,
+    ) -> SdkResult<CreateMessageResult> {
+        let response = self
+            .request(RequestFromServer::CreateMessageRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to retrieve the state of a task.
+    async fn request_get_task(&self, params: GetTaskParams) -> SdkResult<GetTaskResult> {
+        let response = self
+            .request(RequestFromServer::GetTaskRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to retrieve the result of a completed task.
+    async fn request_get_task_payload(
+        &self,
+        params: GetTaskPayloadParams,
+    ) -> SdkResult<GenericResult> {
+        let response = self
+            .request(RequestFromServer::GetTaskPayloadRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to cancel a task.
+    async fn request_task_cancellation(
+        &self,
+        params: CancelTaskParams,
+    ) -> SdkResult<CancelTaskResult> {
+        let response = self
+            .request(RequestFromServer::CancelTaskRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a custom request with a custom method name and params
+    async fn request_custom(&self, params: CustomRequest) -> SdkResult<GenericResult> {
+        let response = self
+            .request(RequestFromServer::CustomRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /*******************
+        Notifications
+    *******************/
+
+    /// Sends a notification. This is a one-way message that is not expected
+    /// to return any response. The method asynchronously sends the notification using
+    /// the transport layer and does not wait for any acknowledgement or result.
+    async fn send_notification(&self, notification: NotificationFromServer) -> SdkResult<()> {
+        self.send(
+            MessageFromServer::NotificationFromServer(notification),
+            None,
+            None,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Send log message notification from server to client.
+    /// If no logging/setLevel request has been sent from the client, the server MAY decide which messages to send automatically.
+    async fn notify_log_message(&self, params: LoggingMessageNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::LoggingMessageNotification(params))
+            .await
+    }
+
+    ///Send an optional notification from the server to the client, informing it that
+    /// the list of prompts it offers has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    async fn notify_prompt_list_changed(
+        &self,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::PromptListChangedNotification(
+            params,
+        ))
+        .await
+    }
+
+    ///Send an optional notification from the server to the client,
+    /// informing it that the list of resources it can read from has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    async fn notify_resource_list_changed(
+        &self,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ResourceListChangedNotification(
+            params,
+        ))
+        .await
+    }
+
+    ///Send a notification from the server to the client, informing it that
+    /// a resource has changed and may need to be read again.
+    ///  This should only be sent if the client previously sent a resources/subscribe request.
+    async fn notify_resource_updated(
+        &self,
+        params: ResourceUpdatedNotificationParams,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ResourceUpdatedNotification(params))
+            .await
+    }
+
+    ///Send an optional notification from the server to the client, informing it that
+    /// the list of tools it offers has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    async fn notify_tool_list_changed(&self, params: Option<NotificationParams>) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ToolListChangedNotification(params))
+            .await
+    }
+
+    /// This notification can be sent to indicate that it is cancelling a previously-issued request.
+    /// The request SHOULD still be in-flight, but due to communication latency, it is always possible that this notification MAY arrive after the request has already finished.
+    /// This notification indicates that the result will be unused, so any associated processing SHOULD cease.
+    /// A client MUST NOT attempt to cancel its initialize request.
+    /// For task cancellation, use the tasks/cancel request instead of this notification.
+    async fn notify_cancellation(&self, params: CancelledNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::CancelledNotification(params))
+            .await
+    }
+
+    ///Send an out-of-band notification used to inform the receiver of a progress update for a long-running request.
+    async fn notify_progress(&self, params: ProgressNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ProgressNotification(params))
+            .await
+    }
+
+    /// Send an optional notification from the receiver to the requestor, informing them that a task's status has changed.
+    /// Receivers are not required to send these notifications.
+    async fn notify_task_status(&self, params: TaskStatusNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::TaskStatusNotification(params))
+            .await
+    }
+
+    ///An optional notification from the server to the client, informing it of a completion of a out-of-band elicitation request.
+    async fn notify_elicitation_completed(&self, params: ElicitCompleteParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ElicitationCompleteNotification(
+            params,
+        ))
+        .await
+    }
+
+    ///Send a custom notification
+    async fn notify_custom(&self, params: CustomNotification) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::CustomNotification(params))
+            .await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_root_list()` instead.")]
+    async fn list_roots(&self, params: Option<RequestParams>) -> SdkResult<ListRootsResult> {
+        let response = self
+            .request(RequestFromServer::ListRootsRequest(params), None)
+            .await?;
+        ListRootsResult::try_from(response).map_err(|err| err.into())
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_elicitation()` instead.")]
+    async fn elicit_input(&self, params: ElicitRequestParams) -> SdkResult<ElicitResult> {
+        let response = self
+            .request(RequestFromServer::ElicitRequest(params), None)
+            .await?;
+        ElicitResult::try_from(response).map_err(|err| err.into())
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_message_creation()` instead.")]
+    async fn create_message(
+        &self,
+        params: CreateMessageRequestParams,
+    ) -> SdkResult<CreateMessageResult> {
+        let response = self
+            .request(RequestFromServer::CreateMessageRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_tool_list_changed()` instead.")]
+    async fn send_tool_list_changed(&self, params: Option<NotificationParams>) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ToolListChangedNotification(params))
+            .await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_resource_updated()` instead.")]
+    async fn send_resource_updated(
+        &self,
+        params: ResourceUpdatedNotificationParams,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ResourceUpdatedNotification(params))
+            .await
+    }
+
+    #[deprecated(
+        since = "0.8.0",
+        note = "Use `notify_resource_list_changed()` instead."
+    )]
+    async fn send_resource_list_changed(
+        &self,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::ResourceListChangedNotification(
+            params,
+        ))
+        .await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_prompt_list_changed()` instead.")]
+    async fn send_prompt_list_changed(&self, params: Option<NotificationParams>) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::PromptListChangedNotification(
+            params,
+        ))
+        .await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_log_message()` instead.")]
+    async fn send_logging_message(
+        &self,
+        params: LoggingMessageNotificationParams,
+    ) -> SdkResult<()> {
+        self.send_notification(NotificationFromServer::LoggingMessageNotification(params))
+            .await
+    }
 }

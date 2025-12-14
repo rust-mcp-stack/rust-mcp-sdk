@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
     self,
     schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-    RpcError, ServerRequest,
+    RpcError,
 };
 use rust_mcp_sdk::{mcp_client::ClientHandlerCore, McpClient};
 pub struct MyClientHandler;
@@ -18,23 +18,24 @@ impl ClientHandlerCore for MyClientHandler {
         _runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
-            RequestFromServer::ServerRequest(server_request) => match server_request {
-                ServerRequest::PingRequest(_) => {
-                    return Ok(schema::Result::default().into());
-                }
-                ServerRequest::CreateMessageRequest(_create_message_request) => {
-                    Err(RpcError::internal_error().with_message(
-                        "CreateMessageRequest handler is not implemented".to_string(),
-                    ))
-                }
-                ServerRequest::ListRootsRequest(_list_roots_request) => {
-                    Err(RpcError::internal_error()
-                        .with_message("ListRootsRequest handler is not implemented".to_string()))
-                }
-                ServerRequest::ElicitRequest(_elicit_request) => Err(RpcError::internal_error()
-                    .with_message("ElicitRequest handler is not implemented".to_string())),
-            },
-            RequestFromServer::CustomRequest(_value) => Err(RpcError::internal_error()
+            RequestFromServer::PingRequest(_) => {
+                return Ok(schema::Result::default().into());
+            }
+            RequestFromServer::CreateMessageRequest(_) => Err(RpcError::internal_error()
+                .with_message("CreateMessageRequest handler is not implemented".to_string())),
+            RequestFromServer::ListRootsRequest(_) => Err(RpcError::internal_error()
+                .with_message("ListRootsRequest handler is not implemented".to_string())),
+            RequestFromServer::ElicitRequest(_) => Err(RpcError::internal_error()
+                .with_message("ElicitRequest handler is not implemented".to_string())),
+            RequestFromServer::GetTaskRequest(_) => Err(RpcError::internal_error()
+                .with_message("GetTaskRequest handler is not implemented".to_string())),
+            RequestFromServer::GetTaskPayloadRequest(_) => Err(RpcError::internal_error()
+                .with_message("GetTaskPayloadRequest handler is not implemented".to_string())),
+            RequestFromServer::CancelTaskRequest(_) => Err(RpcError::internal_error()
+                .with_message("CancelTaskRequest handler is not implemented".to_string())),
+            RequestFromServer::ListTasksRequest(_) => Err(RpcError::internal_error()
+                .with_message("ListTasksRequest handler is not implemented".to_string())),
+            RequestFromServer::CustomRequest(_) => Err(RpcError::internal_error()
                 .with_message("CustomRequest handler is not implemented".to_string())),
         }
     }
@@ -44,21 +45,7 @@ impl ClientHandlerCore for MyClientHandler {
         notification: NotificationFromServer,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
-        if let NotificationFromServer::ServerNotification(
-            schema::ServerNotification::LoggingMessageNotification(logging_message_notification),
-        ) = notification
-        {
-            println!(
-                "Notification from server: {}",
-                logging_message_notification.params.data
-            );
-        } else {
-            println!(
-                "A {} notification received from the server",
-                notification.method()
-            );
-        };
-
+        println!("Notification from server: \"{}\"", notification.method());
         Ok(())
     }
 

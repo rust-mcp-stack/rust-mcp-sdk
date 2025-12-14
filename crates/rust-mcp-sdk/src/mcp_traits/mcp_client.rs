@@ -3,18 +3,21 @@ use crate::schema::{
         ClientMessage, McpMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
         ResultFromServer, ServerMessage,
     },
-    CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequest, CompleteRequestParams,
-    CreateMessageRequest, GetPromptRequest, GetPromptRequestParams, Implementation,
-    InitializeRequestParams, InitializeResult, ListPromptsRequest, ListPromptsRequestParams,
-    ListResourceTemplatesRequest, ListResourceTemplatesRequestParams, ListResourcesRequest,
-    ListResourcesRequestParams, ListRootsRequest, ListToolsRequest, ListToolsRequestParams,
-    LoggingLevel, PingRequest, ReadResourceRequest, ReadResourceRequestParams, RequestId,
-    RootsListChangedNotification, RootsListChangedNotificationParams, RpcError, ServerCapabilities,
-    SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
-    UnsubscribeRequest, UnsubscribeRequestParams,
+    CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequestParams,
+    CreateMessageRequest, GenericResult, GetPromptRequest, GetPromptRequestParams, Implementation,
+    InitializeRequestParams, InitializeResult, ListPromptsRequest, ListResourceTemplatesRequest,
+    ListResourcesRequest, ListRootsRequest, ListToolsRequest, NotificationParams,
+    PaginatedRequestParams, ReadResourceRequest, ReadResourceRequestParams, RequestId,
+    RequestParams, RootsListChangedNotification, RpcError, ServerCapabilities, SetLevelRequest,
+    SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams, UnsubscribeRequest,
+    UnsubscribeRequestParams,
 };
 use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
+use rust_mcp_schema::{
+    schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
+    TaskStatusNotificationParams,
+};
 use std::{sync::Arc, time::Duration};
 
 #[async_trait]
@@ -151,6 +154,123 @@ pub trait McpClient: Sync + Send {
         self.server_info()?.instructions
     }
 
+    /// Asserts that server capabilities support the requested method.
+    ///
+    /// Verifies that the server has the necessary capabilities to handle the given request method.
+    /// If the server is not initialized or lacks a required capability, an error is returned.
+    /// This can be utilized to avoid sending requests when the opposing party lacks support for them.
+    fn assert_server_capabilities(&self, request_method: &str) -> SdkResult<()> {
+        let entity = "Server";
+
+        let capabilities = self.server_capabilities().ok_or::<RpcError>(
+            RpcError::internal_error().with_message("Server is not initialized!".to_string()),
+        )?;
+
+        if request_method == SetLevelRequest::method_value() && capabilities.logging.is_none() {
+            return Err(RpcError::internal_error()
+                .with_message(format_assertion_message(entity, "logging", request_method))
+                .into());
+        }
+
+        if [
+            GetPromptRequest::method_value(),
+            ListPromptsRequest::method_value(),
+        ]
+        .contains(&request_method)
+            && capabilities.prompts.is_none()
+        {
+            return Err(RpcError::internal_error()
+                .with_message(format_assertion_message(entity, "prompts", request_method))
+                .into());
+        }
+
+        if [
+            ListResourcesRequest::method_value(),
+            ListResourceTemplatesRequest::method_value(),
+            ReadResourceRequest::method_value(),
+            SubscribeRequest::method_value(),
+            UnsubscribeRequest::method_value(),
+        ]
+        .contains(&request_method)
+            && capabilities.resources.is_none()
+        {
+            return Err(RpcError::internal_error()
+                .with_message(format_assertion_message(
+                    entity,
+                    "resources",
+                    request_method,
+                ))
+                .into());
+        }
+
+        if [
+            CallToolRequest::method_value(),
+            ListToolsRequest::method_value(),
+        ]
+        .contains(&request_method)
+            && capabilities.tools.is_none()
+        {
+            return Err(RpcError::internal_error()
+                .with_message(format_assertion_message(entity, "tools", request_method))
+                .into());
+        }
+
+        Ok(())
+    }
+
+    fn assert_client_notification_capabilities(
+        &self,
+        notification_method: &str,
+    ) -> std::result::Result<(), RpcError> {
+        let entity = "Client";
+        let capabilities = &self.client_info().capabilities;
+
+        if notification_method == RootsListChangedNotification::method_value()
+            && capabilities.roots.is_some()
+        {
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "roots list changed notifications",
+                    notification_method,
+                )),
+            );
+        }
+
+        Ok(())
+    }
+
+    fn assert_client_request_capabilities(
+        &self,
+        request_method: &str,
+    ) -> std::result::Result<(), RpcError> {
+        let entity = "Client";
+        let capabilities = &self.client_info().capabilities;
+
+        if request_method == CreateMessageRequest::method_value() && capabilities.sampling.is_some()
+        {
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "sampling capability",
+                    request_method,
+                )),
+            );
+        }
+
+        if request_method == ListRootsRequest::method_value() && capabilities.roots.is_some() {
+            return Err(
+                RpcError::internal_error().with_message(format_assertion_message(
+                    entity,
+                    "roots capability",
+                    request_method,
+                )),
+            );
+        }
+
+        Ok(())
+    }
+
     /// Sends a request to the server and processes the response.
     ///
     /// This function sends a `RequestFromClient` message to the server, waits for the response,
@@ -198,6 +318,10 @@ pub trait McpClient: Sync + Send {
         Ok(())
     }
 
+    /*******************
+          Requests
+    *******************/
+
     /// A ping request to check that the other party is still alive.
     /// The receiver must promptly respond, or else may be disconnected.
     ///
@@ -208,232 +332,315 @@ pub trait McpClient: Sync + Send {
     /// # Returns
     /// A `SdkResult` containing the `rust_mcp_schema::Result` if the request is successful.
     /// If the request or conversion fails, an error is returned.
-    async fn ping(&self, timeout: Option<Duration>) -> SdkResult<crate::schema::Result> {
-        let ping_request = PingRequest::new(None);
-        let response = self.request(ping_request.into(), timeout).await?;
+    async fn ping(
+        &self,
+        params: Option<RequestParams>,
+        timeout: Option<Duration>,
+    ) -> SdkResult<GenericResult> {
+        let response = self
+            .request(RequestFromClient::PingRequest(params), timeout)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    ///send a request from the client to the server, to ask for completion options.
+    async fn request_completion(
+        &self,
+        params: CompleteRequestParams,
+    ) -> SdkResult<crate::schema::CompleteResult> {
+        let response = self
+            .request(RequestFromClient::CompleteRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// send a request from the client to the server, to enable or adjust logging.
+    async fn request_set_logging_level(
+        &self,
+        params: SetLevelRequestParams,
+    ) -> SdkResult<crate::schema::Result> {
+        let response = self
+            .request(RequestFromClient::SetLevelRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// send a request to get a prompt provided by the server.
+    async fn request_prompt(
+        &self,
+        params: GetPromptRequestParams,
+    ) -> SdkResult<crate::schema::GetPromptResult> {
+        let response = self
+            .request(RequestFromClient::GetPromptRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Request a list of prompts and prompt templates the server has.
+    async fn request_prompt_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListPromptsResult> {
+        let response = self
+            .request(RequestFromClient::ListPromptsRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// request a list of resources the server has.
+    async fn request_resource_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListResourcesResult> {
+        let response = self
+            .request(RequestFromClient::ListResourcesRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// request a list of resource templates the server has.
+    async fn request_resource_template_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListResourceTemplatesResult> {
+        let response = self
+            .request(
+                RequestFromClient::ListResourceTemplatesRequest(params),
+                None,
+            )
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// send a request to the server to to read a specific resource URI.
+    async fn request_resource_read(
+        &self,
+        params: ReadResourceRequestParams,
+    ) -> SdkResult<crate::schema::ReadResourceResult> {
+        let response = self
+            .request(RequestFromClient::ReadResourceRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// request resources/updated notifications from the server whenever a particular resource changes.
+    async fn request_resource_subscription(
+        &self,
+        params: SubscribeRequestParams,
+    ) -> SdkResult<crate::schema::Result> {
+        let response = self
+            .request(RequestFromClient::SubscribeRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// request cancellation of resources/updated notifications from the server.
+    /// This should follow a previous resources/subscribe request.
+    async fn request_resource_unsubscription(
+        &self,
+        params: UnsubscribeRequestParams,
+    ) -> SdkResult<crate::schema::Result> {
+        let response = self
+            .request(RequestFromClient::UnsubscribeRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// invoke a tool provided by the server.
+    async fn request_tool_call(&self, params: CallToolRequestParams) -> SdkResult<CallToolResult> {
+        let response = self
+            .request(RequestFromClient::CallToolRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /// request a list of tools the server has.
+    async fn request_tool_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListToolsResult> {
+        let response = self
+            .request(RequestFromClient::ListToolsRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    /*******************
+        Notifications
+    *******************/
+
+    /// A notification from the client to the server, informing it that the list of roots has changed.
+    /// This notification should be sent whenever the client adds, removes, or modifies any root.
+    async fn notify_roots_list_changed(&self, params: Option<NotificationParams>) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::RootsListChangedNotification(params))
+            .await
+    }
+
+    /// This notification can be sent by either side to indicate that it is cancelling a previously-issued request.
+    /// The request SHOULD still be in-flight, but due to communication latency, it is always possible that this notification MAY arrive after the request has already finished.
+    /// This notification indicates that the result will be unused, so any associated processing SHOULD cease.
+    /// A client MUST NOT attempt to cancel its initialize request.
+    /// For task cancellation, use the tasks/cancel request instead of this notification
+    async fn notify_cancellation(&self, params: CancelledNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::CancelledNotification(params))
+            .await
+    }
+
+    ///Send an out-of-band notification used to inform the receiver of a progress update for a long-running request.
+    async fn notify_progress(&self, params: ProgressNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::ProgressNotification(params))
+            .await
+    }
+
+    /// Send an optional notification from the receiver to the requestor, informing them that a task's status has changed.
+    /// Receivers are not required to send these notifications.
+    async fn notify_task_status(&self, params: TaskStatusNotificationParams) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::TaskStatusNotification(params))
+            .await
+    }
+
+    ///Send a custom notification
+    async fn notify_custom(&self, params: CustomNotification) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::CustomNotification(params))
+            .await
+    }
+
+    /*******************
+        Deprecated
+    *******************/
+    #[deprecated(since = "0.8.0", note = "Use `request_completion()` instead.")]
     async fn complete(
         &self,
         params: CompleteRequestParams,
     ) -> SdkResult<crate::schema::CompleteResult> {
-        let request = CompleteRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::CompleteRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
-    async fn set_logging_level(&self, level: LoggingLevel) -> SdkResult<crate::schema::Result> {
-        let request = SetLevelRequest::new(SetLevelRequestParams { level });
-        let response = self.request(request.into(), None).await?;
+    #[deprecated(since = "0.8.0", note = "Use `request_set_logging_level()` instead.")]
+    async fn set_logging_level(
+        &self,
+        params: SetLevelRequestParams,
+    ) -> SdkResult<crate::schema::Result> {
+        let response = self
+            .request(RequestFromClient::SetLevelRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_prompt()` instead.")]
     async fn get_prompt(
         &self,
         params: GetPromptRequestParams,
     ) -> SdkResult<crate::schema::GetPromptResult> {
-        let request = GetPromptRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::GetPromptRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_prompt_list()` instead.")]
     async fn list_prompts(
         &self,
-        params: Option<ListPromptsRequestParams>,
+        params: Option<PaginatedRequestParams>,
     ) -> SdkResult<crate::schema::ListPromptsResult> {
-        let request = ListPromptsRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::ListPromptsRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_resource_list()` instead.")]
     async fn list_resources(
         &self,
-        params: Option<ListResourcesRequestParams>,
+        params: Option<PaginatedRequestParams>,
     ) -> SdkResult<crate::schema::ListResourcesResult> {
-        // passing ListResourcesRequestParams::default() if params is None
-        // need to investigate more but this could be a inconsistency on some MCP servers
-        // where it is not required for other requests like prompts/list or tools/list etc
-        // that excepts an empty params to be passed (like server-everything)
-        let request =
-            ListResourcesRequest::new(params.or(Some(ListResourcesRequestParams::default())));
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::ListResourcesRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(
+        since = "0.8.0",
+        note = "Use `request_resource_template_list()` instead."
+    )]
     async fn list_resource_templates(
         &self,
-        params: Option<ListResourceTemplatesRequestParams>,
+        params: Option<PaginatedRequestParams>,
     ) -> SdkResult<crate::schema::ListResourceTemplatesResult> {
-        let request = ListResourceTemplatesRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(
+                RequestFromClient::ListResourceTemplatesRequest(params),
+                None,
+            )
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_resource_read()` instead.")]
     async fn read_resource(
         &self,
         params: ReadResourceRequestParams,
     ) -> SdkResult<crate::schema::ReadResourceResult> {
-        let request = ReadResourceRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::ReadResourceRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(
+        since = "0.8.0",
+        note = "Use `request_resource_subscription()` instead."
+    )]
     async fn subscribe_resource(
         &self,
         params: SubscribeRequestParams,
     ) -> SdkResult<crate::schema::Result> {
-        let request = SubscribeRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::SubscribeRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(
+        since = "0.8.0",
+        note = "Use `request_resource_unsubscription()` instead."
+    )]
     async fn unsubscribe_resource(
         &self,
         params: UnsubscribeRequestParams,
     ) -> SdkResult<crate::schema::Result> {
-        let request = UnsubscribeRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::UnsubscribeRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_tool_call()` instead.")]
     async fn call_tool(&self, params: CallToolRequestParams) -> SdkResult<CallToolResult> {
-        let request = CallToolRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::CallToolRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
+    #[deprecated(since = "0.8.0", note = "Use `request_tool_list()` instead.")]
     async fn list_tools(
         &self,
-        params: Option<ListToolsRequestParams>,
+        params: Option<PaginatedRequestParams>,
     ) -> SdkResult<crate::schema::ListToolsResult> {
-        let request = ListToolsRequest::new(params);
-        let response = self.request(request.into(), None).await?;
+        let response = self
+            .request(RequestFromClient::ListToolsRequest(params), None)
+            .await?;
         Ok(response.try_into()?)
     }
 
-    async fn send_roots_list_changed(
-        &self,
-        params: Option<RootsListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let notification = RootsListChangedNotification::new(params);
-        self.send_notification(notification.into()).await
-    }
-
-    /// Asserts that server capabilities support the requested method.
-    ///
-    /// Verifies that the server has the necessary capabilities to handle the given request method.
-    /// If the server is not initialized or lacks a required capability, an error is returned.
-    /// This can be utilized to avoid sending requests when the opposing party lacks support for them.
-    fn assert_server_capabilities(&self, request_method: &String) -> SdkResult<()> {
-        let entity = "Server";
-
-        let capabilities = self.server_capabilities().ok_or::<RpcError>(
-            RpcError::internal_error().with_message("Server is not initialized!".to_string()),
-        )?;
-
-        if *request_method == SetLevelRequest::method_name() && capabilities.logging.is_none() {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "logging", request_method))
-                .into());
-        }
-
-        if [
-            GetPromptRequest::method_name(),
-            ListPromptsRequest::method_name(),
-        ]
-        .contains(request_method)
-            && capabilities.prompts.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "prompts", request_method))
-                .into());
-        }
-
-        if [
-            ListResourcesRequest::method_name(),
-            ListResourceTemplatesRequest::method_name(),
-            ReadResourceRequest::method_name(),
-            SubscribeRequest::method_name(),
-            UnsubscribeRequest::method_name(),
-        ]
-        .contains(request_method)
-            && capabilities.resources.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(
-                    entity,
-                    "resources",
-                    request_method,
-                ))
-                .into());
-        }
-
-        if [
-            CallToolRequest::method_name(),
-            ListToolsRequest::method_name(),
-        ]
-        .contains(request_method)
-            && capabilities.tools.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "tools", request_method))
-                .into());
-        }
-
-        Ok(())
-    }
-
-    fn assert_client_notification_capabilities(
-        &self,
-        notification_method: &String,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Client";
-        let capabilities = &self.client_info().capabilities;
-
-        if *notification_method == RootsListChangedNotification::method_name()
-            && capabilities.roots.is_some()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "roots list changed notifications",
-                    notification_method,
-                )),
-            );
-        }
-
-        Ok(())
-    }
-
-    fn assert_client_request_capabilities(
-        &self,
-        request_method: &String,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Client";
-        let capabilities = &self.client_info().capabilities;
-
-        if *request_method == CreateMessageRequest::method_name() && capabilities.sampling.is_some()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "sampling capability",
-                    request_method,
-                )),
-            );
-        }
-
-        if *request_method == ListRootsRequest::method_name() && capabilities.roots.is_some() {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "roots capability",
-                    request_method,
-                )),
-            );
-        }
-
-        Ok(())
+    #[deprecated(since = "0.8.0", note = "Use `notify_roots_list_changed()` instead.")]
+    async fn send_roots_list_changed(&self, params: Option<NotificationParams>) -> SdkResult<()> {
+        self.send_notification(NotificationFromClient::RootsListChangedNotification(params))
+            .await
     }
 }

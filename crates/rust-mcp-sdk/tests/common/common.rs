@@ -6,9 +6,9 @@ pub use mock_server::*;
 use reqwest::{Client, Response, Url};
 use rust_mcp_macros::{mcp_tool, JsonSchema};
 use rust_mcp_schema::ProtocolVersion;
-use rust_mcp_sdk::mcp_client::ClientHandler;
-
 use rust_mcp_sdk::auth::{AuthInfo, AuthenticationError, OauthTokenVerifier};
+use rust_mcp_sdk::mcp_client::ClientHandler;
+use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
 use std::process;
@@ -243,10 +243,18 @@ pub fn test_client_info() -> InitializeRequestParams {
         client_info: Implementation {
             name: "test-rust-mcp-client".into(),
             version: "0.1.0".into(),
-            #[cfg(feature = "2025_06_18")]
+            description: None,
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "dark"
+            )],
             title: None,
+            website_url: None,
         },
         protocol_version: ProtocolVersion::V2025_03_26.to_string(),
+        meta: None,
     }
 }
 
@@ -331,9 +339,8 @@ pub fn random_port_old() -> u16 {
 pub mod sample_tools {
     use std::{sync::Arc, time::Duration};
 
+    use rust_mcp_macros::{mcp_tool, JsonSchema};
     use rust_mcp_schema::{LoggingMessageNotificationParams, TextContent};
-    #[cfg(feature = "2025_06_18")]
-    use rust_mcp_sdk::macros::{mcp_tool, JsonSchema};
     use rust_mcp_sdk::{
         schema::{schema_utils::CallToolError, CallToolResult},
         McpServer,
@@ -351,7 +358,7 @@ pub mod sample_tools {
         open_world_hint = false,
         read_only_hint = false
     )]
-    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
+    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, rust_mcp_macros::JsonSchema)]
     pub struct SayHelloTool {
         /// The name of the person to greet with a "Hello".
         pub name: String,
@@ -361,12 +368,7 @@ pub mod sample_tools {
         pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
             let hello_message = format!("Hello, {}!", self.name);
 
-            #[cfg(feature = "2025_06_18")]
-            return Ok(CallToolResult::text_content(vec![
-                rust_mcp_sdk::schema::TextContent::from(hello_message),
-            ]));
-            #[cfg(not(feature = "2025_06_18"))]
-            return Ok(CallToolResult::text_content(hello_message, None));
+            return Ok(CallToolResult::text_content(vec![hello_message.into()]));
         }
     }
 
@@ -390,12 +392,8 @@ pub mod sample_tools {
             auth_info: Option<AuthInfo>,
         ) -> Result<CallToolResult, CallToolError> {
             let message = format!("{}", serde_json::to_string(&auth_info).unwrap());
-            #[cfg(feature = "2025_06_18")]
-            return Ok(CallToolResult::text_content(vec![
-                rust_mcp_sdk::schema::TextContent::from(message),
-            ]));
-            #[cfg(not(feature = "2025_06_18"))]
-            return Ok(CallToolResult::text_content(message, None));
+
+            return Ok(CallToolResult::text_content(vec![message.into()]));
         }
     }
 
@@ -419,12 +417,7 @@ pub mod sample_tools {
         pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
             let goodbye_message = format!("Goodbye, {}!", self.name);
 
-            #[cfg(feature = "2025_06_18")]
-            return Ok(CallToolResult::text_content(vec![
-                rust_mcp_sdk::schema::TextContent::from(goodbye_message),
-            ]));
-            #[cfg(not(feature = "2025_06_18"))]
-            return Ok(CallToolResult::text_content(goodbye_message, None));
+            return Ok(CallToolResult::text_content(vec![goodbye_message.into()]));
         }
     }
 
@@ -453,6 +446,7 @@ pub mod sample_tools {
                         data: json!({"id":format!("message {} of {}",i,self.count)}),
                         level: rust_mcp_sdk::schema::LoggingLevel::Emergency,
                         logger: None,
+                        meta: None,
                     })
                     .await;
                 tokio::time::sleep(Duration::from_millis(self.interval)).await;

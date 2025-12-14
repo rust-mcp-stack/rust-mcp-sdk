@@ -4,7 +4,7 @@ pub mod common;
 mod protocol_compatibility_on_server {
 
     use rust_mcp_sdk::mcp_server::ServerHandler;
-    use rust_mcp_sdk::schema::{InitializeRequest, InitializeResult, RpcError, INTERNAL_ERROR};
+    use rust_mcp_sdk::schema::{InitializeResult, RpcError, INTERNAL_ERROR};
 
     use crate::common::{
         test_client_info,
@@ -30,7 +30,7 @@ mod protocol_compatibility_on_server {
         );
 
         handler
-            .handle_initialize_request(InitializeRequest::new(initialize_request), runtime)
+            .handle_initialize_request(initialize_request, runtime)
             .await
     }
 

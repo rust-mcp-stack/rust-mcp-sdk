@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
-    schema_utils::CallToolError, CallToolRequest, CallToolResult, ListToolsRequest,
-    ListToolsResult, RpcError,
+    schema_utils::CallToolError, CallToolResult, ListToolsResult, RpcError,
 };
+use rust_mcp_sdk::schema::{CallToolRequestParams, PaginatedRequestParams};
 use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ impl ServerHandler for MyServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,
-        request: ListToolsRequest,
+        params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
@@ -33,12 +33,12 @@ impl ServerHandler for MyServerHandler {
     /// Handles incoming CallToolRequest and processes it using the appropriate tool.
     async fn handle_call_tool_request(
         &self,
-        request: CallToolRequest,
+        params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =
-            GreetingTools::try_from(request.params).map_err(CallToolError::new)?;
+            GreetingTools::try_from(params).map_err(CallToolError::new)?;
 
         // Match the tool variant and execute its corresponding logic
         match tool_params {

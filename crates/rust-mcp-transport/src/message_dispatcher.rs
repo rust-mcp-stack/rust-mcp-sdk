@@ -9,7 +9,7 @@ use crate::{
             self, ClientMessage, ClientMessages, McpMessage, RpcMessage, ServerMessage,
             ServerMessages,
         },
-        JsonrpcError,
+        JsonrpcErrorResponse,
     },
     SessionId, StreamId,
 };
@@ -192,7 +192,7 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                     .filter(|message| message.is_request())
                     .map(|message| {
                         (
-                            message.request_id().unwrap(), // guaranteed to have request_id
+                            message.request_id(),
                             self.store_pending_request_for_message(message),
                         )
                     })
@@ -222,9 +222,9 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
                     .zip(request_ids)
                     .map(|(res, request_id)| match res {
                         Ok(response) => response,
-                        Err(error) => ServerMessage::Error(JsonrpcError::new(
+                        Err(error) => ServerMessage::Error(JsonrpcErrorResponse::new(
                             RpcError::internal_error().with_message(error.to_string()),
-                            request_id.to_owned(),
+                            request_id.cloned(),
                         )),
                     })
                     .collect();
@@ -334,7 +334,7 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
                     .filter(|message| message.is_request())
                     .map(|message| {
                         (
-                            message.request_id().unwrap(), // guaranteed to have request_id
+                            message.request_id(),
                             self.store_pending_request_for_message(message),
                         )
                     })
@@ -364,9 +364,9 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
                     .zip(request_ids)
                     .map(|(res, request_id)| match res {
                         Ok(response) => response,
-                        Err(error) => ClientMessage::Error(JsonrpcError::new(
+                        Err(error) => ClientMessage::Error(JsonrpcErrorResponse::new(
                             RpcError::internal_error().with_message(error.to_string()),
-                            request_id.to_owned(),
+                            request_id.cloned(),
                         )),
                     })
                     .collect();

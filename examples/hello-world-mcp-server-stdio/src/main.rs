@@ -2,9 +2,9 @@ mod handler;
 mod tools;
 
 use handler::MyServerHandler;
+use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-    LATEST_PROTOCOL_VERSION,
+    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
     error::SdkResult,
@@ -12,16 +12,35 @@ use rust_mcp_sdk::{
     McpServer, StdioTransport, TransportOptions,
 };
 use std::sync::Arc;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
+    // initialize tracing
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
     // STEP 1: Define server details and capabilities
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Hello World MCP Server".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Hello World MCP Server".to_string()),
+            name: "Hello World MCP Server".into(),
+            version: "0.1.0".into(),
+            title: Some("Hello World MCP Server".into()),
+            description: Some("Hello World MCP Server, by Rust MCP SDK".into()),
+            icons: vec![
+                mcp_icon!(
+                    src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                    mime_type = "image/png",
+                    sizes = ["128x128"],
+                    theme = "dark"
+                )
+            ],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -29,8 +48,8 @@ async fn main() -> SdkResult<()> {
             ..Default::default() // Using default values for other fields
         },
         meta: None,
-        instructions: Some("server instructions...".to_string()),
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+        instructions: Some("server instructions...".into()),
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
     // STEP 2: create a std transport with default options

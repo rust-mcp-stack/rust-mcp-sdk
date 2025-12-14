@@ -2021,9 +2021,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-schema"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba217e6fcb043bba9e194209bff92c35294093187504d1443832ca2051816753"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2375,6 +2373,8 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.17",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

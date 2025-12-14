@@ -17,7 +17,6 @@ use futures::{StreamExt, TryFutureExt};
 #[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
 use rust_mcp_transport::{IoStream, TransportDispatcher};
-use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
@@ -46,7 +45,7 @@ pub struct ServerRuntime {
     server_details: Arc<InitializeResult>,
     #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
-    transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>, //TODO: remove the transport_map, we do not need a hashmap for it
+    transport_map: tokio::sync::RwLock<Option<TransportType>>,
     request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
@@ -107,7 +106,7 @@ impl McpServer for ServerRuntime {
         request_timeout: Option<Duration>,
     ) -> SdkResult<Option<ClientMessage>> {
         let transport_map = self.transport_map.read().await;
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -133,7 +132,7 @@ impl McpServer for ServerRuntime {
         request_timeout: Option<Duration>,
     ) -> SdkResult<Option<Vec<ClientMessage>>> {
         let transport_map = self.transport_map.read().await;
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -160,7 +159,7 @@ impl McpServer for ServerRuntime {
         let self_clone = self.clone();
         let transport_map = self_clone.transport_map.read().await;
 
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -254,7 +253,7 @@ impl McpServer for ServerRuntime {
 
     async fn stderr_message(&self, message: String) -> SdkResult<()> {
         let transport_map = self.transport_map.read().await;
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -275,14 +274,10 @@ impl McpServer for ServerRuntime {
 }
 
 impl ServerRuntime {
-    pub(crate) async fn consume_payload_string(
-        &self,
-        stream_id: &str,
-        payload: &str,
-    ) -> SdkResult<()> {
+    pub(crate) async fn consume_payload_string(&self, payload: &str) -> SdkResult<()> {
         let transport_map = self.transport_map.read().await;
 
-        let transport = transport_map.get(stream_id).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("stream id does not exists or is closed!".to_string()),
         )?;
@@ -308,10 +303,14 @@ impl ServerRuntime {
         let response = match message {
             // Handle a client request
             ClientMessage::Request(client_jsonrpc_request) => {
+                let request_id = client_jsonrpc_request.request_id().clone();
+
                 let result = self
                     .handler
-                    .handle_request(client_jsonrpc_request.request, self.clone())
+                    .handle_request(client_jsonrpc_request.into(), self.clone())
                     .await;
+                println!(">>>  {:?} ", result);
+
                 // create a response to send back to the client
                 let response: MessageFromServer = match result {
                     Ok(success_value) => success_value.into(),
@@ -326,13 +325,13 @@ impl ServerRuntime {
                 };
 
                 let mpc_message: ServerMessage =
-                    ServerMessage::from_message(response, Some(client_jsonrpc_request.id))?;
+                    ServerMessage::from_message(response, Some(request_id))?;
 
                 Some(mpc_message)
             }
             ClientMessage::Notification(client_jsonrpc_notification) => {
                 self.handler
-                    .handle_notification(client_jsonrpc_notification.notification, self.clone())
+                    .handle_notification(client_jsonrpc_notification.into(), self.clone())
                     .await?;
                 None
             }
@@ -340,15 +339,18 @@ impl ServerRuntime {
                 self.handler
                     .handle_error(&jsonrpc_error.error, self.clone())
                     .await?;
-                if let Some(tx_response) = transport.pending_request_tx(&jsonrpc_error.id).await {
-                    tx_response
-                        .send(ClientMessage::Error(jsonrpc_error))
-                        .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
-                } else {
-                    tracing::warn!(
-                        "Received an error response with no corresponding request {:?}",
-                        &jsonrpc_error.id
-                    );
+
+                if let Some(request_id) = jsonrpc_error.id.as_ref() {
+                    if let Some(tx_response) = transport.pending_request_tx(request_id).await {
+                        tx_response
+                            .send(ClientMessage::Error(jsonrpc_error))
+                            .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
+                    } else {
+                        tracing::warn!(
+                            "Received an error response with no corresponding request {:?}",
+                            &jsonrpc_error.id
+                        );
+                    }
                 }
                 None
             }
@@ -387,7 +389,7 @@ impl ServerRuntime {
         }
         let mut transport_map = self.transport_map.write().await;
         tracing::trace!("save transport for stream id : {}", stream_id);
-        transport_map.insert(stream_id.to_string(), transport);
+        *transport_map = Some(transport);
         Ok(())
     }
 
@@ -398,7 +400,7 @@ impl ServerRuntime {
         }
         let transport_map = self.transport_map.read().await;
         tracing::trace!("removing transport for stream id : {}", stream_id);
-        if let Some(transport) = transport_map.get(stream_id) {
+        if let Some(transport) = transport_map.as_ref() {
             transport.shut_down().await?;
         }
         // transport_map.remove(stream_id);
@@ -407,16 +409,16 @@ impl ServerRuntime {
 
     pub(crate) async fn shutdown(&self) {
         let mut transport_map = self.transport_map.write().await;
-        let items: Vec<_> = transport_map.drain().map(|(_, v)| v).collect();
+        let transport_option = transport_map.take();
         drop(transport_map);
-        for item in items {
-            let _ = item.shut_down().await;
+        if let Some(transport) = transport_option {
+            let _ = transport.shut_down().await;
         }
     }
 
-    pub(crate) async fn stream_id_exists(&self, stream_id: &str) -> bool {
+    pub(crate) async fn default_stream_exists(&self) -> bool {
         let transport_map = self.transport_map.read().await;
-        let live_transport = if let Some(t) = transport_map.get(stream_id) {
+        let live_transport = if let Some(t) = transport_map.as_ref() {
             !t.is_shut_down().await
         } else {
             false
@@ -581,7 +583,7 @@ impl ServerRuntime {
             server_details,
             handler,
             session_id: Some(session_id),
-            transport_map: tokio::sync::RwLock::new(HashMap::new()),
+            transport_map: tokio::sync::RwLock::new(None),
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
@@ -600,8 +602,6 @@ impl ServerRuntime {
         >,
         handler: Arc<dyn McpServerHandler>,
     ) -> Arc<Self> {
-        let mut map: HashMap<String, TransportType> = HashMap::new();
-        map.insert(DEFAULT_STREAM_ID.to_string(), Arc::new(transport));
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
         Arc::new(Self {
@@ -609,7 +609,7 @@ impl ServerRuntime {
             handler,
             #[cfg(feature = "hyper-server")]
             session_id: None,
-            transport_map: tokio::sync::RwLock::new(map),
+            transport_map: tokio::sync::RwLock::new(Some(Arc::new(transport))),
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),

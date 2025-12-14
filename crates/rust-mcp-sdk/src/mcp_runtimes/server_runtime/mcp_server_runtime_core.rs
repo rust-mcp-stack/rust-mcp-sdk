@@ -3,12 +3,12 @@ use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 use crate::mcp_traits::{McpServer, McpServerHandler};
 use crate::schema::schema_utils::{
-    self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
-    ResultFromServer, ServerMessage,
+    ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient, ResultFromServer,
+    ServerMessage,
 };
 use crate::schema::{
     schema_utils::{ClientMessages, ServerMessages},
-    ClientRequest, InitializeResult, RpcError,
+    InitializeResult, RpcError,
 };
 use async_trait::async_trait;
 use rust_mcp_transport::TransportDispatcher;
@@ -68,13 +68,10 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         // store the client details if the request is a client initialization request
-        if let schema_utils::RequestFromClient::ClientRequest(ClientRequest::InitializeRequest(
-            initialize_request,
-        )) = &client_jsonrpc_request
-        {
+        if let RequestFromClient::InitializeRequest(initialize_request) = &client_jsonrpc_request {
             // keep a copy of the InitializeRequestParams which includes client_info and capabilities
             runtime
-                .set_client_details(initialize_request.params.clone())
+                .set_client_details(initialize_request.clone())
                 .await
                 .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
         }

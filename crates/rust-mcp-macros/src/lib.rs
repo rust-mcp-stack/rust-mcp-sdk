@@ -4,9 +4,13 @@ mod utils;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use quote::ToTokens;
+use syn::parenthesized;
+use syn::spanned::Spanned;
+use syn::ExprArray;
 use syn::{
-    parse::Parse, parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Error, Expr,
-    ExprLit, Fields, GenericArgument, Lit, Meta, PathArguments, Token, Type,
+    parse::Parse, parse_macro_input, punctuated::Punctuated, token::Comma, Data, DeriveInput,
+    Error, Expr, ExprLit, Fields, Ident, Lit, LitStr, Meta, PathArguments, Token, Type,
 };
 use utils::{is_option, renamed_field, type_to_json_schema};
 
@@ -29,23 +33,18 @@ use utils::{is_option, renamed_field, type_to_json_schema};
 struct McpToolMacroAttributes {
     name: Option<String>,
     description: Option<String>,
-    #[cfg(feature = "2025_06_18")]
     meta: Option<String>, // Store raw JSON string instead of parsed Map
-    #[cfg(feature = "2025_06_18")]
     title: Option<String>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     destructive_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     idempotent_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     open_world_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     read_only_hint: Option<bool>,
+    execution: Option<ExecutionSupportDsl>,
+    icons: Option<Vec<IconDsl>>,
 }
 
+use crate::utils::is_vec_string;
 use syn::parse::ParseStream;
-
-use crate::utils::{generate_enum_parse, is_enum};
 
 struct ExprList {
     exprs: Punctuated<Expr, Token![,]>,
@@ -56,6 +55,152 @@ impl Parse for ExprList {
         Ok(ExprList {
             exprs: Punctuated::parse_terminated(input)?,
         })
+    }
+}
+
+enum ExecutionSupportDsl {
+    Forbidden,
+    Optional,
+    Required,
+}
+
+struct IconDsl {
+    src: LitStr,
+    mime_type: Option<LitStr>,
+    sizes: Option<ExprArray>,
+    theme: Option<IconThemeDsl>,
+}
+
+enum IconThemeDsl {
+    Light,
+    Dark,
+}
+
+struct IconField {
+    key: Ident,
+    _eq_token: Token![=],
+    value: syn::Expr,
+}
+
+impl Parse for IconField {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(IconField {
+            key: input.parse()?,
+            _eq_token: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+impl Parse for IconDsl {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        parenthesized!(content in input); // parse ( ... )
+
+        let fields: Punctuated<IconField, Token![,]> =
+            content.parse_terminated(IconField::parse, Token![,])?;
+
+        let mut src = None;
+        let mut mime_type = None;
+        let mut sizes = None;
+        let mut theme = None;
+
+        for field in fields {
+            let key_str = field.key.to_string();
+            match key_str.as_str() {
+                "src" => {
+                    if let syn::Expr::Lit(expr_lit) = field.value {
+                        if let syn::Lit::Str(lit) = expr_lit.lit {
+                            src = Some(lit);
+                        } else {
+                            return Err(syn::Error::new(
+                                expr_lit.span(),
+                                "expected string literal for src",
+                            ));
+                        }
+                    }
+                }
+                "mime_type" => {
+                    if let syn::Expr::Lit(expr_lit) = field.value {
+                        if let syn::Lit::Str(lit) = expr_lit.lit {
+                            mime_type = Some(lit);
+                        } else {
+                            return Err(syn::Error::new(
+                                expr_lit.span(),
+                                "expected string literal for mime_type",
+                            ));
+                        }
+                    }
+                }
+                "sizes" => {
+                    if let syn::Expr::Array(arr) = field.value {
+                        // Validate that every element is a string literal.
+                        for elem in &arr.elems {
+                            match elem {
+                                syn::Expr::Lit(expr_lit) => {
+                                    if let syn::Lit::Str(_) = &expr_lit.lit {
+                                        // ok
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            expr_lit.span(),
+                                            "sizes array must contain string literals",
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(syn::Error::new(
+                                        elem.span(),
+                                        "sizes array must contain only string literals",
+                                    ));
+                                }
+                            }
+                        }
+
+                        sizes = Some(arr);
+                    } else {
+                        return Err(syn::Error::new(
+                            field.value.span(),
+                            "expected array expression for sizes",
+                        ));
+                    }
+                }
+                "theme" => {
+                    if let syn::Expr::Lit(expr_lit) = field.value {
+                        if let syn::Lit::Str(lit) = expr_lit.lit {
+                            theme = Some(match lit.value().as_str() {
+                                "light" => IconThemeDsl::Light,
+                                "dark" => IconThemeDsl::Dark,
+                                _ => {
+                                    return Err(syn::Error::new(
+                                        lit.span(),
+                                        "theme must be \"light\" or \"dark\"",
+                                    ));
+                                }
+                            });
+                        }
+                    }
+                }
+                _ => {
+                    return Err(syn::Error::new(
+                        field.key.span(),
+                        "unexpected field in icon",
+                    ))
+                }
+            }
+        }
+
+        Ok(IconDsl {
+            src: src.ok_or_else(|| syn::Error::new(input.span(), "icon must have `src`"))?,
+            mime_type,
+            sizes,
+            theme,
+        })
+    }
+}
+
+impl Parse for IconThemeDsl {
+    fn parse(_input: ParseStream) -> syn::Result<Self> {
+        panic!("IconThemeDsl should be parsed inside IconDsl")
     }
 }
 
@@ -76,123 +221,116 @@ impl Parse for McpToolMacroAttributes {
         let mut instance = Self {
             name: None,
             description: None,
-            #[cfg(feature = "2025_06_18")]
             meta: None,
-            #[cfg(feature = "2025_06_18")]
             title: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             destructive_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             idempotent_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             open_world_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
             read_only_hint: None,
+            execution: None,
+            icons: None,
         };
 
         let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
         for meta in meta_list {
-            if let Meta::NameValue(meta_name_value) = meta {
-                let ident = meta_name_value.path.get_ident().unwrap();
-                let ident_str = ident.to_string();
+            match meta {
+                Meta::NameValue(meta_name_value) => {
+                    let ident = meta_name_value.path.get_ident().unwrap();
+                    let ident_str = ident.to_string();
 
-                match ident_str.as_str() {
-                    "name" | "description" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            Expr::Macro(expr_macro) => {
-                                let mac = &expr_macro.mac;
-                                if mac.path.is_ident("concat") {
-                                    let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                    let mut result = String::new();
-                                    for expr in args.exprs {
-                                        if let Expr::Lit(ExprLit {
-                                            lit: Lit::Str(lit_str),
-                                            ..
-                                        }) = expr
-                                        {
-                                            result.push_str(&lit_str.value());
-                                        } else {
-                                            return Err(Error::new_spanned(
+                    match ident_str.as_str() {
+                        "name" | "description" => {
+                            let value = match &meta_name_value.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit_str),
+                                    ..
+                                }) => lit_str.value(),
+                                Expr::Macro(expr_macro) => {
+                                    let mac = &expr_macro.mac;
+                                    if mac.path.is_ident("concat") {
+                                        let args: ExprList = syn::parse2(mac.tokens.clone())?;
+                                        let mut result = String::new();
+                                        for expr in args.exprs {
+                                            if let Expr::Lit(ExprLit {
+                                                lit: Lit::Str(lit_str),
+                                                ..
+                                            }) = expr
+                                            {
+                                                result.push_str(&lit_str.value());
+                                            } else {
+                                                return Err(Error::new_spanned(
                                                 expr,
                                                 "Only string literals are allowed inside concat!()",
                                             ));
+                                            }
                                         }
+                                        result
+                                    } else {
+                                        return Err(Error::new_spanned(
+                                            expr_macro,
+                                            "Only concat!(...) is supported here",
+                                        ));
                                     }
-                                    result
-                                } else {
+                                }
+                                _ => {
                                     return Err(Error::new_spanned(
-                                        expr_macro,
-                                        "Only concat!(...) is supported here",
+                                        &meta_name_value.value,
+                                        "Expected a string literal or concat!(...)",
                                     ));
                                 }
+                            };
+                            match ident_str.as_str() {
+                                "name" => instance.name = Some(value),
+                                "description" => instance.description = Some(value),
+                                _ => {}
                             }
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal or concat!(...)",
-                                ));
-                            }
-                        };
-                        match ident_str.as_str() {
-                            "name" => instance.name = Some(value),
-                            "description" => instance.description = Some(value),
-                            _ => {}
                         }
-                    }
-                    #[cfg(feature = "2025_06_18")]
-                    "meta" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            _ => {
+                        "meta" => {
+                            let value = match &meta_name_value.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit_str),
+                                    ..
+                                }) => lit_str.value(),
+                                _ => {
+                                    return Err(Error::new_spanned(
+                                        &meta_name_value.value,
+                                        "Expected a JSON object as a string literal",
+                                    ));
+                                }
+                            };
+                            // Validate that the string is a valid JSON object
+                            let parsed: serde_json::Value =
+                                serde_json::from_str(&value).map_err(|e| {
+                                    Error::new_spanned(
+                                        &meta_name_value.value,
+                                        format!("Expected a valid JSON object: {e}"),
+                                    )
+                                })?;
+                            if !parsed.is_object() {
                                 return Err(Error::new_spanned(
                                     &meta_name_value.value,
-                                    "Expected a JSON object as a string literal",
+                                    "Expected a JSON object",
                                 ));
                             }
-                        };
-                        // Validate that the string is a valid JSON object
-                        let parsed: serde_json::Value =
-                            serde_json::from_str(&value).map_err(|e| {
-                                Error::new_spanned(
-                                    &meta_name_value.value,
-                                    format!("Expected a valid JSON object: {e}"),
-                                )
-                            })?;
-                        if !parsed.is_object() {
-                            return Err(Error::new_spanned(
-                                &meta_name_value.value,
-                                "Expected a JSON object",
-                            ));
+                            instance.meta = Some(value);
                         }
-                        instance.meta = Some(value);
-                    }
-                    #[cfg(feature = "2025_06_18")]
-                    "title" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal",
-                                ));
-                            }
-                        };
-                        instance.title = Some(value);
-                    }
-                    "destructive_hint" | "idempotent_hint" | "open_world_hint"
-                    | "read_only_hint" => {
-                        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-                        {
+                        "title" => {
+                            let value = match &meta_name_value.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit_str),
+                                    ..
+                                }) => lit_str.value(),
+                                _ => {
+                                    return Err(Error::new_spanned(
+                                        &meta_name_value.value,
+                                        "Expected a string literal",
+                                    ));
+                                }
+                            };
+                            instance.title = Some(value);
+                        }
+                        "destructive_hint" | "idempotent_hint" | "open_world_hint"
+                        | "read_only_hint" => {
                             let value = match &meta_name_value.value {
                                 Expr::Lit(ExprLit {
                                     lit: Lit::Bool(lit_bool),
@@ -214,9 +352,59 @@ impl Parse for McpToolMacroAttributes {
                                 _ => {}
                             }
                         }
+                        "icons" => {
+                            // Check if the value is an array (Expr::Array)
+                            if let Expr::Array(array_expr) = &meta_name_value.value {
+                                let icon_list: Punctuated<IconDsl, Token![,]> = array_expr
+                                    .elems
+                                    .iter()
+                                    .map(|elem| syn::parse2::<IconDsl>(elem.to_token_stream()))
+                                    .collect::<Result<_, _>>()?;
+                                instance.icons = Some(icon_list.into_iter().collect());
+                            } else {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected an array for the 'icons' attribute",
+                                ));
+                            }
+                        }
+                        other => {
+                            eprintln!("other: {:?}", other)
+                        }
                     }
-                    _ => {}
                 }
+                Meta::List(meta_list) => {
+                    let ident = meta_list.path.get_ident().unwrap();
+                    let ident_str = ident.to_string();
+
+                    if ident_str == "execution" {
+                        let nested = meta_list
+                            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
+                        let mut task_support = None;
+
+                        for meta in nested {
+                            if let Meta::NameValue(nv) = meta {
+                                if nv.path.is_ident("task_support") {
+                                    if let Expr::Lit(ExprLit {
+                                        lit: Lit::Str(s), ..
+                                    }) = &nv.value
+                                    {
+                                        let value = s.value();
+                                        task_support = Some(match value.as_str() {
+                                                    "forbidden" => ExecutionSupportDsl::Forbidden,
+                                                    "optional" => ExecutionSupportDsl::Optional,
+                                                    "required" => ExecutionSupportDsl::Required,
+                                                    _ => return Err(Error::new_spanned(&nv.value, "task_support must be one of: forbidden, optional, required")),
+                                                });
+                                    }
+                                }
+                            }
+                        }
+
+                        instance.execution = task_support;
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -232,6 +420,7 @@ impl Parse for McpToolMacroAttributes {
                 "The 'name' attribute is required and must not be empty.",
             ));
         }
+
         if instance
             .description
             .as_ref()
@@ -244,66 +433,6 @@ impl Parse for McpToolMacroAttributes {
             ));
         }
 
-        Ok(instance)
-    }
-}
-
-struct McpElicitationAttributes {
-    message: Option<String>,
-}
-
-impl Parse for McpElicitationAttributes {
-    fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut instance = Self { message: None };
-        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
-        for meta in meta_list {
-            if let Meta::NameValue(meta_name_value) = meta {
-                let ident = meta_name_value.path.get_ident().unwrap();
-                let ident_str = ident.to_string();
-                if ident_str.as_str() == "message" {
-                    let value = match &meta_name_value.value {
-                        Expr::Lit(ExprLit {
-                            lit: Lit::Str(lit_str),
-                            ..
-                        }) => lit_str.value(),
-                        Expr::Macro(expr_macro) => {
-                            let mac = &expr_macro.mac;
-                            if mac.path.is_ident("concat") {
-                                let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                let mut result = String::new();
-                                for expr in args.exprs {
-                                    if let Expr::Lit(ExprLit {
-                                        lit: Lit::Str(lit_str),
-                                        ..
-                                    }) = expr
-                                    {
-                                        result.push_str(&lit_str.value());
-                                    } else {
-                                        return Err(Error::new_spanned(
-                                            expr,
-                                            "Only string literals are allowed inside concat!()",
-                                        ));
-                                    }
-                                }
-                                result
-                            } else {
-                                return Err(Error::new_spanned(
-                                    expr_macro,
-                                    "Only concat!(...) is supported here",
-                                ));
-                            }
-                        }
-                        _ => {
-                            return Err(Error::new_spanned(
-                                &meta_name_value.value,
-                                "Expected a string literal or concat!(...)",
-                            ));
-                        }
-                    };
-                    instance.message = Some(value)
-                }
-            }
-        }
         Ok(instance)
     }
 }
@@ -370,33 +499,22 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let tool_name = macro_attributes.name.unwrap_or_default();
     let tool_description = macro_attributes.description.unwrap_or_default();
 
-    #[cfg(not(feature = "2025_06_18"))]
-    let meta = quote! {};
-    #[cfg(feature = "2025_06_18")]
     let meta = macro_attributes.meta.map_or(quote! { meta: None, }, |m| {
         quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
     });
 
-    #[cfg(not(feature = "2025_06_18"))]
-    let title = quote! {};
-    #[cfg(feature = "2025_06_18")]
     let title = macro_attributes.title.map_or(
         quote! { title: None, },
         |t| quote! { title: Some(#t.to_string()), },
     );
 
-    #[cfg(not(feature = "2025_06_18"))]
-    let output_schema = quote! {};
-    #[cfg(feature = "2025_06_18")]
     let output_schema = quote! { output_schema: None,};
 
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     let some_annotations = macro_attributes.destructive_hint.is_some()
         || macro_attributes.idempotent_hint.is_some()
         || macro_attributes.open_world_hint.is_some()
         || macro_attributes.read_only_hint.is_some();
 
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
     let annotations = if some_annotations {
         let destructive_hint = macro_attributes
             .destructive_hint
@@ -424,17 +542,91 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         quote! { None }
     };
 
-    let annotations_token = {
-        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-        {
-            quote! { annotations: #annotations, }
+    let annotations_token = quote! { annotations: #annotations, };
+
+    let execution_tokens = if let Some(exec) = &macro_attributes.execution {
+        let task_support = match exec {
+            ExecutionSupportDsl::Forbidden => {
+                quote! { Some(#base_crate::ToolExecutionTaskSupport::Forbidden) }
+            }
+            ExecutionSupportDsl::Optional => {
+                quote! { Some(#base_crate::ToolExecutionTaskSupport::Optional)  }
+            }
+            ExecutionSupportDsl::Required => {
+                quote! { Some(#base_crate::ToolExecutionTaskSupport::Required)  }
+            }
+        };
+
+        quote! {
+            execution: Some(#base_crate::ToolExecution {
+                task_support: #task_support,
+            }),
         }
-        #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
-        {
-            quote! {}
+    } else {
+        quote! { execution: None, }
+    };
+
+    let icons_tokens = {
+        let mut icon_exprs = Vec::new();
+
+        if let Some(icons) = &macro_attributes.icons {
+            for icon in icons {
+                let src = &icon.src;
+                let mime_type = icon
+                    .mime_type
+                    .as_ref()
+                    .map(|s| quote! { Some(#s.to_string()) })
+                    .unwrap_or(quote! { None });
+                let theme = icon
+                    .theme
+                    .as_ref()
+                    .map(|t| match t {
+                        IconThemeDsl::Light => quote! { Some(#base_crate::IconTheme::Light) },
+                        IconThemeDsl::Dark => quote! { Some(#base_crate::IconTheme::Dark) },
+                    })
+                    .unwrap_or(quote! { None });
+
+                // Build sizes: Vec<String>
+                let sizes: Vec<_> = icon
+                    .sizes
+                    .as_ref()
+                    .map(|arr| {
+                        arr.elems
+                            .iter()
+                            .map(|elem| {
+                                if let syn::Expr::Lit(expr_lit) = elem {
+                                    if let syn::Lit::Str(lit_str) = &expr_lit.lit {
+                                        let val = lit_str.value();
+                                        return quote! { #val.to_string() };
+                                    }
+                                }
+                                panic!("sizes must contain only string literals");
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
+                let icon_expr = quote! {
+                    #base_crate::Icon {
+                        src: #src.to_string(),
+                        mime_type: #mime_type,
+                        sizes: vec![ #(#sizes),* ],
+                        theme: #theme,
+                    }
+                };
+                icon_exprs.push(icon_expr);
+            }
+        }
+
+        if icon_exprs.is_empty() {
+            quote! { icons: ::std::vec::Vec::new(), }
+        } else {
+            quote! { icons: vec![ #(#icon_exprs),* ], }
         }
     };
 
+    // TODO: add support for schema version to ToolInputSchema :
+    // it defaults to JSON Schema 2020-12 when no explicit $schema is provided.
     let tool_token = quote! {
         #base_crate::Tool {
             name: #tool_name.to_string(),
@@ -443,7 +635,9 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             #title
             #meta
             #annotations_token
-            input_schema: #base_crate::ToolInputSchema::new(required, properties)
+            #execution_tokens
+            #icons_tokens
+            input_schema: #base_crate::ToolInputSchema::new(required, properties, None)
         }
     };
 
@@ -453,6 +647,29 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             pub fn tool_name() -> String {
                 #tool_name.to_string()
             }
+
+
+            /// Returns a `CallToolRequestParams` initialized with the current tool's name.
+            ///
+            /// You can further customize the request by adding arguments or other attributes
+            /// using the builder pattern. For example:
+            ///
+            /// ```ignore
+            /// # use my_crate::{MyTool};
+            /// let args = serde_json::Map::new();
+            /// let task_meta = TaskMetadata{ttl: Some(200)}
+            ///
+            /// let params: CallToolRequestParams = MyTool::request_params()
+            ///     .with_arguments(args)
+            ///     .with_task(task_meta);
+            /// ```
+            ///
+            /// # Returns
+            /// A `CallToolRequestParams` with the tool name set.
+            pub fn request_params() -> CallToolRequestParams {
+               CallToolRequestParams::new(#tool_name.to_string())
+            }
+
 
             /// Constructs and returns a `rust_mcp_schema::Tool` instance.
             ///
@@ -503,300 +720,390 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
+pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let input_ident = &input.ident;
+    let struct_name = &input.ident;
 
-    // Conditionally select the path
+    let elicit_args = parse_macro_input!(args as ElicitArgs);
+
     let base_crate = if cfg!(feature = "sdk") {
         quote! { rust_mcp_sdk::schema }
     } else {
         quote! { rust_mcp_schema }
     };
 
-    let macro_attributes = parse_macro_input!(attributes as McpElicitationAttributes);
-    let message = macro_attributes.message.unwrap_or_default();
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(n) => &n.named,
+            _ => panic!("mcp_elicit only supports structs with named fields"),
+        },
+        _ => panic!("mcp_elicit only supports structs"),
+    };
 
-    // Generate field assignments for from_content_map()
-    let field_assignments = match &input.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => {
-                let assignments = fields.named.iter().map(|field| {
-                      let field_attrs = &field.attrs;
-                      let field_ident = &field.ident;
-                      let renamed_field = renamed_field(field_attrs);
-                      let field_name = renamed_field.unwrap_or_else(|| field_ident.as_ref().unwrap().to_string());
-                      let field_type = &field.ty;
+    let message = &elicit_args.message;
 
-                      let type_check = if is_option(field_type) {
-                          // Extract inner type for Option<T>
-                          let inner_type = match field_type {
-                              Type::Path(type_path) => {
-                                  let segment = type_path.path.segments.last().unwrap();
-                                  if segment.ident == "Option" {
-                                      match &segment.arguments {
-                                          PathArguments::AngleBracketed(args) => {
-                                              match args.args.first().unwrap() {
-                                                  GenericArgument::Type(ty) => ty,
-                                                  _ => panic!("Expected type argument in Option<T>"),
-                                              }
-                                          }
-                                          _ => panic!("Invalid Option type"),
-                                      }
-                                  } else {
-                                      panic!("Expected Option type");
-                                  }
-                              }
-                              _ => panic!("Expected Option type"),
-                          };
-                          // Determine the match arm based on the inner type at compile time
-                          let (inner_type_ident, match_pattern, conversion) = match inner_type {
-                              Type::Path(type_path) if type_path.path.is_ident("String") => (
-                                  quote! { String },
-                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                  quote! { s.clone() }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
-                                  quote! { bool },
-                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
-                                  quote! { *b }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
-                                  quote! { i32 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! {
-                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
-                                          "Invalid number for field '{}': value {} does not fit in i32",
-                                          #field_name, *i
-                                      )))?
-                                  }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
-                                  quote! { i64 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! { *i }
-                              ),
-                              _ if is_enum(inner_type, &input) => {
-                                  let enum_parse = generate_enum_parse(inner_type, &field_name, &base_crate);
-                                  (
-                                      quote! { #inner_type },
-                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                      quote! { #enum_parse }
-                                  )
-                              }
-                              _ => panic!("Unsupported inner type for Option field: {}", quote! { #inner_type }),
-                          };
-                          let inner_type_str = quote! { stringify!(#inner_type_ident) };
-                          quote! {
-                              let #field_ident: Option<#inner_type_ident> = match content.as_ref().and_then(|map| map.get(#field_name)) {
-                                  Some(value) => {
-                                      match value {
-                                          #match_pattern => Some(#conversion),
-                                          _ => {
-                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                                  "Type mismatch for field '{}': expected {}, found {}",
-                                                  #field_name, #inner_type_str,
-                                                  match value {
-                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
-                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
-                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
-                                                  }
-                                              )));
-                                          }
-                                      }
-                                  }
-                                  None => None,
-                              };
-                          }
-                      } else {
-                          // Determine the match arm based on the field type at compile time
-                          let (field_type_ident, match_pattern, conversion) = match field_type {
-                              Type::Path(type_path) if type_path.path.is_ident("String") => (
-                                  quote! { String },
-                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                  quote! { s.clone() }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
-                                  quote! { bool },
-                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
-                                  quote! { *b }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
-                                  quote! { i32 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! {
-                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
-                                          "Invalid number for field '{}': value {} does not fit in i32",
-                                          #field_name, *i
-                                      )))?
-                                  }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
-                                  quote! { i64 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! { *i }
-                              ),
-                              _ if is_enum(field_type, &input) => {
-                                  let enum_parse = generate_enum_parse(field_type, &field_name, &base_crate);
-                                  (
-                                      quote! { #field_type },
-                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                      quote! { #enum_parse }
-                                  )
-                              }
-                              _ => panic!("Unsupported field type: {}", quote! { #field_type }),
-                          };
-                          let type_str = quote! { stringify!(#field_type_ident) };
-                          quote! {
-                              let #field_ident: #field_type_ident = match content.as_ref().and_then(|map| map.get(#field_name)) {
-                                  Some(value) => {
-                                      match value {
-                                          #match_pattern => #conversion,
-                                          _ => {
-                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                                  "Type mismatch for field '{}': expected {}, found {}",
-                                                  #field_name, #type_str,
-                                                  match value {
-                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
-                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
-                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
-                                                  }
-                                              )));
-                                          }
-                                      }
-                                  }
-                                  None => {
-                                      return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                          "Missing required field: {}",
-                                          #field_name
-                                      )));
-                                  }
-                              };
-                          }
-                      };
+    let impl_block = match elicit_args.mode {
+        ElicitMode::Form => {
+            let (from_content, init) = generate_form_impl(fields, &base_crate);
+            let schema = generate_form_schema(struct_name, &base_crate);
 
-                      type_check
-                  });
+            quote! {
+                impl #struct_name {
+                    pub fn message() -> &'static str{
+                        #message
+                    }
 
-                let field_idents = fields.named.iter().map(|field| &field.ident);
+                    pub fn requested_schema() -> #base_crate::ElicitFormSchema {
+                        #schema
+                    }
 
-                quote! {
-                    #(#assignments)*
+                    pub fn elicit_mode()->&'static str{
+                        "form"
+                    }
 
-                    Ok(Self {
-                        #(#field_idents,)*
-                    })
+                    pub fn elicit_form_params() -> #base_crate::ElicitRequestFormParams {
+                            #base_crate::ElicitRequestFormParams::new(
+                                Self::message().to_string(),
+                                Self::requested_schema(),
+                                None,
+                                None,
+                            )
+                    }
+
+                    pub fn elicit_request_params() -> #base_crate::ElicitRequestParams {
+                        Self::elicit_form_params().into()
+                    }
+
+                    pub fn from_elicit_result_content(
+                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                    ) -> Result<Self, #base_crate::RpcError> {
+                        use #base_crate::{ElicitResultContent as V, RpcError};
+                        let mut map = content.take().unwrap_or_default();
+                            #from_content
+                            Ok(#init)
+                    }
+
                 }
             }
-            _ => panic!("mcp_elicit macro only supports structs with named fields"),
-        },
-        _ => panic!("mcp_elicit macro only supports structs"),
-    };
+        }
+        ElicitMode::Url { url } => {
+            let (from_content, init) = generate_form_impl(fields, &base_crate);
 
-    let output = quote! {
-        impl #input_ident {
+            quote! {
+                impl #struct_name {
+                    pub fn message() -> &'static str {
+                        #message
+                    }
 
-            /// Returns the elicitation message defined in the `#[mcp_elicit(message = "...")]` attribute.
-            ///
-            /// This message is used to prompt the user or system for input when eliciting data for the struct.
-            /// If no message is provided in the attribute, an empty string is returned.
-            ///
-            /// # Returns
-            /// A `String` containing the elicitation message.
-            pub fn message()->String{
-                #message.to_string()
-            }
+                    pub fn url() -> &'static str {
+                        #url
+                    }
 
-            /// This method returns a `ElicitRequestedSchema` by retrieves the
-            /// struct's JSON schema (via the `JsonSchema` derive) and converting int into
-            /// a `ElicitRequestedSchema`. It extracts the `required` fields and
-            /// `properties` from the schema, mapping them to a `HashMap` of `PrimitiveSchemaDefinition` objects.
-            ///
-            /// # Returns
-            /// An `ElicitRequestedSchema` representing the schema of the struct.
-            ///
-            /// # Panics
-            /// Panics if the schema's properties cannot be converted to `PrimitiveSchemaDefinition` or if the schema
-            /// is malformed.
-            pub fn requested_schema() -> #base_crate::ElicitRequestedSchema {
-                let json_schema = &#input_ident::json_schema();
+                    pub fn elicit_mode()->&'static str {
+                        "url"
+                    }
 
-                let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
-                    Some(arr) => arr
-                        .iter()
-                        .filter_map(|item| item.as_str().map(String::from))
-                        .collect(),
-                    None => Vec::new(),
-                };
+                    pub fn elicit_url_params(elicitation_id:String) -> #base_crate::ElicitRequestUrlParams {
+                            #base_crate::ElicitRequestUrlParams::new(
+                                elicitation_id,
+                                Self::message().to_string(),
+                                Self::url().to_string(),
+                                None,
+                                None,
+                            )
+                    }
 
-                let properties: Option<std::collections::HashMap<String, _>> = json_schema
-                    .get("properties")
-                    .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
-                    .map(|properties| {
-                        properties
-                            .iter()
-                            .filter_map(|(key, value)| {
-                                serde_json::to_value(value)
-                                    .ok() // If serialization fails, return None.
-                                    .and_then(|v| {
-                                        if let serde_json::Value::Object(obj) = v {
-                                            Some(obj)
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .map(|obj| (key.to_string(), #base_crate::PrimitiveSchemaDefinition::try_from(&obj)))
-                            })
-                            .collect()
-                    });
+                    pub fn elicit_request_params(elicitation_id:String) -> #base_crate::ElicitRequestParams {
+                        Self::elicit_url_params(elicitation_id).into()
+                    }
 
-                let properties = properties
-                    .map(|map| {
-                        map.into_iter()
-                            .map(|(k, v)| v.map(|ok_v| (k, ok_v))) // flip Result inside tuple
-                            .collect::<Result<std::collections::HashMap<_, _>, _>>() // collect only if all Ok
-                    })
-                    .transpose()
-                    .unwrap();
-
-                let properties =
-                    properties.expect("Was not able to create a ElicitRequestedSchema");
-
-                let requested_schema = #base_crate::ElicitRequestedSchema::new(properties, required);
-                requested_schema
-            }
-
-            /// Converts a map of field names and `ElicitResultContentValue` into an instance of the struct.
-            ///
-            /// This method parses the provided content map, matching field names to struct fields and converting
-            /// `ElicitResultContentValue` variants into the appropriate Rust types (e.g., `String`, `bool`, `i32`,
-            /// `i64`, or simple enums). It supports both required and optional fields (`Option<T>`).
-            ///
-            /// # Parameters
-            /// - `content`: An optional `HashMap` mapping field names to `ElicitResultContentValue` values.
-            ///
-            /// # Returns
-            /// - `Ok(Self)` if the map is successfully parsed into the struct.
-            /// - `Err(RpcError)` if:
-            ///   - A required field is missing.
-            ///   - A value’s type does not match the expected field type.
-            ///   - An integer value cannot be converted (e.g., `i64` to `i32` out of bounds).
-            ///   - An enum value is invalid (e.g., string value does not match a enum variant name).
-            ///
-            /// # Errors
-            /// Returns `RpcError` with messages like:
-            /// - `"Missing required field: {}"`
-            /// - `"Type mismatch for field '{}': expected {}, found {}"`
-            /// - `"Invalid number for field '{}': value {} does not fit in i32"`
-            /// - `"Invalid enum value for field '{}': expected 'Yes' or 'No', found '{}'"`.
-            pub fn from_content_map(content: ::std::option::Option<::std::collections::HashMap<::std::string::String, #base_crate::ElicitResultContentValue>>) -> Result<Self, #base_crate::RpcError> {
-                #field_assignments
+                    pub fn from_elicit_result_content(
+                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                    ) -> Result<Self, RpcError> {
+                        use #base_crate::{ElicitResultContent as V, RpcError};
+                        let mut map = content.take().unwrap_or_default();
+                            #from_content
+                            Ok(#init)
+                    }
+                }
             }
         }
-        #input
     };
 
-    TokenStream::from(output)
+    let expanded = quote! {
+        #input
+        #impl_block
+    };
+
+    TokenStream::from(expanded)
+}
+
+// ──────────────────────────────────────────────────────────────
+//  Attribute parsing
+// ──────────────────────────────────────────────────────────────
+
+struct ElicitArgs {
+    message: LitStr,
+    mode: ElicitMode,
+}
+
+enum ElicitMode {
+    Form,
+    Url { url: LitStr },
+}
+
+impl syn::parse::Parse for ElicitArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut message = None;
+        let mut mode = ElicitMode::Form; // default
+        let mut url_lit: Option<LitStr> = None;
+
+        let metas = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+
+        // First pass
+        for meta in &metas {
+            if let Meta::NameValue(nv) = meta {
+                if let Some(ident) = nv.path.get_ident() {
+                    if ident == "message" {
+                        if let Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }) = &nv.value
+                        {
+                            message = Some(s.clone());
+                        }
+                    } else if ident == "url" {
+                        if let Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }) = &nv.value
+                        {
+                            url_lit = Some(s.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Second pass: handle `mode = url` or `mode = form`
+        for meta in &metas {
+            if let Meta::NameValue(nv) = meta {
+                if let Some(ident) = nv.path.get_ident() {
+                    if ident == "mode" {
+                        if let Expr::Path(path) = &nv.value {
+                            if let Some(k) = path.path.get_ident() {
+                                match k.to_string().as_str() {
+                                    "url" => {
+                                        let the_url = url_lit.clone().ok_or_else(|| {
+                                                    syn::Error::new_spanned(nv, "when `mode = url`, you must also provide `url = \"https://...\"`")
+                                                })?;
+                                        mode = ElicitMode::Url { url: the_url };
+                                    }
+                                    "form" => {
+                                        mode = ElicitMode::Form;
+                                    }
+                                    _ => {
+                                        return Err(syn::Error::new_spanned(
+                                            k,
+                                            "mode must be `form` or `url`",
+                                        ))
+                                    }
+                                }
+                            }
+                        } else {
+                            return Err(syn::Error::new_spanned(
+                                &nv.value,
+                                "mode must be `form` or `url`",
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        let message = message.unwrap_or_else(|| LitStr::new("", proc_macro2::Span::call_site()));
+
+        Ok(Self { message, mode })
+    }
+}
+
+fn json_field_name(field: &syn::Field) -> String {
+    field
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("serde"))
+        .find_map(|attr| {
+            // Parse everything inside #[serde(...)]
+            let items = attr
+                .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                .ok()?;
+
+            for item in items {
+                match item {
+                    // Case 1: #[serde(rename = "field_name")]
+                    Meta::NameValue(nv) if nv.path.is_ident("rename") => {
+                        if let Expr::Lit(ExprLit {
+                            lit: Lit::Str(lit_str),
+                            ..
+                        }) = nv.value
+                        {
+                            return Some(lit_str.value());
+                        }
+                    }
+
+                    // Case 2: #[serde(rename(serialize = "a", deserialize = "b"))]
+                    Meta::List(list) if list.path.is_ident("rename") => {
+                        let inner_items = list
+                            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                            .ok()?;
+
+                        for inner in inner_items {
+                            if let Meta::NameValue(nv) = inner {
+                                if nv.path.is_ident("serialize") || nv.path.is_ident("deserialize")
+                                {
+                                    if let Expr::Lit(ExprLit {
+                                        lit: Lit::Str(lit_str),
+                                        ..
+                                    }) = nv.value
+                                    {
+                                        return Some(lit_str.value());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    _ => {}
+                }
+            }
+            None
+        })
+        .unwrap_or_else(|| field.ident.as_ref().unwrap().to_string())
+}
+
+//  Form implementation generation
+fn generate_form_impl(
+    fields: &Punctuated<syn::Field, Comma>,
+    base: &proc_macro2::TokenStream,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let mut assigns = Vec::new();
+    let mut idents = Vec::new();
+
+    for field in fields {
+        let ident = field.ident.as_ref().unwrap();
+        let key = json_field_name(field);
+        let ty = &field.ty;
+
+        idents.push(ident);
+
+        let block = if is_option(ty) {
+            let inner = get_option_inner(ty);
+            let (expected, pat, conv) = match_type(inner, &key, base);
+            quote! {
+                let #ident = match map.remove(#key) {
+                    Some(#pat) => Some(#conv),
+                    Some(other) => return Err(RpcError::parse_error().with_message(format!(
+                        "Type mismatch for optional field '{}': expected {}, got {:?}",
+                        #key, #expected, other
+                    ))),
+                    None => None,
+                };
+            }
+        } else {
+            let (expected, pat, conv) = match_type(ty, &key, base);
+            quote! {
+                let #ident = match map.remove(#key) {
+                    Some(#pat) => #conv,
+                    Some(other) => return Err(RpcError::parse_error().with_message(format!(
+                        "Type mismatch for required field '{}': expected {}, got {:?}",
+                        #key, #expected, other
+                    ))),
+                    None => return Err(RpcError::parse_error().with_message(format!("Missing required field '{}'", #key))),
+                };
+            }
+        };
+
+        assigns.push(block);
+    }
+
+    (quote! { #(#assigns)* }, quote! { Self { #(#idents),* } })
+}
+
+fn get_option_inner(ty: &Type) -> &Type {
+    if let Type::Path(p) = ty {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(ref args) = seg.arguments {
+                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                        return inner;
+                    }
+                }
+            }
+        }
+    }
+    panic!("Not Option<T>")
+}
+
+fn match_type(
+    ty: &Type,
+    key: &str,
+    base: &proc_macro2::TokenStream,
+) -> (String, proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    if is_vec_string(ty) {
+        return (
+            "string array".into(), // expected
+            quote! { V::StringArray(v) },
+            quote! { v },
+        );
+    };
+
+    match ty {
+        Type::Path(p) if p.path.is_ident("String") => (
+            "string".into(),
+            quote! { V::Primitive(#base::ElicitResultContentPrimitive::String(v)) },
+            quote! { v.clone() },
+        ),
+        Type::Path(p) if p.path.is_ident("bool") => (
+            "bool".into(),
+            quote! { V::Primitive(#base::ElicitResultContentPrimitive::Boolean(v)) },
+            quote! { v },
+        ),
+        Type::Path(p) if p.path.is_ident("i32") => (
+            "i32".into(),
+            quote! { V::Primitive(#base::ElicitResultContentPrimitive::Integer(v)) },
+            quote! { (v).try_into().map_err(|_| RpcError::parse_error().with_message(format!("i32 overflow in field '{}'", #key)))? },
+        ),
+        Type::Path(p) if p.path.is_ident("i64") => (
+            "i64".into(),
+            quote! { V::Primitive(#base::ElicitResultContentPrimitive::Integer(v)) },
+            quote! { v },
+        ),
+        _ => panic!("Unsupported type in mcp_elicit: {}", ty.to_token_stream()),
+    }
+}
+
+fn generate_form_schema(
+    struct_name: &Ident,
+    base: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        {
+            let json = #struct_name::json_schema();
+            let properties = json.get("properties")
+                .and_then(|v| v.as_object())
+                .into_iter()
+                .flatten()
+                .filter_map(|(k, v)| #base::PrimitiveSchemaDefinition::try_from(v.as_object()?).ok().map(|def| (k.clone(), def)))
+                .collect();
+
+            let required = json.get("required")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+
+            #base::ElicitFormSchema::new(properties, required, None)
+        }
+    }
 }
 
 /// Derives a JSON Schema representation for a struct.

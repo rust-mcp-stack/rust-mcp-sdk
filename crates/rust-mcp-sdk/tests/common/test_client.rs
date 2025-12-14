@@ -1,5 +1,8 @@
 use async_trait::async_trait;
-use rust_mcp_schema::{schema_utils::MessageFromServer, PingRequest, RpcError};
+use rust_mcp_schema::{
+    schema_utils::{MessageFromServer, RequestFromServer},
+    PingRequest, RequestParams, RpcError,
+};
 use rust_mcp_sdk::{mcp_client::ClientHandler, McpClient};
 use serde_json::json;
 use std::sync::Arc;
@@ -13,7 +16,7 @@ pub mod test_client_common {
     };
     use rust_mcp_sdk::{
         mcp_client::{client_runtime, ClientRuntime},
-        McpClient, RequestOptions, SessionId, StreamableTransportOptions,
+        mcp_icon, McpClient, RequestOptions, SessionId, StreamableTransportOptions,
     };
     use std::{collections::HashMap, sync::Arc, time::Duration};
     use tokio::sync::RwLock;
@@ -34,7 +37,7 @@ pub mod test_client_common {
     }
 
     pub const TEST_SESSION_ID: &str = "test-session-id";
-    pub const INITIALIZE_REQUEST: &str = r#"{"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"simple-rust-mcp-client-sse","title":"Simple Rust MCP Client (SSE)","version":"0.1.0"},"protocolVersion":"2025-06-18"}}"#;
+    pub const INITIALIZE_REQUEST: &str = r#"{"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"icons":[{"mimeType":"image/png","sizes":["128x128"],"src":"https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png","theme":"dark"}],"name":"simple-rust-mcp-client-sse","title":"Simple Rust MCP Client (SSE)","version":"0.1.0"},"protocolVersion":"2025-11-25"}}"#;
 
     pub fn test_client_details() -> InitializeRequestParams {
         InitializeRequestParams {
@@ -43,8 +46,17 @@ pub mod test_client_common {
                 name: "simple-rust-mcp-client-sse".to_string(),
                 version: "0.1.0".to_string(),
                 title: Some("Simple Rust MCP Client (SSE)".to_string()),
+                description: None,
+                icons: vec![mcp_icon!(
+                    src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                    mime_type = "image/png",
+                    sizes = ["128x128"],
+                    theme = "dark"
+                )],
+                website_url: None,
             },
             protocol_version: LATEST_PROTOCOL_VERSION.into(),
+            meta: None,
         }
     }
 
@@ -147,10 +159,13 @@ impl TestClientHandler {
 impl ClientHandler for TestClientHandler {
     async fn handle_ping_request(
         &self,
-        request: PingRequest,
+        params: Option<RequestParams>,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<rust_mcp_schema::Result, RpcError> {
-        self.register_message(&request.into()).await;
+        self.register_message(&MessageFromServer::RequestFromServer(
+            RequestFromServer::PingRequest(params),
+        ))
+        .await;
 
         Ok(rust_mcp_schema::Result {
             meta: Some(json!({"meta_number":1515}).as_object().unwrap().to_owned()),

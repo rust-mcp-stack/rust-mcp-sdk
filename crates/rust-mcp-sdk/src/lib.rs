@@ -96,4 +96,8 @@ pub mod macros {
 }
 
 pub mod id_generator;
-pub mod schema;
+
+pub mod schema {
+    pub use rust_mcp_schema::schema_utils::*;
+    pub use rust_mcp_schema::*;
+}

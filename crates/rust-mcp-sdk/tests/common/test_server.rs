@@ -2,13 +2,14 @@
 pub mod test_server_common {
     use crate::common::sample_tools::{DisplayAuthInfo, SayHelloTool};
     use async_trait::async_trait;
-    use rust_mcp_schema::schema_utils::CallToolError;
+    use rust_mcp_schema::schema_utils::{CallToolError, RequestFromClient};
     use rust_mcp_schema::{
-        CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, ProtocolVersion,
-        RpcError,
+        CallToolRequest, CallToolRequestParams, CallToolResult, ListToolsRequest, ListToolsResult,
+        PaginatedRequestParams, ProtocolVersion, RpcError,
     };
     use rust_mcp_sdk::event_store::EventStore;
     use rust_mcp_sdk::id_generator::IdGenerator;
+    use rust_mcp_sdk::mcp_icon;
     use rust_mcp_sdk::mcp_server::hyper_runtime::HyperRuntime;
     use rust_mcp_sdk::schema::{
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
@@ -23,9 +24,9 @@ pub mod test_server_common {
     use tokio::time::timeout;
     use tokio_stream::StreamExt;
 
-    pub const INITIALIZE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"reqwest-test","version":"0.1.0"}}}"#;
+    pub const INITIALIZE_REQUEST: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{"sampling":{},"roots":{"listChanged":true}},"clientInfo":{"name":"reqwest-test","version":"0.1.0"}}}"#;
     pub const PING_REQUEST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
-    pub const INITIALIZE_RESPONSE: &str = r#"{"result":{"protocolVersion":"2025-06-18","capabilities":{"prompts":{},"resources":{"subscribe":true},"tools":{},"logging":{}},"serverInfo":{"name":"example-servers/everything","version":"1.0.0"}},"jsonrpc":"2.0","id":0}"#;
+    pub const INITIALIZE_RESPONSE: &str = r#"{"result":{"protocolVersion":"2025-11-25","capabilities":{"prompts":{},"resources":{"subscribe":true},"tools":{},"logging":{}},"serverInfo":{"name":"example-servers/everything","version":"1.0.0"}},"jsonrpc":"2.0","id":0}"#;
 
     pub struct LaunchedServer {
         pub hyper_runtime: HyperRuntime,
@@ -35,8 +36,8 @@ pub mod test_server_common {
         pub event_store: Option<Arc<dyn EventStore>>,
     }
 
-    pub fn initialize_request() -> InitializeRequest {
-        InitializeRequest::new(InitializeRequestParams {
+    pub fn initialize_request() -> RequestFromClient {
+        RequestFromClient::InitializeRequest(InitializeRequestParams {
             capabilities: ClientCapabilities {
                 ..Default::default()
             },
@@ -44,8 +45,17 @@ pub mod test_server_common {
                 name: "test-server".to_string(),
                 title: None,
                 version: "0.1.0".to_string(),
+                description: None,
+                icons: vec![mcp_icon!(
+                    src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                    mime_type = "image/png",
+                    sizes = ["128x128"],
+                    theme = "dark"
+                )],
+                website_url: None,
             },
-            protocol_version: ProtocolVersion::V2025_06_18.to_string(),
+            protocol_version: ProtocolVersion::V2025_11_25.to_string(),
+            meta: None,
         })
     }
 
@@ -55,8 +65,15 @@ pub mod test_server_common {
             server_info: Implementation {
                 name: "Test MCP Server".to_string(),
                 version: "0.1.0".to_string(),
-                #[cfg(feature = "2025_06_18")]
                 title: None,
+                description: None,
+                icons: vec![mcp_icon!(
+                    src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                    mime_type = "image/png",
+                    sizes = ["128x128"],
+                    theme = "dark"
+                )],
+                website_url: None,
             },
             capabilities: ServerCapabilities {
                 // indicates that server support mcp tools
@@ -65,7 +82,7 @@ pub mod test_server_common {
             },
             meta: None,
             instructions: Some("server instructions...".to_string()),
-            protocol_version: ProtocolVersion::V2025_06_18.to_string(),
+            protocol_version: ProtocolVersion::V2025_11_25.to_string(),
         }
     }
 
@@ -75,10 +92,10 @@ pub mod test_server_common {
     impl ServerHandler for TestServerHandler {
         async fn handle_list_tools_request(
             &self,
-            request: ListToolsRequest,
+            _params: Option<PaginatedRequestParams>,
             runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<ListToolsResult, RpcError> {
-            runtime.assert_server_request_capabilities(request.method())?;
+            runtime.assert_server_request_capabilities(&ListToolsRequest::method_value())?;
 
             Ok(ListToolsResult {
                 meta: None,
@@ -89,17 +106,17 @@ pub mod test_server_common {
 
         async fn handle_call_tool_request(
             &self,
-            request: CallToolRequest,
+            params: CallToolRequestParams,
             runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<CallToolResult, CallToolError> {
             runtime
-                .assert_server_request_capabilities(request.method())
+                .assert_server_request_capabilities(&CallToolRequest::method_value())
                 .map_err(CallToolError::new)?;
 
-            match request.params.name.as_str() {
+            match params.name.as_str() {
                 "say_hello" => {
                     let tool = SayHelloTool {
-                        name: request.params.arguments.unwrap()["name"]
+                        name: params.arguments.unwrap()["name"]
                             .as_str()
                             .unwrap()
                             .to_string(),
@@ -111,11 +128,9 @@ pub mod test_server_common {
                     let tool = DisplayAuthInfo {};
                     Ok(tool.call_tool(runtime.auth_info_cloned().await).unwrap())
                 }
-                _ => Ok(CallToolError::unknown_tool(format!(
-                    "Unknown tool: {}",
-                    request.params.name
-                ))
-                .into()),
+                _ => Ok(
+                    CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into(),
+                ),
             }
         }
     }
@@ -197,12 +212,12 @@ pub mod test_server_common {
 
                     // Check if we have collected 5 lines
                     if collected_lines.len() >= line_count {
-                        return Ok(collected_lines);
+                        return Ok(collected_lines.clone());
                     }
                 }
             }
             // If the stream ends before collecting 5 lines, return what we have
-            Ok(collected_lines)
+            Ok(collected_lines.clone())
         })
         .await;
 
@@ -212,7 +227,11 @@ pub mod test_server_common {
             Ok(Err(e)) => Err(e),
             Err(_) => Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
-                "Timed out waiting for 5 lines",
+                format!(
+                    "Timed out waiting for 5 lines, received({}): {}",
+                    collected_lines.len(),
+                    collected_lines.join(" \n ")
+                ),
             ))),
         }
     }

@@ -1,5 +1,4 @@
-use std::sync::Arc;
-
+use super::ServerRuntime;
 #[cfg(feature = "hyper-server")]
 use crate::auth::AuthInfo;
 use crate::schema::{
@@ -7,21 +6,18 @@ use crate::schema::{
         self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
         NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage, ServerMessages,
     },
-    CallToolResult, ClientNotification, ClientRequest, InitializeResult, RpcError,
+    CallToolResult, InitializeResult, RpcError,
 };
-use async_trait::async_trait;
-
-use rust_mcp_transport::TransportDispatcher;
-
-use super::ServerRuntime;
-#[cfg(feature = "hyper-server")]
-use rust_mcp_transport::SessionId;
-
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{McpServer, McpServerHandler},
 };
+use async_trait::async_trait;
+#[cfg(feature = "hyper-server")]
+use rust_mcp_transport::SessionId;
+use rust_mcp_transport::TransportDispatcher;
+use std::sync::Arc;
 
 /// Creates a new MCP server runtime with the specified configuration.
 ///
@@ -86,93 +82,108 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         match client_jsonrpc_request {
-            schema_utils::RequestFromClient::ClientRequest(client_request) => {
-                match client_request {
-                    ClientRequest::InitializeRequest(initialize_request) => self
-                        .handler
-                        .handle_initialize_request(initialize_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::PingRequest(ping_request) => self
-                        .handler
-                        .handle_ping_request(ping_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::ListResourcesRequest(list_resources_request) => self
-                        .handler
-                        .handle_list_resources_request(list_resources_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::ListResourceTemplatesRequest(
-                        list_resource_templates_request,
-                    ) => self
-                        .handler
-                        .handle_list_resource_templates_request(
-                            list_resource_templates_request,
-                            runtime,
-                        )
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::ReadResourceRequest(read_resource_request) => self
-                        .handler
-                        .handle_read_resource_request(read_resource_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::SubscribeRequest(subscribe_request) => self
-                        .handler
-                        .handle_subscribe_request(subscribe_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::UnsubscribeRequest(unsubscribe_request) => self
-                        .handler
-                        .handle_unsubscribe_request(unsubscribe_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::ListPromptsRequest(list_prompts_request) => self
-                        .handler
-                        .handle_list_prompts_request(list_prompts_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-
-                    ClientRequest::GetPromptRequest(prompt_request) => self
-                        .handler
-                        .handle_get_prompt_request(prompt_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::ListToolsRequest(list_tools_request) => self
-                        .handler
-                        .handle_list_tools_request(list_tools_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::CallToolRequest(call_tool_request) => {
-                        let result = self
-                            .handler
-                            .handle_call_tool_request(call_tool_request, runtime)
-                            .await;
-
-                        Ok(result.map_or_else(
-                            |err| {
-                                let result: CallToolResult = CallToolError::new(err).into();
-                                result.into()
-                            },
-                            Into::into,
-                        ))
-                    }
-                    ClientRequest::SetLevelRequest(set_level_request) => self
-                        .handler
-                        .handle_set_level_request(set_level_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                    ClientRequest::CompleteRequest(complete_request) => self
-                        .handler
-                        .handle_complete_request(complete_request, runtime)
-                        .await
-                        .map(|value| value.into()),
-                }
-            }
-            schema_utils::RequestFromClient::CustomRequest(value) => self
+            RequestFromClient::InitializeRequest(initialize_request) => self
                 .handler
-                .handle_custom_request(value, runtime)
+                .handle_initialize_request(initialize_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::PingRequest(ping_request) => self
+                .handler
+                .handle_ping_request(ping_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::ListResourcesRequest(list_resources_request) => self
+                .handler
+                .handle_list_resources_request(list_resources_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::ListResourceTemplatesRequest(list_resource_templates_request) => {
+                self.handler
+                    .handle_list_resource_templates_request(
+                        list_resource_templates_request,
+                        runtime,
+                    )
+                    .await
+                    .map(|value| value.into())
+            }
+            RequestFromClient::ReadResourceRequest(read_resource_request) => self
+                .handler
+                .handle_read_resource_request(read_resource_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::SubscribeRequest(subscribe_request) => self
+                .handler
+                .handle_subscribe_request(subscribe_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::UnsubscribeRequest(unsubscribe_request) => self
+                .handler
+                .handle_unsubscribe_request(unsubscribe_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::ListPromptsRequest(list_prompts_request) => self
+                .handler
+                .handle_list_prompts_request(list_prompts_request, runtime)
+                .await
+                .map(|value| value.into()),
+
+            RequestFromClient::GetPromptRequest(prompt_request) => self
+                .handler
+                .handle_get_prompt_request(prompt_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::ListToolsRequest(list_tools_request) => self
+                .handler
+                .handle_list_tools_request(list_tools_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::CallToolRequest(call_tool_request) => {
+                let result = self
+                    .handler
+                    .handle_call_tool_request(call_tool_request, runtime)
+                    .await;
+
+                Ok(result.map_or_else(
+                    |err| {
+                        let result: CallToolResult = CallToolError::new(err).into();
+                        result.into()
+                    },
+                    Into::into,
+                ))
+            }
+            RequestFromClient::SetLevelRequest(set_level_request) => self
+                .handler
+                .handle_set_level_request(set_level_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::CompleteRequest(complete_request) => self
+                .handler
+                .handle_complete_request(complete_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::GetTaskRequest(get_task_request) => self
+                .handler
+                .handle_get_task_request(get_task_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::GetTaskPayloadRequest(get_task_payload_request) => self
+                .handler
+                .handle_get_task_payload_request(get_task_payload_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::CancelTaskRequest(cancel_task_request) => self
+                .handler
+                .handle_cancel_task_request(cancel_task_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::ListTasksRequest(list_tasks_request) => self
+                .handler
+                .handle_list_task_request(list_tasks_request, runtime)
+                .await
+                .map(|value| value.into()),
+            RequestFromClient::CustomRequest(custom_request) => self
+                .handler
+                .handle_custom_request(custom_request, runtime)
                 .await
                 .map(|value| value.into()),
         }
@@ -193,39 +204,38 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         match client_jsonrpc_notification {
-            schema_utils::NotificationFromClient::ClientNotification(client_notification) => {
-                match client_notification {
-                    ClientNotification::CancelledNotification(cancelled_notification) => {
-                        self.handler
-                            .handle_cancelled_notification(cancelled_notification, runtime)
-                            .await?;
-                    }
-                    ClientNotification::InitializedNotification(initialized_notification) => {
-                        self.handler
-                            .handle_initialized_notification(
-                                initialized_notification,
-                                runtime.clone(),
-                            )
-                            .await?;
-                        self.handler.on_initialized(runtime).await;
-                    }
-                    ClientNotification::ProgressNotification(progress_notification) => {
-                        self.handler
-                            .handle_progress_notification(progress_notification, runtime)
-                            .await?;
-                    }
-                    ClientNotification::RootsListChangedNotification(
-                        roots_list_changed_notification,
-                    ) => {
-                        self.handler
-                            .handle_roots_list_changed_notification(
-                                roots_list_changed_notification,
-                                runtime,
-                            )
-                            .await?;
-                    }
-                }
+            NotificationFromClient::CancelledNotification(cancelled_notification) => {
+                self.handler
+                    .handle_cancelled_notification(cancelled_notification, runtime)
+                    .await?;
             }
+            NotificationFromClient::InitializedNotification(initialized_notification) => {
+                self.handler
+                    .handle_initialized_notification(initialized_notification, runtime.clone())
+                    .await?;
+                self.handler.on_initialized(runtime).await;
+            }
+            NotificationFromClient::ProgressNotification(progress_notification) => {
+                self.handler
+                    .handle_progress_notification(progress_notification, runtime)
+                    .await?;
+            }
+            NotificationFromClient::RootsListChangedNotification(
+                roots_list_changed_notification,
+            ) => {
+                self.handler
+                    .handle_roots_list_changed_notification(
+                        roots_list_changed_notification,
+                        runtime,
+                    )
+                    .await?;
+            }
+            NotificationFromClient::TaskStatusNotification(task_status_notification) => {
+                self.handler
+                    .handle_task_status_notification(task_status_notification, runtime)
+                    .await?;
+            }
+
             schema_utils::NotificationFromClient::CustomNotification(value) => {
                 self.handler.handle_custom_notification(value).await?;
             }

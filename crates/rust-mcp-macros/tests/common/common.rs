@@ -48,30 +48,3 @@ impl FromStr for Colors {
         }
     }
 }
-
-#[mcp_elicit(message = "Please enter your info")]
-#[derive(JsonSchema)]
-pub struct UserInfo {
-    #[json_schema(
-        title = "Name",
-        description = "The user's full name",
-        min_length = 5,
-        max_length = 100
-    )]
-    pub name: String,
-
-    /// Email address of the user
-    #[json_schema(title = "Email", format = "email")]
-    pub email: Option<String>,
-
-    /// The user's age in years
-    #[json_schema(title = "Age", minimum = 15, maximum = 125)]
-    pub age: i32,
-
-    /// Is user a student?
-    #[json_schema(title = "Is student?", default = true)]
-    pub is_student: Option<bool>,
-
-    /// User's favorite color
-    pub favorate_color: Colors,
-}

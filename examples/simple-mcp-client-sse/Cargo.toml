@@ -12,7 +12,6 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "sse",
     "streamable-http",
     "macros",
-    "2025_06_18",
 ] }
 
 tokio = { workspace = true }

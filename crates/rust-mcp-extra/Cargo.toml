@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
 [dependencies]
-rust-mcp-sdk = {  version = "0.7.4" , path = "../rust-mcp-sdk", default-features = false, features=["server","2025_06_18","auth","hyper-server","macros"] }
+rust-mcp-sdk = {  version = "0.7.4" , path = "../rust-mcp-sdk", default-features = false, features=["server","auth","hyper-server","macros"] }
 base64 = {workspace = true, optional=true}
 url= {workspace = true, optional=true}
 nanoid = {version="0.4", optional=true}

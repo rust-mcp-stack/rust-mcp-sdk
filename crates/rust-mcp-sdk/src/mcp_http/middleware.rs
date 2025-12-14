@@ -52,6 +52,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp_icon;
     use crate::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
     use crate::{
         id_generator::{FastIdGenerator, UuidGenerator},
@@ -90,6 +91,14 @@ mod tests {
                     name: "server".to_string(),
                     title: None,
                     version: "0.1.0".to_string(),
+                    description: Some("test Server, by Rust MCP SDK".to_string()),
+                    icons: vec![mcp_icon!(
+                        src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                        mime_type = "image/png",
+                        sizes = ["128x128"],
+                        theme = "dark"
+                    )],
+                    website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".to_string()),
                 },
             }),
             handler: handler.to_mcp_server_handler(),
