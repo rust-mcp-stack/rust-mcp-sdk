@@ -1801,15 +1801,18 @@ async fn should_handle_elicitation() {
     assert_eq!(user.name, "Alice");
     assert_eq!(user.age, 25);
     assert_eq!(user.tags, vec!["rust", "c++"]);
-    assert_eq!(user.email.unwrap(), "alice@Borderland.com");
+    assert_eq!(user.email.as_ref().unwrap(), "alice@Borderland.com");
 
     println!("name: {}", user.name);
     println!("age: {}", user.age);
-    println!("email: {}", user.email.unwrap_or_default();
+    println!(
+        "email: {}",
+        user.email.clone().unwrap_or("not provider".into())
+    );
     println!("tags: {}", user.tags.join(","));
 
     server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.hyper_runtime.await_server().await.unwrap();
 }
 
 // should return 400 error for invalid JSON-RPC messages

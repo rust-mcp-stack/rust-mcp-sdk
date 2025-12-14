@@ -1,6 +1,5 @@
 mod handler;
 mod tools;
-
 use handler::MyServerHandler;
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{

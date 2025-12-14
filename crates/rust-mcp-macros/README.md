@@ -146,7 +146,7 @@ The `mcp_elicit` macro generates implementations for eliciting user input based 
     
     println!("name: {}", user_info.name);
     println!("age: {}", user_info.age);
-    println!("email: {}", user_info.email.unwrap_or_default();
+    println!("email: {}",user.email.clone().unwrap_or("not provider".into()));
     println!("tags: {}", user_info.tags.join(","));    
 
 ```

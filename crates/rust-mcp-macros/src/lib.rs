@@ -666,8 +666,8 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             ///
             /// # Returns
             /// A `CallToolRequestParams` with the tool name set.
-            pub fn request_params() -> CallToolRequestParams {
-               CallToolRequestParams::new(#tool_name.to_string())
+            pub fn request_params() -> #base_crate::CallToolRequestParams {
+               #base_crate::CallToolRequestParams::new(#tool_name.to_string())
             }
 
 

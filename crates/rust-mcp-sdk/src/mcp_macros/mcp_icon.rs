@@ -19,7 +19,7 @@
 ///
 /// # Example
 /// ```rust
-/// let my_icon: Icon = mcp_icon!(
+/// let my_icon: rust_mcp_sdk::schema::Icon = rust_mcp_sdk::mcp_icon!(
 ///     src = "/icons/dark.png",
 ///     mime_type = "image/png",
 ///     sizes = ["128x128", "256x256"],
