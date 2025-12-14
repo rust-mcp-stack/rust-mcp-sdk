@@ -13,7 +13,7 @@ fn test_form_basic_conversion() {
     pub struct BasicUser {
         pub name: String,
         pub age: Option<i32>,
-        pub experties: Vec<String>,
+        pub expertise: Vec<String>,
     }
     assert_eq!(BasicUser::message(), "Please enter your name and age");
     let mut content: std::collections::HashMap<String, ElicitResultContent> = HashMap::new();
@@ -28,14 +28,14 @@ fn test_form_basic_conversion() {
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Integer(21)),
     );
     content.insert(
-        "experties".to_string(),
+        "expertise".to_string(),
         ElicitResultContent::StringArray(vec!["Rust".to_string(), "C++".to_string()]),
     );
 
     let user: BasicUser = BasicUser::from_elicit_result_content(Some(content)).unwrap();
     assert_eq!(user.name, "Ali");
     assert_eq!(user.age, Some(21));
-    assert_eq!(user.experties, vec!["Rust".to_string(), "C++".to_string()]);
+    assert_eq!(user.expertise, vec!["Rust".to_string(), "C++".to_string()]);
 
     let req = BasicUser::elicit_request_params();
     match req {
@@ -43,7 +43,7 @@ fn test_form_basic_conversion() {
             assert_eq!(form.message, "Please enter your name and age");
             assert!(form.requested_schema.properties.contains_key("name"));
             assert!(form.requested_schema.properties.contains_key("age"));
-            assert_eq!(form.requested_schema.required, vec!["name", "experties"]); // age is optional
+            assert_eq!(form.requested_schema.required, vec!["name", "expertise"]); // age is optional
             assert!(form.meta.is_none());
             assert_eq!(form.mode().as_ref().unwrap(), "form");
         }
@@ -58,7 +58,7 @@ fn test_url_basic_conversion() {
     pub struct InfoFromUrl {
         pub name: String,
         pub age: Option<i32>,
-        pub experties: Vec<String>,
+        pub expertise: Vec<String>,
     }
 
     assert_eq!(InfoFromUrl::message(), "Please enter your name and age");
@@ -79,14 +79,14 @@ fn test_url_basic_conversion() {
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Integer(21)),
     );
     content.insert(
-        "experties".to_string(),
+        "expertise".to_string(),
         ElicitResultContent::StringArray(vec!["Rust".to_string(), "C++".to_string()]),
     );
 
     let user: InfoFromUrl = InfoFromUrl::from_elicit_result_content(Some(content)).unwrap();
     assert_eq!(user.name, "Ali");
     assert_eq!(user.age, Some(21));
-    assert_eq!(user.experties, vec!["Rust".to_string(), "C++".to_string()]);
+    assert_eq!(user.expertise, vec!["Rust".to_string(), "C++".to_string()]);
     let req = InfoFromUrl::elicit_request_params("elicit_id".to_string());
     match req {
         ElicitRequestParams::UrlParams(params) => {
