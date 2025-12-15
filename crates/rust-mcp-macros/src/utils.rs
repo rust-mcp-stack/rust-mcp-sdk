@@ -1,8 +1,18 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
     punctuated::Punctuated, token, Attribute, DeriveInput, GenericArgument, Lit, LitInt, LitStr,
     Path, PathArguments, Type, TypePath,
 };
+
+pub fn base_crate() -> TokenStream {
+    // Conditionally select the path for Tool
+    if cfg!(feature = "sdk") {
+        quote! { rust_mcp_sdk::schema }
+    } else {
+        quote! { rust_mcp_schema }
+    }
+}
 
 // Check if a type is an Option<T>
 pub fn is_option(ty: &Type) -> bool {

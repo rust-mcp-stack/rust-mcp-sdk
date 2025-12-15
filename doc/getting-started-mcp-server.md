@@ -175,11 +175,7 @@ impl ServerHandler for MyServerHandler {
     }
 
     //Handles incoming CallToolRequest and processes it using the appropriate tool.
-    async fn handle_call_tool_request(
-        &self,
-        request: CallToolRequest,
-        _runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
+    async fn handle_call_tool_request(&self, request: CallToolRequest) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =
             GreetingTools::try_from(request.params).map_err(CallToolError::new)?;

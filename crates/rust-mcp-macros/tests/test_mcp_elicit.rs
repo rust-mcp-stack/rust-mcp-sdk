@@ -146,7 +146,7 @@ fn test_extra_unknown_field_is_ignored() {
 
     let user = StrictStruct::from_elicit_result_content(Some(content)).unwrap();
     assert_eq!(user.name, "Bob");
-    // unknown_field is silently ignored — correct behavior
+    // unknown_field is silently ignored - correct behavior
 }
 
 #[test]
