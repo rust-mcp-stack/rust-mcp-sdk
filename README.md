@@ -18,6 +18,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 
 
 **Key Features**
+- ✅ Latest MCP protocol specification supported: 2025-11-25
 - ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
 - ✅ Lightweight Axum-based server for Streamable HTTP and SSE
 - ✅ Multi-client concurrency
