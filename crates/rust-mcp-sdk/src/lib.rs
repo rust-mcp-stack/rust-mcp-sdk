@@ -86,6 +86,8 @@ pub mod mcp_server {
     pub use super::mcp_traits::{McpServerHandler, ToMcpServerHandler, ToMcpServerHandlerCore};
 }
 
+pub use utils::capability_checks;
+
 pub mod auth;
 pub use mcp_traits::*;
 pub use rust_mcp_transport::error::*;

@@ -1,18 +1,15 @@
 use crate::auth::AuthInfo;
+use crate::error::SdkResult;
 use crate::schema::{
     schema_utils::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
         ResultFromClient, ServerMessage,
     },
-    CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult, ElicitRequestParams,
-    ElicitResult, Implementation, InitializeRequestParams, InitializeResult, ListRootsRequest,
-    ListRootsResult, LoggingMessageNotification, LoggingMessageNotificationParams,
-    NotificationParams, PromptListChangedNotification, RequestId, RequestParams,
-    ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
-    ToolListChangedNotification,
+    CreateMessageRequestParams, CreateMessageResult, ElicitRequestParams, ElicitResult,
+    Implementation, InitializeRequestParams, InitializeResult, ListRootsResult,
+    LoggingMessageNotificationParams, NotificationParams, RequestId, RequestParams,
+    ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
 };
-use crate::utils::assert_server_request_capabilities;
-use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest};
 use rust_mcp_schema::{
@@ -87,43 +84,6 @@ pub trait McpServer: Sync + Send {
 
     /// Sends a message to the standard error output (stderr) asynchronously.
     async fn stderr_message(&self, message: String) -> SdkResult<()>;
-
-    /// Asserts that client capabilities are available for a given server request.
-    ///
-    /// This method verifies that the client capabilities required to process the specified
-    /// server request have been retrieved and are accessible. It returns an error if the
-    /// capabilities are not available.
-    ///
-    /// This can be utilized to avoid sending requests when the opposing party lacks support for them.
-    fn assert_client_capabilities(
-        &self,
-        request_method: &String,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Client";
-        if *request_method == CreateMessageRequest::method_value()
-            && !self.client_supports_sampling().unwrap_or(false)
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "sampling",
-                    request_method,
-                )),
-            );
-        }
-        if *request_method == ListRootsRequest::method_value()
-            && !self.client_supports_root_list().unwrap_or(false)
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "listing roots",
-                    request_method,
-                )),
-            );
-        }
-        Ok(())
-    }
 
     #[cfg(feature = "hyper-server")]
     fn session_id(&self) -> Option<SessionId>;

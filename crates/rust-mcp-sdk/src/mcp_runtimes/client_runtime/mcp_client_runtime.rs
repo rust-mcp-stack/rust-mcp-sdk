@@ -92,21 +92,37 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                 .handle_ping_request(params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::CreateMessageRequest(params) => self
-                .handler
-                .handle_create_message_request(params, runtime)
-                .await
-                .map(|value| value.into()),
+            RequestFromServer::CreateMessageRequest(params) => {
+                if params.is_task_augmented() {
+                    self.handler
+                        .handle_task_augmented_create_message(params, runtime)
+                        .await
+                        .map(|value| value.into())
+                } else {
+                    self.handler
+                        .handle_create_message_request(params, runtime)
+                        .await
+                        .map(|value| value.into())
+                }
+            }
             RequestFromServer::ListRootsRequest(params) => self
                 .handler
                 .handle_list_roots_request(params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::ElicitRequest(params) => self
-                .handler
-                .handle_elicit_request(params, runtime)
-                .await
-                .map(|value| value.into()),
+            RequestFromServer::ElicitRequest(params) => {
+                if params.is_task_augmented() {
+                    self.handler
+                        .handle_task_augmented_elicit_request(params, runtime)
+                        .await
+                        .map(|value| value.into())
+                } else {
+                    self.handler
+                        .handle_elicit_request(params, runtime)
+                        .await
+                        .map(|value| value.into())
+                }
+            }
 
             RequestFromServer::GetTaskRequest(params) => self
                 .handler

@@ -4,7 +4,7 @@ use handler::MyServerHandler;
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
-    ServerCapabilitiesResources, ServerCapabilitiesTools, ServerTasks,
+    ServerCapabilitiesResources, ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
     error::SdkResult,
@@ -46,7 +46,7 @@ async fn main() -> SdkResult<()> {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
             resources: Some(ServerCapabilitiesResources { list_changed: None, subscribe: None }),
-            tasks: Some(ServerTasks{ cancel: todo!(), list: todo!(), requests: todo!() }),
+            tasks: None,
             ..Default::default() // Using default values for other fields
         },
         meta: None,

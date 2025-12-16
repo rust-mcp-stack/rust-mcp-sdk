@@ -134,18 +134,30 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                 .await
                 .map(|value| value.into()),
             RequestFromClient::CallToolRequest(call_tool_request) => {
-                let result = self
-                    .handler
-                    .handle_call_tool_request(call_tool_request, runtime)
-                    .await;
-
-                Ok(result.map_or_else(
-                    |err| {
-                        let result: CallToolResult = CallToolError::new(err).into();
-                        result.into()
-                    },
-                    Into::into,
-                ))
+                let result = if call_tool_request.is_task_augmented() {
+                    self.handler
+                        .handle_task_augmented_tool_call(call_tool_request, runtime)
+                        .await
+                        .map_or_else(
+                            |err| {
+                                let result: CallToolResult = CallToolError::new(err).into();
+                                result.into()
+                            },
+                            Into::into,
+                        )
+                } else {
+                    self.handler
+                        .handle_call_tool_request(call_tool_request, runtime)
+                        .await
+                        .map_or_else(
+                            |err| {
+                                let result: CallToolResult = CallToolError::new(err).into();
+                                result.into()
+                            },
+                            Into::into,
+                        )
+                };
+                Ok(result)
             }
             RequestFromClient::SetLevelRequest(set_level_request) => self
                 .handler

@@ -97,8 +97,6 @@ pub mod test_server_common {
             _params: Option<PaginatedRequestParams>,
             runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<ListToolsResult, RpcError> {
-            runtime.assert_server_request_capabilities(&ListToolsRequest::method_value())?;
-
             Ok(ListToolsResult {
                 meta: None,
                 next_cursor: None,
@@ -111,10 +109,6 @@ pub mod test_server_common {
             params: CallToolRequestParams,
             runtime: Arc<dyn McpServer>,
         ) -> std::result::Result<CallToolResult, CallToolError> {
-            runtime
-                .assert_server_request_capabilities(&CallToolRequest::method_value())
-                .map_err(CallToolError::new)?;
-
             match params.name.as_str() {
                 "say_hello" => {
                     let tool = SayHelloTool {

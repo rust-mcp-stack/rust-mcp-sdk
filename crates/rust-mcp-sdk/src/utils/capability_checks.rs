@@ -1,9 +1,11 @@
 use rust_mcp_schema::{
-    CallToolRequest, CancelTaskRequest, CompleteRequest, GetPromptRequest, GetTaskPayloadRequest,
-    GetTaskRequest, ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest,
-    ListTasksRequest, ListToolsRequest, LoggingMessageNotification, PromptListChangedNotification,
-    ReadResourceRequest, ResourceUpdatedNotification, RpcError, ServerCapabilities,
-    SetLevelRequest, SubscribeRequest, ToolListChangedNotification, UnsubscribeRequest,
+    CallToolRequest, CancelTaskRequest, ClientCapabilities, CompleteRequest, CreateMessageRequest,
+    GetPromptRequest, GetTaskPayloadRequest, GetTaskRequest, ListPromptsRequest,
+    ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListTasksRequest,
+    ListToolsRequest, LoggingMessageNotification, PromptListChangedNotification,
+    ReadResourceRequest, ResourceUpdatedNotification, RootsListChangedNotification, RpcError,
+    ServerCapabilities, SetLevelRequest, SubscribeRequest, ToolListChangedNotification,
+    UnsubscribeRequest,
 };
 
 /// Asserts that server capabilities support the requested method.
@@ -84,16 +86,14 @@ pub fn assert_server_request_capabilities(
     }
 
     // completion
-    if request_method.eq(CompleteRequest::method_value()) {
-        if capabilities.completions.is_none() {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "completions",
-                    request_method,
-                )),
-            );
-        }
+    if request_method.eq(CompleteRequest::method_value()) && capabilities.completions.is_none() {
+        return Err(
+            RpcError::internal_error().with_message(format_assertion_message(
+                entity,
+                "completions",
+                request_method,
+            )),
+        );
     }
 
     if [
@@ -144,6 +144,7 @@ pub fn assert_server_request_capabilities(
 /// allowing callers to avoid sending notifications that the server does not
 /// support. This can be used to prevent issuing requests to peers that lack
 /// the required capability.
+#[allow(unused)]
 pub fn assert_server_notification_capabilities(
     capabilities: &ServerCapabilities,
     notification_method: &String,
@@ -198,6 +199,64 @@ pub fn assert_server_notification_capabilities(
     Ok(())
 }
 
+#[allow(unused)]
+pub fn assert_client_notification_capabilities(
+    capabilities: &ClientCapabilities,
+    notification_method: &str,
+) -> std::result::Result<(), RpcError> {
+    let entity = "Client";
+
+    if notification_method == RootsListChangedNotification::method_value()
+        && capabilities.roots.is_some()
+    {
+        return Err(
+            RpcError::internal_error().with_message(format_assertion_message(
+                entity,
+                "roots list changed notifications",
+                notification_method,
+            )),
+        );
+    }
+
+    Ok(())
+}
+
+/// Asserts that client capabilities are available for a given server request.
+///
+/// This method verifies that the client capabilities required to process the specified
+/// server request have been retrieved and are accessible. It returns an error if the
+/// capabilities are not available.
+///
+/// This can be utilized to avoid sending requests when the opposing party lacks support for them.
+pub fn assert_client_request_capabilities(
+    capabilities: &ClientCapabilities,
+    request_method: &str,
+) -> std::result::Result<(), RpcError> {
+    let entity = "Client";
+
+    if request_method == CreateMessageRequest::method_value() && capabilities.sampling.is_some() {
+        return Err(
+            RpcError::internal_error().with_message(format_assertion_message(
+                entity,
+                "sampling capability",
+                request_method,
+            )),
+        );
+    }
+
+    if request_method == ListRootsRequest::method_value() && capabilities.roots.is_some() {
+        return Err(
+            RpcError::internal_error().with_message(format_assertion_message(
+                entity,
+                "roots capability",
+                request_method,
+            )),
+        );
+    }
+
+    Ok(())
+}
+
 /// Formats an assertion error message for unsupported capabilities.
 ///
 /// Constructs a string describing that a specific entity (e.g., server or client) lacks
@@ -216,6 +275,6 @@ pub fn assert_server_notification_capabilities(
 /// let msg = format_assertion_message("Server", "tools", rust_mcp_schema::ListResourcesRequest::method_value());
 /// assert_eq!(msg, "Server does not support resources (required for resources/list)");
 /// ```
-pub fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {
+fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {
     format!("{entity} does not support {capability} (required for {method_name})")
 }

@@ -1,13 +1,7 @@
-mod capability_checks;
-
-pub use capability_checks::*;
+pub mod capability_checks;
 
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
-use crate::schema::{
-    CallToolRequest, ClientMessages, GetPromptRequest, ListPromptsRequest,
-    ListResourceTemplatesRequest, ListResourcesRequest, ListToolsRequest, ProtocolVersion,
-    ReadResourceRequest, RpcError, SdkError, ServerCapabilities, SetLevelRequest,
-};
+use crate::schema::{ClientMessages, ProtocolVersion, SdkError};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(feature = "auth")]

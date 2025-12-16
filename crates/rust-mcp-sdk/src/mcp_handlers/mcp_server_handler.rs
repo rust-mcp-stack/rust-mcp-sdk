@@ -5,7 +5,7 @@ use crate::{
         schema_utils::{CallToolError, CustomNotification, CustomRequest},
         *,
     },
-    utils::assert_server_request_capabilities,
+    utils::capability_checks::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -88,7 +88,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourcesResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ListResourcesRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -107,7 +107,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ListResourceTemplatesRequest::method_value(),
         )?;
 
@@ -127,7 +127,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ReadResourceResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ReadResourceRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -146,7 +146,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             SubscribeRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -165,7 +165,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             UnsubscribeRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -184,7 +184,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListPromptsResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ListPromptsRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -203,7 +203,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<GetPromptResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             GetPromptRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -222,7 +222,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ListToolsRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -240,7 +240,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CreateTaskResult, CallToolError> {
-        if !runtime.capabilities().can_call_task_augmented_tools() {
+        if !runtime.capabilities().can_run_task_augmented_tools() {
             return Err(CallToolError::unsupported_task_augmented_tool_call());
         }
         Err(CallToolError::from_message(
@@ -257,11 +257,8 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
-        assert_server_request_capabilities(
-            &runtime.capabilities(),
-            CallToolRequest::method_value(),
-        )
-        .map_err(CallToolError::new)?;
+        assert_server_request_capabilities(runtime.capabilities(), CallToolRequest::method_value())
+            .map_err(CallToolError::new)?;
 
         Ok(CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into())
     }
@@ -276,7 +273,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             SetLevelRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -295,7 +292,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             CompleteRequest::method_value(),
         )?;
 
@@ -311,10 +308,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: GetTaskParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        assert_server_request_capabilities(
-            &runtime.capabilities(),
-            GetTaskRequest::method_value(),
-        )?;
+        assert_server_request_capabilities(runtime.capabilities(), GetTaskRequest::method_value())?;
 
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
@@ -329,7 +323,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             GetTaskPayloadRequest::method_value(),
         )?;
 
@@ -346,7 +340,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             CancelTaskRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(
@@ -362,7 +356,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
         assert_server_request_capabilities(
-            &runtime.capabilities(),
+            runtime.capabilities(),
             ListTasksRequest::method_value(),
         )?;
         Err(RpcError::method_not_found().with_message(format!(

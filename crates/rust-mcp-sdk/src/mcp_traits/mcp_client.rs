@@ -1,22 +1,20 @@
-use crate::{error::SdkResult, utils::format_assertion_message};
+use crate::error::SdkResult;
 use crate::{
     schema::{
         schema_utils::{
             ClientMessage, McpMessage, MessageFromClient, NotificationFromClient,
             RequestFromClient, ResultFromServer, ServerMessage,
         },
-        CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequestParams,
-        CreateMessageRequest, GenericResult, GetPromptRequest, GetPromptRequestParams,
-        Implementation, InitializeRequestParams, InitializeResult, ListPromptsRequest,
-        ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListToolsRequest,
-        NotificationParams, PaginatedRequestParams, ReadResourceRequest, ReadResourceRequestParams,
-        RequestId, RequestParams, RootsListChangedNotification, RpcError, ServerCapabilities,
-        SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
-        UnsubscribeRequest, UnsubscribeRequestParams,
+        CallToolRequestParams, CallToolResult, CompleteRequestParams, GenericResult,
+        GetPromptRequestParams, Implementation, InitializeRequestParams, InitializeResult,
+        NotificationParams, PaginatedRequestParams, ReadResourceRequestParams, RequestId,
+        RequestParams, RpcError, ServerCapabilities, SetLevelRequestParams, SubscribeRequestParams,
+        UnsubscribeRequestParams,
     },
-    utils::assert_server_request_capabilities,
+    utils::capability_checks::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
+use rust_mcp_schema::ClientCapabilities;
 use rust_mcp_schema::{
     schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
     TaskStatusNotificationParams,
@@ -157,6 +155,11 @@ pub trait McpClient: Sync + Send {
         self.server_info()?.instructions
     }
 
+    /// Returns the client's capabilities.
+    fn capabilities(&self) -> &ClientCapabilities {
+        &self.client_info().capabilities
+    }
+
     /// Asserts that server capabilities support the requested method.
     ///
     /// Verifies that the server has the necessary capabilities to handle the given request method.
@@ -167,59 +170,6 @@ pub trait McpClient: Sync + Send {
             RpcError::internal_error().with_message("Server is not initialized!".to_string()),
         )?;
         assert_server_request_capabilities(capabilities, request_method)
-    }
-
-    fn assert_client_notification_capabilities(
-        &self,
-        notification_method: &str,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Client";
-        let capabilities = &self.client_info().capabilities;
-
-        if notification_method == RootsListChangedNotification::method_value()
-            && capabilities.roots.is_some()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "roots list changed notifications",
-                    notification_method,
-                )),
-            );
-        }
-
-        Ok(())
-    }
-
-    fn assert_client_request_capabilities(
-        &self,
-        request_method: &str,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Client";
-        let capabilities = &self.client_info().capabilities;
-
-        if request_method == CreateMessageRequest::method_value() && capabilities.sampling.is_some()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "sampling capability",
-                    request_method,
-                )),
-            );
-        }
-
-        if request_method == ListRootsRequest::method_value() && capabilities.roots.is_some() {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "roots capability",
-                    request_method,
-                )),
-            );
-        }
-
-        Ok(())
     }
 
     /// Sends a request to the server and processes the response.

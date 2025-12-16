@@ -11,7 +11,7 @@ use crate::{
             self, ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromClient,
             NotificationFromClient, RequestFromClient, ServerMessage, ServerMessages,
         },
-        InitializeRequestParams, InitializeResult, RequestId, RpcError, ServerResult,
+        InitializeRequestParams, InitializeResult, RequestId, RpcError,
     },
 };
 use async_trait::async_trait;

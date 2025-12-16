@@ -1,3 +1,4 @@
+use crate::capability_checks::assert_client_request_capabilities;
 use crate::mcp_traits::McpClient;
 use crate::schema::schema_utils::{CustomNotification, CustomRequest};
 use crate::schema::{
@@ -10,6 +11,7 @@ use crate::schema::{
     ResourceUpdatedNotificationParams, Result, RpcError, TaskStatusNotificationParams,
 };
 use async_trait::async_trait;
+use rust_mcp_schema::CreateTaskResult;
 
 /// The `ClientHandler` trait defines how a client handles Model Context Protocol (MCP) operations.
 /// It includes default implementations for handling requests , notifications and errors and must be
@@ -40,9 +42,37 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: CreateMessageRequestParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<CreateMessageResult, RpcError> {
-        runtime.assert_client_request_capabilities(CreateMessageRequest::method_value())?;
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            CreateMessageRequest::method_value(),
+        )?;
+
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
+            CreateMessageRequest::method_value()
+        )))
+    }
+
+    /// Handles requests to call a task-augmented sampling (sampling/createMessage).
+    /// you need to returns a CreateTaskResult containing task data.
+    /// The actual operation result becomes available later
+    /// through tasks/result after the task completes.
+    async fn handle_task_augmented_create_message(
+        &self,
+        params: CreateMessageRequestParams,
+        runtime: &dyn McpClient,
+    ) -> std::result::Result<CreateTaskResult, RpcError> {
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            CreateMessageRequest::method_value(),
+        )?;
+        if !runtime.capabilities().can_accept_sampling_task() {
+            return Err(RpcError::invalid_request()
+                .with_message("Task-augmented sampling is not supported.".to_string()));
+        }
+
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for task-augmented '{}'.",
             CreateMessageRequest::method_value()
         )))
     }
@@ -56,7 +86,10 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: Option<RequestParams>,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ListRootsResult, RpcError> {
-        runtime.assert_client_request_capabilities(ListRootsRequest::method_value())?;
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            ListRootsRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ListRootsRequest::method_value(),
@@ -69,7 +102,27 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: ElicitRequestParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ElicitResult, RpcError> {
-        runtime.assert_client_request_capabilities(ElicitRequest::method_value())?;
+        assert_client_request_capabilities(runtime.capabilities(), ElicitRequest::method_value())?;
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            ElicitRequest::method_value()
+        )))
+    }
+
+    /// Handles task-augmented elicitation, to elicit additional information from the user via the client.
+    /// you need to returns a CreateTaskResult containing task data.
+    /// The actual operation result becomes available later
+    /// through tasks/result after the task completes.
+    async fn handle_task_augmented_elicit_request(
+        &self,
+        params: ElicitRequestParams,
+        runtime: &dyn McpClient,
+    ) -> std::result::Result<ElicitResult, RpcError> {
+        assert_client_request_capabilities(runtime.capabilities(), ElicitRequest::method_value())?;
+        if !runtime.capabilities().can_accept_elicitation_task() {
+            return Err(RpcError::invalid_request()
+                .with_message("Task-augmented elicitation is not supported.".to_string()));
+        }
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ElicitRequest::method_value()
@@ -82,7 +135,7 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: GetTaskParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<GetTaskResult, RpcError> {
-        runtime.assert_client_request_capabilities(GetTaskRequest::method_value())?;
+        assert_client_request_capabilities(runtime.capabilities(), GetTaskRequest::method_value())?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             GetTaskRequest::method_value()
@@ -95,7 +148,10 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: GetTaskPayloadParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<GenericResult, RpcError> {
-        runtime.assert_client_request_capabilities(GetTaskPayloadRequest::method_value())?;
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            GetTaskPayloadRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             GetTaskPayloadRequest::method_value()
@@ -108,7 +164,10 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: CancelTaskParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<CancelTaskResult, RpcError> {
-        runtime.assert_client_request_capabilities(CancelTaskRequest::method_value())?;
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            CancelTaskRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             CancelTaskRequest::method_value()
@@ -121,7 +180,10 @@ pub trait ClientHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ListTasksResult, RpcError> {
-        runtime.assert_client_request_capabilities(ListTasksRequest::method_value())?;
+        assert_client_request_capabilities(
+            runtime.capabilities(),
+            ListTasksRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ListTasksRequest::method_value()
