@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
+use rust_mcp_schema::schema_utils::ResultFromServer;
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
 use rust_mcp_transport::{IoStream, SessionId, StreamId, TransportDispatcher};
@@ -109,14 +110,14 @@ impl ClientRuntime {
     }
 
     async fn initialize_request(self: Arc<Self>) -> SdkResult<()> {
-        let result: ServerResult = self
+        let result: ResultFromServer = self
             .request(
                 RequestFromClient::InitializeRequest(self.client_details.clone()),
                 None,
             )
             .await?;
 
-        if let ServerResult::InitializeResult(initialize_result) = result {
+        if let ResultFromServer::InitializeResult(initialize_result) = result {
             ensure_server_protocole_compatibility(
                 &self.client_details.protocol_version,
                 &initialize_result.protocol_version,

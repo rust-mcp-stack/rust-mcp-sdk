@@ -1,6 +1,13 @@
+mod capability_checks;
+
+pub use capability_checks::*;
+
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
-use crate::schema::schema_utils::{ClientMessages, SdkError};
-use crate::schema::ProtocolVersion;
+use crate::schema::{
+    CallToolRequest, ClientMessages, GetPromptRequest, ListPromptsRequest,
+    ListResourceTemplatesRequest, ListResourcesRequest, ListToolsRequest, ProtocolVersion,
+    ReadResourceRequest, RpcError, SdkError, ServerCapabilities, SetLevelRequest,
+};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(feature = "auth")]
@@ -21,28 +28,6 @@ impl Drop for AbortTaskOnDrop {
         // Automatically abort the associated task when this guard is dropped.
         self.handle.abort();
     }
-}
-
-/// Formats an assertion error message for unsupported capabilities.
-///
-/// Constructs a string describing that a specific entity (e.g., server or client) lacks
-/// support for a required capability, needed for a particular method.
-///
-/// # Arguments
-/// - `entity`: The name of the entity (e.g., "Server" or "Client") that lacks support.
-/// - `capability`: The name of the unsupported capability or tool.
-/// - `method_name`: The name of the method requiring the capability.
-///
-/// # Returns
-/// A formatted string detailing the unsupported capability error.
-///
-/// # Examples
-/// ```ignore
-/// let msg = format_assertion_message("Server", "tools", rust_mcp_schema::ListResourcesRequest::method_value());
-/// assert_eq!(msg, "Server does not support resources (required for resources/list)");
-/// ```
-pub fn format_assertion_message(entity: &str, capability: &str, method_name: &str) -> String {
-    format!("{entity} does not support {capability} (required for {method_name})")
 }
 
 // Function to convert Unix timestamp to SystemTime

@@ -4,15 +4,14 @@ use crate::schema::{
         ClientMessage, McpMessage, MessageFromServer, NotificationFromServer, RequestFromServer,
         ResultFromClient, ServerMessage,
     },
-    CallToolRequest, CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult,
-    ElicitRequestParams, ElicitResult, GetPromptRequest, Implementation, InitializeRequestParams,
-    InitializeResult, ListPromptsRequest, ListResourceTemplatesRequest, ListResourcesRequest,
-    ListRootsRequest, ListRootsResult, ListToolsRequest, LoggingMessageNotification,
-    LoggingMessageNotificationParams, NotificationParams, PromptListChangedNotification,
-    ReadResourceRequest, RequestId, RequestParams, ResourceUpdatedNotification,
-    ResourceUpdatedNotificationParams, RpcError, ServerCapabilities, SetLevelRequest,
+    CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult, ElicitRequestParams,
+    ElicitResult, Implementation, InitializeRequestParams, InitializeResult, ListRootsRequest,
+    ListRootsResult, LoggingMessageNotification, LoggingMessageNotificationParams,
+    NotificationParams, PromptListChangedNotification, RequestId, RequestParams,
+    ResourceUpdatedNotification, ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
     ToolListChangedNotification,
 };
+use crate::utils::assert_server_request_capabilities;
 use crate::{error::SdkResult, utils::format_assertion_message};
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest};
@@ -119,127 +118,6 @@ pub trait McpServer: Sync + Send {
                 RpcError::internal_error().with_message(format_assertion_message(
                     entity,
                     "listing roots",
-                    request_method,
-                )),
-            );
-        }
-        Ok(())
-    }
-
-    fn assert_server_notification_capabilities(
-        &self,
-        notification_method: &String,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Server";
-
-        let capabilities = &self.server_info().capabilities;
-
-        if *notification_method == LoggingMessageNotification::method_value()
-            && capabilities.logging.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "logging",
-                    notification_method,
-                )),
-            );
-        }
-        if *notification_method == ResourceUpdatedNotification::method_value()
-            && capabilities.resources.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "notifying about resources",
-                    notification_method,
-                )),
-            );
-        }
-        if *notification_method == ToolListChangedNotification::method_value()
-            && capabilities.tools.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "notifying of tool list changes",
-                    notification_method,
-                )),
-            );
-        }
-        if *notification_method == PromptListChangedNotification::method_value()
-            && capabilities.prompts.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "notifying of prompt list changes",
-                    notification_method,
-                )),
-            );
-        }
-
-        Ok(())
-    }
-
-    fn assert_server_request_capabilities(
-        &self,
-        request_method: &str,
-    ) -> std::result::Result<(), RpcError> {
-        let entity = "Server";
-        let capabilities = &self.server_info().capabilities;
-
-        if request_method == SetLevelRequest::method_value() && capabilities.logging.is_none() {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "logging",
-                    request_method,
-                )),
-            );
-        }
-        if [
-            GetPromptRequest::method_value(),
-            ListPromptsRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.prompts.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "prompts",
-                    request_method,
-                )),
-            );
-        }
-        if [
-            ListResourcesRequest::method_value(),
-            ListResourceTemplatesRequest::method_value(),
-            ReadResourceRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.resources.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "resources",
-                    request_method,
-                )),
-            );
-        }
-        if [
-            CallToolRequest::method_value(),
-            ListToolsRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.tools.is_none()
-        {
-            return Err(
-                RpcError::internal_error().with_message(format_assertion_message(
-                    entity,
-                    "tools",
                     request_method,
                 )),
             );

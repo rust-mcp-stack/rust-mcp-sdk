@@ -1,18 +1,21 @@
-use crate::schema::{
-    schema_utils::{
-        ClientMessage, McpMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
-        ResultFromServer, ServerMessage,
-    },
-    CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequestParams,
-    CreateMessageRequest, GenericResult, GetPromptRequest, GetPromptRequestParams, Implementation,
-    InitializeRequestParams, InitializeResult, ListPromptsRequest, ListResourceTemplatesRequest,
-    ListResourcesRequest, ListRootsRequest, ListToolsRequest, NotificationParams,
-    PaginatedRequestParams, ReadResourceRequest, ReadResourceRequestParams, RequestId,
-    RequestParams, RootsListChangedNotification, RpcError, ServerCapabilities, SetLevelRequest,
-    SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams, UnsubscribeRequest,
-    UnsubscribeRequestParams,
-};
 use crate::{error::SdkResult, utils::format_assertion_message};
+use crate::{
+    schema::{
+        schema_utils::{
+            ClientMessage, McpMessage, MessageFromClient, NotificationFromClient,
+            RequestFromClient, ResultFromServer, ServerMessage,
+        },
+        CallToolRequest, CallToolRequestParams, CallToolResult, CompleteRequestParams,
+        CreateMessageRequest, GenericResult, GetPromptRequest, GetPromptRequestParams,
+        Implementation, InitializeRequestParams, InitializeResult, ListPromptsRequest,
+        ListResourceTemplatesRequest, ListResourcesRequest, ListRootsRequest, ListToolsRequest,
+        NotificationParams, PaginatedRequestParams, ReadResourceRequest, ReadResourceRequestParams,
+        RequestId, RequestParams, RootsListChangedNotification, RpcError, ServerCapabilities,
+        SetLevelRequest, SetLevelRequestParams, SubscribeRequest, SubscribeRequestParams,
+        UnsubscribeRequest, UnsubscribeRequestParams,
+    },
+    utils::assert_server_request_capabilities,
+};
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
@@ -159,63 +162,11 @@ pub trait McpClient: Sync + Send {
     /// Verifies that the server has the necessary capabilities to handle the given request method.
     /// If the server is not initialized or lacks a required capability, an error is returned.
     /// This can be utilized to avoid sending requests when the opposing party lacks support for them.
-    fn assert_server_capabilities(&self, request_method: &str) -> SdkResult<()> {
-        let entity = "Server";
-
-        let capabilities = self.server_capabilities().ok_or::<RpcError>(
+    fn assert_server_capabilities(&self, request_method: &str) -> Result<(), RpcError> {
+        let capabilities = &self.server_capabilities().ok_or::<RpcError>(
             RpcError::internal_error().with_message("Server is not initialized!".to_string()),
         )?;
-
-        if request_method == SetLevelRequest::method_value() && capabilities.logging.is_none() {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "logging", request_method))
-                .into());
-        }
-
-        if [
-            GetPromptRequest::method_value(),
-            ListPromptsRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.prompts.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "prompts", request_method))
-                .into());
-        }
-
-        if [
-            ListResourcesRequest::method_value(),
-            ListResourceTemplatesRequest::method_value(),
-            ReadResourceRequest::method_value(),
-            SubscribeRequest::method_value(),
-            UnsubscribeRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.resources.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(
-                    entity,
-                    "resources",
-                    request_method,
-                ))
-                .into());
-        }
-
-        if [
-            CallToolRequest::method_value(),
-            ListToolsRequest::method_value(),
-        ]
-        .contains(&request_method)
-            && capabilities.tools.is_none()
-        {
-            return Err(RpcError::internal_error()
-                .with_message(format_assertion_message(entity, "tools", request_method))
-                .into());
-        }
-
-        Ok(())
+        assert_server_request_capabilities(capabilities, request_method)
     }
 
     fn assert_client_notification_capabilities(

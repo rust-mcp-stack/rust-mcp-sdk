@@ -5,6 +5,7 @@ use crate::{
         schema_utils::{CallToolError, CustomNotification, CustomRequest},
         *,
     },
+    utils::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -86,7 +87,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourcesResult, RpcError> {
-        runtime.assert_server_request_capabilities(ListResourcesRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ListResourcesRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListResourcesRequest::method_value(),
@@ -102,7 +106,11 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
-        runtime.assert_server_request_capabilities(ListResourceTemplatesRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ListResourceTemplatesRequest::method_value(),
+        )?;
+
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListResourceTemplatesRequest::method_value(),
@@ -118,7 +126,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: ReadResourceRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ReadResourceResult, RpcError> {
-        runtime.assert_server_request_capabilities(ReadResourceRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ReadResourceRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ReadResourceRequest::method_value(),
@@ -134,7 +145,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: SubscribeRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
-        runtime.assert_server_request_capabilities(SubscribeRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            SubscribeRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &SubscribeRequest::method_value(),
@@ -150,7 +164,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: UnsubscribeRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
-        runtime.assert_server_request_capabilities(UnsubscribeRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            UnsubscribeRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &UnsubscribeRequest::method_value(),
@@ -166,7 +183,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListPromptsResult, RpcError> {
-        runtime.assert_server_request_capabilities(ListPromptsRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ListPromptsRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListPromptsRequest::method_value(),
@@ -182,7 +202,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: GetPromptRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<GetPromptResult, RpcError> {
-        runtime.assert_server_request_capabilities(GetPromptRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            GetPromptRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &GetPromptRequest::method_value(),
@@ -198,11 +221,31 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
-        runtime.assert_server_request_capabilities(ListToolsRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ListToolsRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListToolsRequest::method_value(),
         )))
+    }
+
+    /// Handles requests to call a task-augmented tool.
+    /// you need to returns a CreateTaskResult containing task data.
+    /// The actual operation result becomes available later
+    /// through tasks/result after the task completes.
+    async fn handle_task_augmented_tool_call(
+        &self,
+        params: CallToolRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<CreateTaskResult, CallToolError> {
+        if !runtime.capabilities().can_call_task_augmented_tools() {
+            return Err(CallToolError::unsupported_task_augmented_tool_call());
+        }
+        Err(CallToolError::from_message(
+            "No handler is implemented for 'task augmented tool call'.",
+        ))
     }
 
     /// Handles requests to call a specific tool.
@@ -214,9 +257,12 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
-        runtime
-            .assert_server_request_capabilities(CallToolRequest::method_value())
-            .map_err(CallToolError::new)?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            CallToolRequest::method_value(),
+        )
+        .map_err(CallToolError::new)?;
+
         Ok(CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into())
     }
 
@@ -229,7 +275,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: SetLevelRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<Result, RpcError> {
-        runtime.assert_server_request_capabilities(SetLevelRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            SetLevelRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &SetLevelRequest::method_value(),
@@ -245,7 +294,11 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: CompleteRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        runtime.assert_server_request_capabilities(CompleteRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            CompleteRequest::method_value(),
+        )?;
+
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &CompleteRequest::method_value(),
@@ -258,7 +311,11 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: GetTaskParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        runtime.assert_server_request_capabilities(GetTaskRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            GetTaskRequest::method_value(),
+        )?;
+
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &GetTaskRequest::method_value(),
@@ -271,7 +328,11 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: GetTaskPayloadParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        runtime.assert_server_request_capabilities(GetTaskPayloadRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            GetTaskPayloadRequest::method_value(),
+        )?;
+
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &GetTaskPayloadRequest::method_value(),
@@ -284,7 +345,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: CancelTaskParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        runtime.assert_server_request_capabilities(CancelTaskRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            CancelTaskRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &CancelTaskRequest::method_value(),
@@ -297,7 +361,10 @@ pub trait ServerHandler: Send + Sync + 'static {
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
-        runtime.assert_server_request_capabilities(ListTasksRequest::method_value())?;
+        assert_server_request_capabilities(
+            &runtime.capabilities(),
+            ListTasksRequest::method_value(),
+        )?;
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListTasksRequest::method_value(),
