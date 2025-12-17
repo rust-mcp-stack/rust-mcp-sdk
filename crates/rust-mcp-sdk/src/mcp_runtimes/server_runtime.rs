@@ -10,6 +10,7 @@ use crate::schema::{
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
+use crate::task_store::ServerTaskStore;
 use crate::utils::AbortTaskOnDrop;
 use async_trait::async_trait;
 use futures::future::try_join_all;
@@ -50,10 +51,31 @@ pub struct ServerRuntime {
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
+    task_store: Option<Arc<ServerTaskStore>>,
+}
+
+pub struct McpServerOptions<T>
+where
+    T: TransportDispatcher<
+        ClientMessages,
+        MessageFromServer,
+        ClientMessage,
+        ServerMessages,
+        ServerMessage,
+    >,
+{
+    server_details: InitializeResult,
+    transport: T,
+    handler: Arc<dyn McpServerHandler>,
+    task_store: Option<Arc<ServerTaskStore>>,
 }
 
 #[async_trait]
 impl McpServer for ServerRuntime {
+    fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
+        self.task_store.clone()
+    }
+
     /// Set the client details, storing them in client_details
     async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
         self.client_details_tx
@@ -574,6 +596,7 @@ impl ServerRuntime {
         handler: Arc<dyn McpServerHandler>,
         session_id: SessionId,
         auth_info: Option<AuthInfo>,
+        task_store: Option<Arc<ServerTaskStore>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 
@@ -588,32 +611,33 @@ impl ServerRuntime {
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(auth_info),
+            task_store,
         })
     }
 
-    pub(crate) fn new(
-        server_details: InitializeResult,
-        transport: impl TransportDispatcher<
+    pub(crate) fn new<T>(options: McpServerOptions<T>) -> Arc<Self>
+    where
+        T: TransportDispatcher<
             ClientMessages,
             MessageFromServer,
             ClientMessage,
             ServerMessages,
             ServerMessage,
         >,
-        handler: Arc<dyn McpServerHandler>,
-    ) -> Arc<Self> {
+    {
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
         Arc::new(Self {
-            server_details: Arc::new(server_details),
-            handler,
+            server_details: Arc::new(options.server_details),
+            handler: options.handler,
             #[cfg(feature = "hyper-server")]
             session_id: None,
-            transport_map: tokio::sync::RwLock::new(Some(Arc::new(transport))),
+            transport_map: tokio::sync::RwLock::new(Some(Arc::new(options.transport))),
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(None),
+            task_store: options.task_store,
         })
     }
 }

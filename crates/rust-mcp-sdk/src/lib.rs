@@ -10,6 +10,7 @@ mod mcp_runtimes;
 mod mcp_traits;
 #[cfg(any(feature = "server", feature = "hyper-server"))]
 pub mod session_store;
+pub mod task_store;
 mod utils;
 
 #[cfg(feature = "client")]

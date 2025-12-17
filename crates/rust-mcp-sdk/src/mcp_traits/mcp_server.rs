@@ -10,6 +10,7 @@ use crate::schema::{
     LoggingMessageNotificationParams, NotificationParams, RequestId, RequestParams,
     ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
 };
+use crate::task_store::ServerTaskStore;
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest};
 use rust_mcp_schema::{
@@ -33,6 +34,8 @@ pub trait McpServer: Sync + Send {
     async fn update_auth_info(&self, auth_info: Option<AuthInfo>);
 
     async fn wait_for_initialization(&self);
+
+    fn task_store(&self) -> Option<Arc<ServerTaskStore>>;
 
     /// Checks if the client supports sampling.
     ///

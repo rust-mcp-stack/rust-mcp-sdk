@@ -1,17 +1,21 @@
 use super::ServerRuntime;
 #[cfg(feature = "hyper-server")]
-use crate::auth::AuthInfo;
-use crate::schema::{
-    schema_utils::{
-        self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
-        NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage, ServerMessages,
-    },
-    CallToolResult, InitializeResult, RpcError,
-};
+use crate::{auth::AuthInfo, task_store::ServerTaskStore};
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{McpServer, McpServerHandler},
+};
+use crate::{
+    mcp_runtimes::server_runtime::McpServerOptions,
+    schema::{
+        schema_utils::{
+            self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
+            NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage,
+            ServerMessages,
+        },
+        CallToolResult, InitializeResult, RpcError,
+    },
 };
 use async_trait::async_trait;
 #[cfg(feature = "hyper-server")]
@@ -37,18 +41,17 @@ use std::sync::Arc;
 /// You can find a detailed example of how to use this function in the repository:
 ///
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio)
-pub fn create_server(
-    server_details: InitializeResult,
-    transport: impl TransportDispatcher<
+pub fn create_server<T>(options: McpServerOptions<T>) -> Arc<ServerRuntime>
+where
+    T: TransportDispatcher<
         ClientMessages,
         MessageFromServer,
         ClientMessage,
         ServerMessages,
         ServerMessage,
     >,
-    handler: Arc<dyn McpServerHandler>,
-) -> Arc<ServerRuntime> {
-    ServerRuntime::new(server_details, transport, handler)
+{
+    ServerRuntime::new(options)
 }
 
 #[cfg(feature = "hyper-server")]
@@ -57,8 +60,9 @@ pub(crate) fn create_server_instance(
     handler: Arc<dyn McpServerHandler>,
     session_id: SessionId,
     auth_info: Option<AuthInfo>,
+    task_store: Option<Arc<ServerTaskStore>>,
 ) -> Arc<ServerRuntime> {
-    ServerRuntime::new_instance(server_details, handler, session_id, auth_info)
+    ServerRuntime::new_instance(server_details, handler, session_id, auth_info, task_store)
 }
 
 pub(crate) struct ServerRuntimeInternalHandler<H> {

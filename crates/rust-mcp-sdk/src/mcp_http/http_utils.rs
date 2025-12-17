@@ -1,6 +1,7 @@
 use crate::auth::AuthInfo;
 use crate::mcp_http::types::GenericBody;
 use crate::schema::schema_utils::{ClientMessage, SdkError};
+use crate::task_store::ServerTaskStore;
 use crate::McpServer;
 use crate::{
     error::SdkResult,
@@ -384,6 +385,7 @@ pub(crate) async fn start_new_session(
         h,
         session_id.to_owned(),
         auth_info,
+        state.task_store.clone(),
     );
 
     tracing::info!("a new client joined : {}", &session_id);
@@ -744,6 +746,7 @@ pub(crate) async fn handle_sse_connection(
         h,
         session_id.to_owned(),
         auth_info,
+        state.task_store.clone(),
     );
 
     state

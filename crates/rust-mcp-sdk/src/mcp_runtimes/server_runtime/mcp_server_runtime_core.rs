@@ -1,6 +1,7 @@
 use super::ServerRuntime;
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
+use crate::mcp_runtimes::server_runtime::McpServerOptions;
 use crate::mcp_traits::{McpServer, McpServerHandler};
 use crate::schema::schema_utils::{
     ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient, ResultFromServer,
@@ -8,7 +9,7 @@ use crate::schema::schema_utils::{
 };
 use crate::schema::{
     schema_utils::{ClientMessages, ServerMessages},
-    InitializeResult, RpcError,
+    RpcError,
 };
 use async_trait::async_trait;
 use rust_mcp_transport::TransportDispatcher;
@@ -32,18 +33,17 @@ use std::sync::Arc;
 /// You can find a detailed example of how to use this function in the repository:
 ///
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core)
-pub fn create_server(
-    server_details: InitializeResult,
-    transport: impl TransportDispatcher<
+pub fn create_server<T>(options: McpServerOptions<T>) -> Arc<ServerRuntime>
+where
+    T: TransportDispatcher<
         ClientMessages,
         MessageFromServer,
         ClientMessage,
         ServerMessages,
         ServerMessage,
     >,
-    handler: Arc<dyn McpServerHandler>,
-) -> Arc<ServerRuntime> {
-    ServerRuntime::new(server_details, transport, handler)
+{
+    ServerRuntime::new(options)
 }
 
 pub(crate) struct RuntimeCoreInternalHandler<H> {
