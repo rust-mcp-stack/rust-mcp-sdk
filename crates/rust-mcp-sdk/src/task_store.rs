@@ -1,5 +1,7 @@
-// mod in_memory_task_store;
-// pub use in_memory_task_store::*;
+mod in_memory_task_store;
+use std::fmt::Debug;
+
+pub use in_memory_task_store::*;
 
 use async_trait::async_trait;
 use rust_mcp_schema::{
@@ -9,8 +11,8 @@ use rust_mcp_schema::{
 
 #[derive(::serde::Deserialize, ::serde::Serialize, Debug)]
 pub struct CreateTaskOptions {
-    ///Actual retention duration from creation in milliseconds, null for unlimited.
-    pub ttl: i64,
+    ///Actual retention duration from creation in milliseconds, None for unlimited.
+    pub ttl: Option<i64>,
     ///Suggested polling interval in milliseconds.
     #[serde(
         rename = "pollInterval",
@@ -26,7 +28,11 @@ pub struct CreateTaskOptions {
 /// Tasks were introduced in MCP Protocol version 2025-11-25.
 /// For more details, see: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
 #[async_trait]
-pub trait TaskStore<Req, Res>: Send + Sync {
+pub trait TaskStore<Req, Res>: Send + Sync
+where
+    Req: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
+    Res: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
+{
     /// Creates a new task with the given creation parameters and original request.
     /// The implementation must generate a unique taskId and createdAt timestamp.
     ///
@@ -86,7 +92,7 @@ pub trait TaskStore<Req, Res>: Send + Sync {
     ///
     /// # Returns
     /// The stored result
-    async fn get_task_result(&self, task_id: &str, session_id: Option<String>) -> Res;
+    async fn get_task_result(&self, task_id: &str, session_id: Option<String>) -> Option<Res>;
 
     /// Updates a task's status (e.g., to 'cancelled', 'failed', 'completed').
     ///

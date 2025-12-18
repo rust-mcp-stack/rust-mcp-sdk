@@ -4,6 +4,8 @@ use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
 use crate::schema::{ClientMessages, ProtocolVersion, SdkError};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use time::format_description::well_known::Iso8601;
+use time::OffsetDateTime;
 #[cfg(feature = "auth")]
 use url::Url;
 
@@ -218,6 +220,42 @@ pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
     };
 
     Ok(())
+}
+
+/// Returns the current UTC time, optionally adjusted by a millisecond offset.
+///
+/// This function fetches the current UTC time and applies an optional offset in milliseconds.
+/// Positive values move the time into the future, negative values into the past.
+///
+/// If the offset would cause an overflow (i.e., exceed the valid range of `OffsetDateTime`),
+/// the time is clamped to a safe boundary instead of panicking.
+pub fn current_utc_time(ms_offset: Option<i64>) -> OffsetDateTime {
+    let mut dt = OffsetDateTime::now_utc();
+    if let Some(ms) = ms_offset {
+        let duration = time::Duration::milliseconds(ms);
+
+        dt = match dt.checked_add(duration) {
+            Some(new_dt) => new_dt,
+            None => {
+                if ms > 0 {
+                    dt.checked_add(time::Duration::milliseconds(180_000))
+                        .unwrap_or(dt)
+                } else {
+                    dt.checked_sub(time::Duration::milliseconds(180_000))
+                        .unwrap_or(dt)
+                }
+            }
+        };
+    }
+    dt
+}
+
+/// Formats an `OffsetDateTime` as an ISO 8601 string.
+///
+/// Uses the default ISO 8601 configuration (with nanosecond precision and `Z` suffix).
+/// If formatting fails for any reason (extremely unlikely), returns an empty string as fallback.
+pub fn iso8601_time(time_value: OffsetDateTime) -> String {
+    time_value.format(&Iso8601::DEFAULT).unwrap_or_default()
 }
 
 #[cfg(feature = "auth")]
