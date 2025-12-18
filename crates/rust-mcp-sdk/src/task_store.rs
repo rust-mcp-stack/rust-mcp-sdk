@@ -20,6 +20,7 @@ pub struct CreateTaskOptions {
         skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub poll_interval: ::std::option::Option<i64>,
+    #[serde(flatten)]
     ///Additional context to pass to the task store.
     pub context: Option<serde_json::Map<String, serde_json::Value>>,
 }

@@ -3,7 +3,7 @@ pub mod common;
 
 mod protocol_compatibility_on_server {
 
-    use rust_mcp_sdk::mcp_server::{ServerHandler, ToMcpServerHandler};
+    use rust_mcp_sdk::mcp_server::{McpServerOptions, ServerHandler, ToMcpServerHandler};
     use rust_mcp_sdk::schema::{InitializeResult, RpcError, INTERNAL_ERROR};
 
     use crate::common::{
@@ -23,11 +23,12 @@ mod protocol_compatibility_on_server {
             rust_mcp_sdk::StdioTransport::new(rust_mcp_sdk::TransportOptions::default()).unwrap();
 
         // mock unused runtime
-        let runtime = rust_mcp_sdk::mcp_server::server_runtime::create_server(
-            test_server_details(),
+        let runtime = rust_mcp_sdk::mcp_server::server_runtime::create_server(McpServerOptions {
+            server_details: test_server_details(),
             transport,
-            TestServerHandler {}.to_mcp_server_handler(),
-        );
+            handler: TestServerHandler {}.to_mcp_server_handler(),
+            task_store: None,
+        });
 
         handler
             .handle_initialize_request(initialize_request, runtime)

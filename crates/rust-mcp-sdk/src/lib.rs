@@ -74,7 +74,7 @@ pub mod mcp_server {
 
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime as server_runtime;
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime_core as server_runtime_core;
-    pub use super::mcp_runtimes::server_runtime::ServerRuntime;
+    pub use super::mcp_runtimes::server_runtime::{McpServerOptions, ServerRuntime};
 
     #[cfg(feature = "hyper-server")]
     pub use super::hyper_servers::*;

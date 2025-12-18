@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rust_mcp_sdk::{
     error::SdkResult,
     macros,
-    mcp_server::{server_runtime, ServerHandler},
+    mcp_server::{server_runtime, McpServerOptions, ServerHandler},
     schema::*,
     *,
 };
@@ -52,7 +52,7 @@ impl ServerHandler for HelloHandler {
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    let server_info = InitializeResult {
+    let server_details = InitializeResult {
         server_info: Implementation {
             name: "hello-rust-mcp".into(),
             version: "0.1.0".into(),
@@ -72,6 +72,11 @@ async fn main() -> SdkResult<()> {
 
     let transport = StdioTransport::new(TransportOptions::default())?;
     let handler = HelloHandler::default().to_mcp_server_handler();
-    let server = server_runtime::create_server(server_info, transport, handler);
+    let server = server_runtime::create_server(McpServerOptions {
+        transport,
+        handler,
+        server_details,
+        task_store: None,
+    });
     server.start().await
 }

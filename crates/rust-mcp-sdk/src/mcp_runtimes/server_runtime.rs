@@ -64,10 +64,10 @@ where
         ServerMessage,
     >,
 {
-    server_details: InitializeResult,
-    transport: T,
-    handler: Arc<dyn McpServerHandler>,
-    task_store: Option<Arc<ServerTaskStore>>,
+    pub server_details: InitializeResult,
+    pub transport: T,
+    pub handler: Arc<dyn McpServerHandler>,
+    pub task_store: Option<Arc<ServerTaskStore>>,
 }
 
 #[async_trait]
