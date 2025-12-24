@@ -18,13 +18,12 @@ description = "A procedural macro, part of the rust-mcp-sdk ecosystem, that deri
 [dependencies]
 serde_json = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
-syn = "2.0"
+syn = {version="2.0", features = ["full", "extra-traits","parsing"]}
 quote = "1.0"
 proc-macro2 = "1.0"
 
-
 [dev-dependencies]
-rust-mcp-schema = { workspace = true, default-features = false }
+rust-mcp-schema = { workspace = true , features=["latest","schema_utils"]}
 
 [lints]
 workspace = true
@@ -32,18 +31,7 @@ workspace = true
 [lib]
 proc-macro = true
 
-
 [features]
 # defalt features
-default = ["2025_06_18"] # Default features
-
-# activates the latest MCP schema version, this will be updated once a new version of schema is published
-latest = ["2025_06_18"]
-
-# enables mcp schema version 2025_06_18
-2025_06_18 = ["rust-mcp-schema/2025_06_18", "rust-mcp-schema/schema_utils"]
-# enables mcp schema version 2025_03_26
-2025_03_26 = ["rust-mcp-schema/2025_03_26", "rust-mcp-schema/schema_utils"]
-# enables mcp schema version 2024_11_05
-2024_11_05 = ["rust-mcp-schema/2024_11_05", "rust-mcp-schema/schema_utils"]
+default = []
 sdk = []

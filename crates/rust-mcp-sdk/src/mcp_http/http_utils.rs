@@ -343,7 +343,7 @@ pub(crate) async fn create_standalone_stream(
 
     runtime.update_auth_info(auth_info).await;
 
-    if runtime.stream_id_exists(DEFAULT_STREAM_ID).await {
+    if runtime.default_stream_exists().await {
         let error =
             SdkError::bad_request().with_message("Only one SSE stream is allowed per session");
         return error_response(StatusCode::CONFLICT, error)
@@ -384,6 +384,7 @@ pub(crate) async fn start_new_session(
         h,
         session_id.to_owned(),
         auth_info,
+        state.task_store.clone(),
     );
 
     tracing::info!("a new client joined : {}", &session_id);
@@ -549,10 +550,7 @@ pub(crate) async fn process_incoming_message(
             };
 
             if is_result {
-                match runtime
-                    .consume_payload_string(DEFAULT_STREAM_ID, payload)
-                    .await
-                {
+                match runtime.consume_payload_string(payload).await {
                     Ok(()) => {
                         let body = Full::new(Bytes::new())
                             .map_err(|err| TransportServerError::HttpError(err.to_string()))
@@ -747,6 +745,7 @@ pub(crate) async fn handle_sse_connection(
         h,
         session_id.to_owned(),
         auth_info,
+        state.task_store.clone(),
     );
 
     state

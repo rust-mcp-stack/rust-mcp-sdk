@@ -9,9 +9,9 @@ use crate::auth::AuthInfo;
 use crate::auth::AuthProvider;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, RequestExt};
-use crate::mcp_runtimes::server_runtime::DEFAULT_STREAM_ID;
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
+#[cfg(feature = "sse")]
 use crate::{
     error::McpSdkError,
     mcp_http::{
@@ -263,7 +263,7 @@ impl McpHttpHandler {
         let message = request.body();
 
         transmit
-            .consume_payload_string(DEFAULT_STREAM_ID, message.as_ref())
+            .consume_payload_string(message.as_ref())
             .await
             .map_err(|err| {
                 tracing::trace!("{}", err);

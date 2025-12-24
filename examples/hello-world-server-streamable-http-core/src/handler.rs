@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use rust_mcp_sdk::schema::{
     schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
-    ClientRequest, ListToolsResult, RpcError,
+    ListToolsResult, RpcError,
 };
 use rust_mcp_sdk::{
     mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
@@ -28,65 +28,59 @@ impl ServerHandlerCore for MyServerHandler {
     ) -> std::result::Result<ResultFromServer, RpcError> {
         let method_name = &request.method().to_owned();
         match request {
-            //Handle client requests according to their specific type.
-            RequestFromClient::ClientRequest(client_request) => match client_request {
-                // Handle the initialization request
-                ClientRequest::InitializeRequest(initialize_request) => {
-                    let mut server_info = runtime.server_info().to_owned();
+            // Handle the initialization request
+            RequestFromClient::InitializeRequest(params) => {
+                let mut server_info = runtime.server_info().to_owned();
 
-                    if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
-                        &initialize_request.params.protocol_version,
-                        &server_info.protocol_version,
-                    )
-                    .map_err(|err| {
-                        tracing::error!(
-                            "Incompatible protocol version :\nclient: {}\nserver: {}",
-                            &initialize_request.params.protocol_version,
-                            &server_info.protocol_version
-                        );
-                        RpcError::internal_error().with_message(err.to_string())
-                    })? {
-                        server_info.protocol_version = updated_protocol_version;
-                    }
-
-                    return Ok(server_info.into());
-                }
-                // Handle ListToolsRequest, return list of available tools
-                ClientRequest::ListToolsRequest(_) => Ok(ListToolsResult {
-                    meta: None,
-                    next_cursor: None,
-                    tools: GreetingTools::tools(),
-                }
-                .into()),
-
-                // Handles incoming CallToolRequest and processes it using the appropriate tool.
-                ClientRequest::CallToolRequest(request) => {
-                    let tool_name = request.tool_name().to_string();
-
-                    // Attempt to convert request parameters into GreetingTools enum
-                    let tool_params = GreetingTools::try_from(request.params)
-                        .map_err(|_| CallToolError::unknown_tool(tool_name.clone()))?;
-
-                    // Match the tool variant and execute its corresponding logic
-                    let result = match tool_params {
-                        GreetingTools::SayHelloTool(say_hello_tool) => {
-                            say_hello_tool.call_tool().map_err(|err| {
-                                RpcError::internal_error().with_message(err.to_string())
-                            })?
-                        }
-                        GreetingTools::SayGoodbyeTool(say_goodbye_tool) => {
-                            say_goodbye_tool.call_tool().map_err(|err| {
-                                RpcError::internal_error().with_message(err.to_string())
-                            })?
-                        }
-                    };
-                    Ok(result.into())
+                if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
+                    &params.protocol_version,
+                    &server_info.protocol_version,
+                )
+                .map_err(|err| {
+                    tracing::error!(
+                        "Incompatible protocol version :\nclient: {}\nserver: {}",
+                        &params.protocol_version,
+                        &server_info.protocol_version
+                    );
+                    RpcError::internal_error().with_message(err.to_string())
+                })? {
+                    server_info.protocol_version = updated_protocol_version;
                 }
 
-                // Return Method not found for any other requests
-                _ => Err(RpcError::method_not_found()
-                    .with_message(format!("No handler is implemented for '{method_name}'.",))),
-            },
+                return Ok(server_info.into());
+            }
+            // Handle ListToolsRequest, return list of available tools
+            RequestFromClient::ListToolsRequest(_) => Ok(ListToolsResult {
+                meta: None,
+                next_cursor: None,
+                tools: GreetingTools::tools(),
+            }
+            .into()),
+
+            // Handles incoming CallToolRequest and processes it using the appropriate tool.
+            RequestFromClient::CallToolRequest(params) => {
+                let tool_name = params.name.to_string();
+
+                // Attempt to convert request parameters into GreetingTools enum
+                let tool_params = GreetingTools::try_from(params)
+                    .map_err(|_| CallToolError::unknown_tool(tool_name.clone()))?;
+
+                // Match the tool variant and execute its corresponding logic
+                let result = match tool_params {
+                    GreetingTools::SayHelloTool(say_hello_tool) => say_hello_tool
+                        .call_tool()
+                        .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?,
+                    GreetingTools::SayGoodbyeTool(say_goodbye_tool) => say_goodbye_tool
+                        .call_tool()
+                        .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?,
+                };
+                Ok(result.into())
+            }
+
+            // Return Method not found for any other requests
+            _ => Err(RpcError::method_not_found()
+                .with_message(format!("No handler is implemented for '{method_name}'.",))),
+
             // Handle custom requests
             RequestFromClient::CustomRequest(_) => Err(RpcError::method_not_found()
                 .with_message("No handler is implemented for custom requests.".to_string())),

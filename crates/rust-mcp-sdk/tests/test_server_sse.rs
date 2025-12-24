@@ -208,8 +208,7 @@ mod tets_server_sse {
         let result = serde_json::from_str::<ServerMessage>(&init_response).unwrap();
 
         assert!(matches!(result, ServerMessage::Response(response)
-        if matches!(&response.result, ResultFromServer::ServerResult(server_result)
-        if matches!(server_result, ServerResult::InitializeResult(init_result) if init_result.server_info.name == "Test MCP Server"))));
+        if matches!(&response.result, ResultFromServer::InitializeResult(init_result) if init_result.server_info.name == "Test MCP Server")));
         handle.graceful_shutdown(Some(Duration::from_millis(1)));
         server_task.await.unwrap();
     }

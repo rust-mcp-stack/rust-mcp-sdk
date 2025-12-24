@@ -6,7 +6,9 @@ use crate::common::{
 use rust_mcp_extra::auth_provider::scalekit::{ScalekitAuthOptions, ScalekitAuthProvider};
 use rust_mcp_sdk::{
     error::SdkResult,
+    event_store::InMemoryEventStore,
     mcp_server::{hyper_server, HyperServerOptions},
+    ToMcpServerHandler,
 };
 use std::{env, sync::Arc};
 
@@ -32,10 +34,11 @@ async fn main() -> SdkResult<()> {
 
     let server = hyper_server::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: 8080,
+            event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
             auth: Some(Arc::new(auth_provider)), // enable authentication
             sse_support: false,
             ..Default::default()

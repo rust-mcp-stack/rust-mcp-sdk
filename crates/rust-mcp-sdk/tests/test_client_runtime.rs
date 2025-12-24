@@ -1,7 +1,10 @@
 #[cfg(unix)]
 use common::UVX_SERVER_GIT;
 use common::{test_client_info, TestClientHandler, NPX_SERVER_EVERYTHING};
-use rust_mcp_sdk::{mcp_client::client_runtime, McpClient, StdioTransport, TransportOptions};
+use rust_mcp_sdk::{
+    mcp_client::{client_runtime, McpClientOptions},
+    McpClient, StdioTransport, ToMcpClientHandler, TransportOptions,
+};
 
 #[path = "common/common.rs"]
 pub mod common;
@@ -17,7 +20,12 @@ async fn tets_client_launch_npx_server() {
     )
     .unwrap();
 
-    let client = client_runtime::create_client(test_client_info(), transport, TestClientHandler {});
+    let client = client_runtime::create_client(McpClientOptions {
+        client_details: test_client_info(),
+        transport,
+        handler: TestClientHandler {}.to_mcp_client_handler(),
+        task_store: None,
+    });
 
     client.clone().start().await.unwrap();
 
@@ -42,7 +50,12 @@ async fn tets_client_launch_uvx_server() {
     )
     .unwrap();
 
-    let client = client_runtime::create_client(test_client_info(), transport, TestClientHandler {});
+    let client = client_runtime::create_client(McpClientOptions {
+        client_details: test_client_info(),
+        transport,
+        handler: TestClientHandler {}.to_mcp_client_handler(),
+        task_store: None,
+    });
     client.clone().start().await.unwrap();
     let server_capabilities = client.server_capabilities().unwrap();
     let server_info = client.server_info().unwrap();

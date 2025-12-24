@@ -1,312 +1,17 @@
 extern crate proc_macro;
 
+mod elicit;
+mod tool;
 mod utils;
 
+use crate::elicit::generator::{generate_form_schema, generate_from_impl};
+use crate::elicit::parser::{ElicitArgs, ElicitMode};
+use crate::tool::generator::{generate_tool_tokens, ToolTokens};
+use crate::tool::parser::{IconThemeDsl, McpToolMacroAttributes};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    parse::Parse, parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Error, Expr,
-    ExprLit, Fields, GenericArgument, Lit, Meta, PathArguments, Token, Type,
-};
-use utils::{is_option, renamed_field, type_to_json_schema};
-
-/// Represents the attributes for the `mcp_tool` procedural macro.
-///
-/// This struct parses and validates the attributes provided to the `mcp_tool` macro.
-/// The `name` and `description` attributes are required and must not be empty strings.
-///
-/// # Fields
-/// * `name` - A string representing the tool's name (required).
-/// * `description` - A string describing the tool (required).
-/// * `meta` - An optional JSON string for metadata.
-/// * `title` - An optional string for the tool's title.
-/// * The following fields are available only with the `2025_03_26` feature and later:
-///   * `destructive_hint` - Optional boolean for `ToolAnnotations::destructive_hint`.
-///   * `idempotent_hint` - Optional boolean for `ToolAnnotations::idempotent_hint`.
-///   * `open_world_hint` - Optional boolean for `ToolAnnotations::open_world_hint`.
-///   * `read_only_hint` - Optional boolean for `ToolAnnotations::read_only_hint`.
-///
-struct McpToolMacroAttributes {
-    name: Option<String>,
-    description: Option<String>,
-    #[cfg(feature = "2025_06_18")]
-    meta: Option<String>, // Store raw JSON string instead of parsed Map
-    #[cfg(feature = "2025_06_18")]
-    title: Option<String>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    destructive_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    idempotent_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    open_world_hint: Option<bool>,
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    read_only_hint: Option<bool>,
-}
-
-use syn::parse::ParseStream;
-
-use crate::utils::{generate_enum_parse, is_enum};
-
-struct ExprList {
-    exprs: Punctuated<Expr, Token![,]>,
-}
-
-impl Parse for ExprList {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(ExprList {
-            exprs: Punctuated::parse_terminated(input)?,
-        })
-    }
-}
-
-impl Parse for McpToolMacroAttributes {
-    /// Parses the macro attributes from a `ParseStream`.
-    ///
-    /// This implementation extracts `name`, `description`, `meta`, and `title` from the attribute input.
-    /// The `name` and `description` must be provided as string literals and be non-empty.
-    /// The `meta` attribute must be a valid JSON object provided as a string literal, and `title` must be a string literal.
-    ///
-    /// # Errors
-    /// Returns a `syn::Error` if:
-    /// - The `name` attribute is missing or empty.
-    /// - The `description` attribute is missing or empty.
-    /// - The `meta` attribute is provided but is not a valid JSON object.
-    /// - The `title` attribute is provided but is not a string literal.
-    fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut instance = Self {
-            name: None,
-            description: None,
-            #[cfg(feature = "2025_06_18")]
-            meta: None,
-            #[cfg(feature = "2025_06_18")]
-            title: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-            destructive_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-            idempotent_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-            open_world_hint: None,
-            #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-            read_only_hint: None,
-        };
-
-        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
-        for meta in meta_list {
-            if let Meta::NameValue(meta_name_value) = meta {
-                let ident = meta_name_value.path.get_ident().unwrap();
-                let ident_str = ident.to_string();
-
-                match ident_str.as_str() {
-                    "name" | "description" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            Expr::Macro(expr_macro) => {
-                                let mac = &expr_macro.mac;
-                                if mac.path.is_ident("concat") {
-                                    let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                    let mut result = String::new();
-                                    for expr in args.exprs {
-                                        if let Expr::Lit(ExprLit {
-                                            lit: Lit::Str(lit_str),
-                                            ..
-                                        }) = expr
-                                        {
-                                            result.push_str(&lit_str.value());
-                                        } else {
-                                            return Err(Error::new_spanned(
-                                                expr,
-                                                "Only string literals are allowed inside concat!()",
-                                            ));
-                                        }
-                                    }
-                                    result
-                                } else {
-                                    return Err(Error::new_spanned(
-                                        expr_macro,
-                                        "Only concat!(...) is supported here",
-                                    ));
-                                }
-                            }
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal or concat!(...)",
-                                ));
-                            }
-                        };
-                        match ident_str.as_str() {
-                            "name" => instance.name = Some(value),
-                            "description" => instance.description = Some(value),
-                            _ => {}
-                        }
-                    }
-                    #[cfg(feature = "2025_06_18")]
-                    "meta" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a JSON object as a string literal",
-                                ));
-                            }
-                        };
-                        // Validate that the string is a valid JSON object
-                        let parsed: serde_json::Value =
-                            serde_json::from_str(&value).map_err(|e| {
-                                Error::new_spanned(
-                                    &meta_name_value.value,
-                                    format!("Expected a valid JSON object: {e}"),
-                                )
-                            })?;
-                        if !parsed.is_object() {
-                            return Err(Error::new_spanned(
-                                &meta_name_value.value,
-                                "Expected a JSON object",
-                            ));
-                        }
-                        instance.meta = Some(value);
-                    }
-                    #[cfg(feature = "2025_06_18")]
-                    "title" => {
-                        let value = match &meta_name_value.value {
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(lit_str),
-                                ..
-                            }) => lit_str.value(),
-                            _ => {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a string literal",
-                                ));
-                            }
-                        };
-                        instance.title = Some(value);
-                    }
-                    "destructive_hint" | "idempotent_hint" | "open_world_hint"
-                    | "read_only_hint" => {
-                        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-                        {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Bool(lit_bool),
-                                    ..
-                                }) => lit_bool.value,
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a boolean literal",
-                                    ));
-                                }
-                            };
-
-                            match ident_str.as_str() {
-                                "destructive_hint" => instance.destructive_hint = Some(value),
-                                "idempotent_hint" => instance.idempotent_hint = Some(value),
-                                "open_world_hint" => instance.open_world_hint = Some(value),
-                                "read_only_hint" => instance.read_only_hint = Some(value),
-                                _ => {}
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // Validate presence and non-emptiness
-        if instance
-            .name
-            .as_ref()
-            .map(|s| s.trim().is_empty())
-            .unwrap_or(true)
-        {
-            return Err(Error::new(
-                attributes.span(),
-                "The 'name' attribute is required and must not be empty.",
-            ));
-        }
-        if instance
-            .description
-            .as_ref()
-            .map(|s| s.trim().is_empty())
-            .unwrap_or(true)
-        {
-            return Err(Error::new(
-                attributes.span(),
-                "The 'description' attribute is required and must not be empty.",
-            ));
-        }
-
-        Ok(instance)
-    }
-}
-
-struct McpElicitationAttributes {
-    message: Option<String>,
-}
-
-impl Parse for McpElicitationAttributes {
-    fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut instance = Self { message: None };
-        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
-        for meta in meta_list {
-            if let Meta::NameValue(meta_name_value) = meta {
-                let ident = meta_name_value.path.get_ident().unwrap();
-                let ident_str = ident.to_string();
-                if ident_str.as_str() == "message" {
-                    let value = match &meta_name_value.value {
-                        Expr::Lit(ExprLit {
-                            lit: Lit::Str(lit_str),
-                            ..
-                        }) => lit_str.value(),
-                        Expr::Macro(expr_macro) => {
-                            let mac = &expr_macro.mac;
-                            if mac.path.is_ident("concat") {
-                                let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                let mut result = String::new();
-                                for expr in args.exprs {
-                                    if let Expr::Lit(ExprLit {
-                                        lit: Lit::Str(lit_str),
-                                        ..
-                                    }) = expr
-                                    {
-                                        result.push_str(&lit_str.value());
-                                    } else {
-                                        return Err(Error::new_spanned(
-                                            expr,
-                                            "Only string literals are allowed inside concat!()",
-                                        ));
-                                    }
-                                }
-                                result
-                            } else {
-                                return Err(Error::new_spanned(
-                                    expr_macro,
-                                    "Only concat!(...) is supported here",
-                                ));
-                            }
-                        }
-                        _ => {
-                            return Err(Error::new_spanned(
-                                &meta_name_value.value,
-                                "Expected a string literal or concat!(...)",
-                            ));
-                        }
-                    };
-                    instance.message = Some(value)
-                }
-            }
-        }
-        Ok(instance)
-    }
-}
+use syn::{parse_macro_input, Data, DeriveInput, Fields};
+use utils::{base_crate, is_option, is_vec_string, renamed_field, type_to_json_schema};
 
 /// A procedural macro attribute to generate rust_mcp_schema::Tool related utility methods for a struct.
 ///
@@ -357,84 +62,22 @@ impl Parse for McpElicitationAttributes {
 pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let input_ident = &input.ident;
-
-    // Conditionally select the path for Tool
-    let base_crate = if cfg!(feature = "sdk") {
-        quote! { rust_mcp_sdk::schema }
-    } else {
-        quote! { rust_mcp_schema }
-    };
-
     let macro_attributes = parse_macro_input!(attributes as McpToolMacroAttributes);
 
-    let tool_name = macro_attributes.name.unwrap_or_default();
-    let tool_description = macro_attributes.description.unwrap_or_default();
+    let ToolTokens {
+        base_crate,
+        tool_name,
+        tool_description,
+        meta,
+        title,
+        output_schema,
+        annotations,
+        execution,
+        icons,
+    } = generate_tool_tokens(macro_attributes);
 
-    #[cfg(not(feature = "2025_06_18"))]
-    let meta = quote! {};
-    #[cfg(feature = "2025_06_18")]
-    let meta = macro_attributes.meta.map_or(quote! { meta: None, }, |m| {
-        quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
-    });
-
-    #[cfg(not(feature = "2025_06_18"))]
-    let title = quote! {};
-    #[cfg(feature = "2025_06_18")]
-    let title = macro_attributes.title.map_or(
-        quote! { title: None, },
-        |t| quote! { title: Some(#t.to_string()), },
-    );
-
-    #[cfg(not(feature = "2025_06_18"))]
-    let output_schema = quote! {};
-    #[cfg(feature = "2025_06_18")]
-    let output_schema = quote! { output_schema: None,};
-
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    let some_annotations = macro_attributes.destructive_hint.is_some()
-        || macro_attributes.idempotent_hint.is_some()
-        || macro_attributes.open_world_hint.is_some()
-        || macro_attributes.read_only_hint.is_some();
-
-    #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-    let annotations = if some_annotations {
-        let destructive_hint = macro_attributes
-            .destructive_hint
-            .map_or(quote! {None}, |v| quote! {Some(#v)});
-
-        let idempotent_hint = macro_attributes
-            .idempotent_hint
-            .map_or(quote! {None}, |v| quote! {Some(#v)});
-        let open_world_hint = macro_attributes
-            .open_world_hint
-            .map_or(quote! {None}, |v| quote! {Some(#v)});
-        let read_only_hint = macro_attributes
-            .read_only_hint
-            .map_or(quote! {None}, |v| quote! {Some(#v)});
-        quote! {
-            Some(#base_crate::ToolAnnotations {
-                destructive_hint: #destructive_hint,
-                idempotent_hint: #idempotent_hint,
-                open_world_hint: #open_world_hint,
-                read_only_hint: #read_only_hint,
-                title: None,
-            })
-        }
-    } else {
-        quote! { None }
-    };
-
-    let annotations_token = {
-        #[cfg(any(feature = "2025_03_26", feature = "2025_06_18"))]
-        {
-            quote! { annotations: #annotations, }
-        }
-        #[cfg(not(any(feature = "2025_03_26", feature = "2025_06_18")))]
-        {
-            quote! {}
-        }
-    };
-
+    // TODO: add support for schema version to ToolInputSchema :
+    // it defaults to JSON Schema 2020-12 when no explicit $schema is provided.
     let tool_token = quote! {
         #base_crate::Tool {
             name: #tool_name.to_string(),
@@ -442,8 +85,10 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             #output_schema
             #title
             #meta
-            #annotations_token
-            input_schema: #base_crate::ToolInputSchema::new(required, properties)
+            #annotations
+            #execution
+            #icons
+            input_schema: #base_crate::ToolInputSchema::new(required, properties, None)
         }
     };
 
@@ -452,6 +97,27 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             /// Returns the name of the tool as a String.
             pub fn tool_name() -> String {
                 #tool_name.to_string()
+            }
+
+            /// Returns a `CallToolRequestParams` initialized with the current tool's name.
+            ///
+            /// You can further customize the request by adding arguments or other attributes
+            /// using the builder pattern. For example:
+            ///
+            /// ```ignore
+            /// # use my_crate::{MyTool};
+            /// let args = serde_json::Map::new();
+            /// let task_meta = TaskMetadata{ttl: Some(200)}
+            ///
+            /// let params: CallToolRequestParams = MyTool::request_params()
+            ///     .with_arguments(args)
+            ///     .with_task(task_meta);
+            /// ```
+            ///
+            /// # Returns
+            /// A `CallToolRequestParams` with the tool name set.
+            pub fn request_params() -> #base_crate::CallToolRequestParams {
+               #base_crate::CallToolRequestParams::new(#tool_name.to_string())
             }
 
             /// Constructs and returns a `rust_mcp_schema::Tool` instance.
@@ -503,300 +169,118 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn mcp_elicit(attributes: TokenStream, input: TokenStream) -> TokenStream {
+pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let input_ident = &input.ident;
 
-    // Conditionally select the path
-    let base_crate = if cfg!(feature = "sdk") {
-        quote! { rust_mcp_sdk::schema }
-    } else {
-        quote! { rust_mcp_schema }
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(n) => &n.named,
+            _ => panic!("mcp_elicit only supports structs with named fields"),
+        },
+        _ => panic!("mcp_elicit only supports structs"),
     };
 
-    let macro_attributes = parse_macro_input!(attributes as McpElicitationAttributes);
-    let message = macro_attributes.message.unwrap_or_default();
+    let struct_name = &input.ident;
+    let elicit_args = parse_macro_input!(args as ElicitArgs);
 
-    // Generate field assignments for from_content_map()
-    let field_assignments = match &input.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => {
-                let assignments = fields.named.iter().map(|field| {
-                      let field_attrs = &field.attrs;
-                      let field_ident = &field.ident;
-                      let renamed_field = renamed_field(field_attrs);
-                      let field_name = renamed_field.unwrap_or_else(|| field_ident.as_ref().unwrap().to_string());
-                      let field_type = &field.ty;
+    let base_crate = base_crate();
 
-                      let type_check = if is_option(field_type) {
-                          // Extract inner type for Option<T>
-                          let inner_type = match field_type {
-                              Type::Path(type_path) => {
-                                  let segment = type_path.path.segments.last().unwrap();
-                                  if segment.ident == "Option" {
-                                      match &segment.arguments {
-                                          PathArguments::AngleBracketed(args) => {
-                                              match args.args.first().unwrap() {
-                                                  GenericArgument::Type(ty) => ty,
-                                                  _ => panic!("Expected type argument in Option<T>"),
-                                              }
-                                          }
-                                          _ => panic!("Invalid Option type"),
-                                      }
-                                  } else {
-                                      panic!("Expected Option type");
-                                  }
-                              }
-                              _ => panic!("Expected Option type"),
-                          };
-                          // Determine the match arm based on the inner type at compile time
-                          let (inner_type_ident, match_pattern, conversion) = match inner_type {
-                              Type::Path(type_path) if type_path.path.is_ident("String") => (
-                                  quote! { String },
-                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                  quote! { s.clone() }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
-                                  quote! { bool },
-                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
-                                  quote! { *b }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
-                                  quote! { i32 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! {
-                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
-                                          "Invalid number for field '{}': value {} does not fit in i32",
-                                          #field_name, *i
-                                      )))?
-                                  }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
-                                  quote! { i64 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! { *i }
-                              ),
-                              _ if is_enum(inner_type, &input) => {
-                                  let enum_parse = generate_enum_parse(inner_type, &field_name, &base_crate);
-                                  (
-                                      quote! { #inner_type },
-                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                      quote! { #enum_parse }
-                                  )
-                              }
-                              _ => panic!("Unsupported inner type for Option field: {}", quote! { #inner_type }),
-                          };
-                          let inner_type_str = quote! { stringify!(#inner_type_ident) };
-                          quote! {
-                              let #field_ident: Option<#inner_type_ident> = match content.as_ref().and_then(|map| map.get(#field_name)) {
-                                  Some(value) => {
-                                      match value {
-                                          #match_pattern => Some(#conversion),
-                                          _ => {
-                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                                  "Type mismatch for field '{}': expected {}, found {}",
-                                                  #field_name, #inner_type_str,
-                                                  match value {
-                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
-                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
-                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
-                                                  }
-                                              )));
-                                          }
-                                      }
-                                  }
-                                  None => None,
-                              };
-                          }
-                      } else {
-                          // Determine the match arm based on the field type at compile time
-                          let (field_type_ident, match_pattern, conversion) = match field_type {
-                              Type::Path(type_path) if type_path.path.is_ident("String") => (
-                                  quote! { String },
-                                  quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                  quote! { s.clone() }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("bool") => (
-                                  quote! { bool },
-                                  quote! { #base_crate::ElicitResultContentValue::Boolean(b) },
-                                  quote! { *b }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i32") => (
-                                  quote! { i32 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! {
-                                      (*i).try_into().map_err(|_| #base_crate::RpcError::parse_error().with_message(format!(
-                                          "Invalid number for field '{}': value {} does not fit in i32",
-                                          #field_name, *i
-                                      )))?
-                                  }
-                              ),
-                              Type::Path(type_path) if type_path.path.is_ident("i64") => (
-                                  quote! { i64 },
-                                  quote! { #base_crate::ElicitResultContentValue::Integer(i) },
-                                  quote! { *i }
-                              ),
-                              _ if is_enum(field_type, &input) => {
-                                  let enum_parse = generate_enum_parse(field_type, &field_name, &base_crate);
-                                  (
-                                      quote! { #field_type },
-                                      quote! { #base_crate::ElicitResultContentValue::String(s) },
-                                      quote! { #enum_parse }
-                                  )
-                              }
-                              _ => panic!("Unsupported field type: {}", quote! { #field_type }),
-                          };
-                          let type_str = quote! { stringify!(#field_type_ident) };
-                          quote! {
-                              let #field_ident: #field_type_ident = match content.as_ref().and_then(|map| map.get(#field_name)) {
-                                  Some(value) => {
-                                      match value {
-                                          #match_pattern => #conversion,
-                                          _ => {
-                                              return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                                  "Type mismatch for field '{}': expected {}, found {}",
-                                                  #field_name, #type_str,
-                                                  match value {
-                                                      #base_crate::ElicitResultContentValue::Boolean(_) => "boolean",
-                                                      #base_crate::ElicitResultContentValue::String(_) => "string",
-                                                      #base_crate::ElicitResultContentValue::Integer(_) => "integer",
-                                                  }
-                                              )));
-                                          }
-                                      }
-                                  }
-                                  None => {
-                                      return Err(#base_crate::RpcError::parse_error().with_message(format!(
-                                          "Missing required field: {}",
-                                          #field_name
-                                      )));
-                                  }
-                              };
-                          }
-                      };
+    let message = &elicit_args.message;
 
-                      type_check
-                  });
+    let impl_block = match elicit_args.mode {
+        ElicitMode::Form => {
+            let (from_content, init) = generate_from_impl(fields, &base_crate);
+            let schema = generate_form_schema(struct_name, &base_crate);
 
-                let field_idents = fields.named.iter().map(|field| &field.ident);
+            quote! {
+                impl #struct_name {
+                    pub fn message() -> &'static str{
+                        #message
+                    }
 
-                quote! {
-                    #(#assignments)*
+                    pub fn requested_schema() -> #base_crate::ElicitFormSchema {
+                        #schema
+                    }
 
-                    Ok(Self {
-                        #(#field_idents,)*
-                    })
+                    pub fn elicit_mode()->&'static str{
+                        "form"
+                    }
+
+                    pub fn elicit_form_params() -> #base_crate::ElicitRequestFormParams {
+                            #base_crate::ElicitRequestFormParams::new(
+                                Self::message().to_string(),
+                                Self::requested_schema(),
+                                None,
+                                None,
+                            )
+                    }
+
+                    pub fn elicit_request_params() -> #base_crate::ElicitRequestParams {
+                        Self::elicit_form_params().into()
+                    }
+
+                    pub fn from_elicit_result_content(
+                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                    ) -> Result<Self, #base_crate::RpcError> {
+                        use #base_crate::{ElicitResultContent as V, RpcError};
+                        let mut map = content.take().unwrap_or_default();
+                            #from_content
+                            Ok(#init)
+                    }
+
                 }
             }
-            _ => panic!("mcp_elicit macro only supports structs with named fields"),
-        },
-        _ => panic!("mcp_elicit macro only supports structs"),
-    };
+        }
+        ElicitMode::Url { url } => {
+            let (from_content, init) = generate_from_impl(fields, &base_crate);
 
-    let output = quote! {
-        impl #input_ident {
+            quote! {
+                impl #struct_name {
+                    pub fn message() -> &'static str {
+                        #message
+                    }
 
-            /// Returns the elicitation message defined in the `#[mcp_elicit(message = "...")]` attribute.
-            ///
-            /// This message is used to prompt the user or system for input when eliciting data for the struct.
-            /// If no message is provided in the attribute, an empty string is returned.
-            ///
-            /// # Returns
-            /// A `String` containing the elicitation message.
-            pub fn message()->String{
-                #message.to_string()
-            }
+                    pub fn url() -> &'static str {
+                        #url
+                    }
 
-            /// This method returns a `ElicitRequestedSchema` by retrieves the
-            /// struct's JSON schema (via the `JsonSchema` derive) and converting int into
-            /// a `ElicitRequestedSchema`. It extracts the `required` fields and
-            /// `properties` from the schema, mapping them to a `HashMap` of `PrimitiveSchemaDefinition` objects.
-            ///
-            /// # Returns
-            /// An `ElicitRequestedSchema` representing the schema of the struct.
-            ///
-            /// # Panics
-            /// Panics if the schema's properties cannot be converted to `PrimitiveSchemaDefinition` or if the schema
-            /// is malformed.
-            pub fn requested_schema() -> #base_crate::ElicitRequestedSchema {
-                let json_schema = &#input_ident::json_schema();
+                    pub fn elicit_mode()->&'static str {
+                        "url"
+                    }
 
-                let required: Vec<_> = match json_schema.get("required").and_then(|r| r.as_array()) {
-                    Some(arr) => arr
-                        .iter()
-                        .filter_map(|item| item.as_str().map(String::from))
-                        .collect(),
-                    None => Vec::new(),
-                };
+                    pub fn elicit_url_params(elicitation_id:String) -> #base_crate::ElicitRequestUrlParams {
+                            #base_crate::ElicitRequestUrlParams::new(
+                                elicitation_id,
+                                Self::message().to_string(),
+                                Self::url().to_string(),
+                                None,
+                                None,
+                            )
+                    }
 
-                let properties: Option<std::collections::HashMap<String, _>> = json_schema
-                    .get("properties")
-                    .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
-                    .map(|properties| {
-                        properties
-                            .iter()
-                            .filter_map(|(key, value)| {
-                                serde_json::to_value(value)
-                                    .ok() // If serialization fails, return None.
-                                    .and_then(|v| {
-                                        if let serde_json::Value::Object(obj) = v {
-                                            Some(obj)
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .map(|obj| (key.to_string(), #base_crate::PrimitiveSchemaDefinition::try_from(&obj)))
-                            })
-                            .collect()
-                    });
+                    pub fn elicit_request_params(elicitation_id:String) -> #base_crate::ElicitRequestParams {
+                        Self::elicit_url_params(elicitation_id).into()
+                    }
 
-                let properties = properties
-                    .map(|map| {
-                        map.into_iter()
-                            .map(|(k, v)| v.map(|ok_v| (k, ok_v))) // flip Result inside tuple
-                            .collect::<Result<std::collections::HashMap<_, _>, _>>() // collect only if all Ok
-                    })
-                    .transpose()
-                    .unwrap();
-
-                let properties =
-                    properties.expect("Was not able to create a ElicitRequestedSchema");
-
-                let requested_schema = #base_crate::ElicitRequestedSchema::new(properties, required);
-                requested_schema
-            }
-
-            /// Converts a map of field names and `ElicitResultContentValue` into an instance of the struct.
-            ///
-            /// This method parses the provided content map, matching field names to struct fields and converting
-            /// `ElicitResultContentValue` variants into the appropriate Rust types (e.g., `String`, `bool`, `i32`,
-            /// `i64`, or simple enums). It supports both required and optional fields (`Option<T>`).
-            ///
-            /// # Parameters
-            /// - `content`: An optional `HashMap` mapping field names to `ElicitResultContentValue` values.
-            ///
-            /// # Returns
-            /// - `Ok(Self)` if the map is successfully parsed into the struct.
-            /// - `Err(RpcError)` if:
-            ///   - A required field is missing.
-            ///   - A value’s type does not match the expected field type.
-            ///   - An integer value cannot be converted (e.g., `i64` to `i32` out of bounds).
-            ///   - An enum value is invalid (e.g., string value does not match a enum variant name).
-            ///
-            /// # Errors
-            /// Returns `RpcError` with messages like:
-            /// - `"Missing required field: {}"`
-            /// - `"Type mismatch for field '{}': expected {}, found {}"`
-            /// - `"Invalid number for field '{}': value {} does not fit in i32"`
-            /// - `"Invalid enum value for field '{}': expected 'Yes' or 'No', found '{}'"`.
-            pub fn from_content_map(content: ::std::option::Option<::std::collections::HashMap<::std::string::String, #base_crate::ElicitResultContentValue>>) -> Result<Self, #base_crate::RpcError> {
-                #field_assignments
+                    pub fn from_elicit_result_content(
+                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                    ) -> Result<Self, RpcError> {
+                        use #base_crate::{ElicitResultContent as V, RpcError};
+                        let mut map = content.take().unwrap_or_default();
+                            #from_content
+                            Ok(#init)
+                    }
+                }
             }
         }
-        #input
     };
 
-    TokenStream::from(output)
+    let expanded = quote! {
+        #input
+        #impl_block
+    };
+
+    TokenStream::from(expanded)
 }
 
 /// Derives a JSON Schema representation for a struct.
@@ -1050,85 +534,4 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
         }
     };
     TokenStream::from(expanded)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use syn::parse_str;
-    #[test]
-    fn test_valid_macro_attributes() {
-        let input = r#"name = "test_tool", description = "A test tool.", meta = "{\"version\": \"1.0\"}", title = "Test Tool""#;
-        let parsed: McpToolMacroAttributes = parse_str(input).unwrap();
-
-        assert_eq!(parsed.name.unwrap(), "test_tool");
-        assert_eq!(parsed.description.unwrap(), "A test tool.");
-        assert_eq!(parsed.meta.unwrap(), "{\"version\": \"1.0\"}");
-        assert_eq!(parsed.title.unwrap(), "Test Tool");
-    }
-
-    #[test]
-    fn test_missing_name() {
-        let input = r#"description = "Only description""#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert_eq!(
-            result.err().unwrap().to_string(),
-            "The 'name' attribute is required and must not be empty."
-        );
-    }
-
-    #[test]
-    fn test_missing_description() {
-        let input = r#"name = "OnlyName""#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert_eq!(
-            result.err().unwrap().to_string(),
-            "The 'description' attribute is required and must not be empty."
-        );
-    }
-
-    #[test]
-    fn test_empty_name_field() {
-        let input = r#"name = "", description = "something""#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert_eq!(
-            result.err().unwrap().to_string(),
-            "The 'name' attribute is required and must not be empty."
-        );
-    }
-
-    #[test]
-    fn test_empty_description_field() {
-        let input = r#"name = "my-tool", description = """#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert_eq!(
-            result.err().unwrap().to_string(),
-            "The 'description' attribute is required and must not be empty."
-        );
-    }
-
-    #[test]
-    fn test_invalid_meta() {
-        let input =
-            r#"name = "test_tool", description = "A test tool.", meta = "not_a_json_object""#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert!(result
-            .err()
-            .unwrap()
-            .to_string()
-            .contains("Expected a valid JSON object"));
-    }
-
-    #[test]
-    fn test_non_object_meta() {
-        let input = r#"name = "test_tool", description = "A test tool.", meta = "[1, 2, 3]""#;
-        let result: Result<McpToolMacroAttributes, Error> = parse_str(input);
-        assert!(result.is_err());
-        assert_eq!(result.err().unwrap().to_string(), "Expected a JSON object");
-    }
 }

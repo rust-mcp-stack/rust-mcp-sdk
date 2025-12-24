@@ -65,6 +65,7 @@
   "pull-request-header": ":robot: Auto-generated release PR",
   "packages": {
     "crates/rust-mcp-macros": {
+      "release-as": "0.8.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -79,20 +80,7 @@
       ]
     },
     "crates/rust-mcp-transport": {
-      "release-type": "rust",
-      "draft": false,
-      "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
-      "changelogPath": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "CHANGELOG.md"
-        }
-      ]
-    },
-    "crates/rust-mcp-extra": {
+      "release-as": "0.8.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -107,6 +95,21 @@
       ]
     },
     "crates/rust-mcp-sdk": {
+      "release-as": "0.8.0",
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    },
+    "crates/rust-mcp-extra": {
       "release-type": "rust",
       "draft": false,
       "prerelease": false,

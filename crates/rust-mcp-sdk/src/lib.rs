@@ -10,6 +10,7 @@ mod mcp_runtimes;
 mod mcp_traits;
 #[cfg(any(feature = "server", feature = "hyper-server"))]
 pub mod session_store;
+pub mod task_store;
 mod utils;
 
 #[cfg(feature = "client")]
@@ -40,7 +41,8 @@ pub mod mcp_client {
     pub use super::mcp_handlers::mcp_client_handler_core::ClientHandlerCore;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
-    pub use super::mcp_runtimes::client_runtime::ClientRuntime;
+    pub use super::mcp_runtimes::client_runtime::{ClientRuntime, McpClientOptions};
+    pub use super::mcp_traits::{McpClientHandler, ToMcpClientHandler, ToMcpClientHandlerCore};
     pub use super::utils::ensure_server_protocole_compatibility;
 }
 
@@ -68,12 +70,12 @@ pub mod mcp_server {
     //!   handle each message based on its type and parameters.
     //!
     //! Refer to [examples/hello-world-mcp-server-stdio-core](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core) for an example.
-    pub use super::mcp_handlers::mcp_server_handler::{ServerHandler, ToMcpServerHandler};
+    pub use super::mcp_handlers::mcp_server_handler::ServerHandler;
     pub use super::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
 
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime as server_runtime;
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime_core as server_runtime_core;
-    pub use super::mcp_runtimes::server_runtime::ServerRuntime;
+    pub use super::mcp_runtimes::server_runtime::{McpServerOptions, ServerRuntime};
 
     #[cfg(feature = "hyper-server")]
     pub use super::hyper_servers::*;
@@ -83,7 +85,10 @@ pub mod mcp_server {
 
     #[cfg(feature = "hyper-server")]
     pub use super::mcp_http::{McpAppState, McpHttpHandler};
+    pub use super::mcp_traits::{McpServerHandler, ToMcpServerHandler, ToMcpServerHandlerCore};
 }
+
+pub use utils::capability_checks;
 
 pub mod auth;
 pub use mcp_traits::*;
@@ -96,4 +101,8 @@ pub mod macros {
 }
 
 pub mod id_generator;
-pub mod schema;
+
+pub mod schema {
+    pub use rust_mcp_schema::schema_utils::*;
+    pub use rust_mcp_schema::*;
+}

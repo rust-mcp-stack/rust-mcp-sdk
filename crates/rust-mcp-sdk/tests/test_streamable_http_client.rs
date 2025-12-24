@@ -1,27 +1,6 @@
 #[path = "common/common.rs"]
 pub mod common;
 
-use common::test_client_common::create_client;
-use hyper::{Method, StatusCode};
-use rust_mcp_schema::{
-    schema_utils::{
-        ClientJsonrpcRequest, ClientMessage, MessageFromServer, RequestFromClient,
-        RequestFromServer, ResultFromServer, RpcMessage, ServerMessage,
-    },
-    RequestId, ServerRequest, ServerResult,
-};
-use rust_mcp_sdk::{
-    error::McpSdkError, mcp_server::HyperServerOptions, McpClient, TransportError,
-    MCP_LAST_EVENT_ID_HEADER,
-};
-use serde_json::{json, Value};
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
-use wiremock::{
-    http::{HeaderName, HeaderValue},
-    matchers::{body_json_string, header, method, path},
-    Mock, MockServer, ResponseTemplate,
-};
-
 use crate::common::{
     create_sse_response, debug_wiremock, random_port,
     test_client_common::{
@@ -31,6 +10,26 @@ use crate::common::{
         create_start_server, LaunchedServer, TestIdGenerator, INITIALIZE_RESPONSE,
     },
     wait_for_n_requests, wiremock_request, MockBuilder, SimpleMockServer, SseEvent,
+};
+use common::test_client_common::create_client;
+use hyper::{Method, StatusCode};
+use rust_mcp_schema::{
+    schema_utils::{
+        ClientJsonrpcRequest, ClientMessage, CustomRequest, MessageFromServer, RequestFromClient,
+        RequestFromServer, ResultFromServer, RpcMessage, ServerMessage,
+    },
+    RequestId,
+};
+use rust_mcp_sdk::{
+    error::McpSdkError, mcp_server::HyperServerOptions, McpClient, TransportError,
+    MCP_LAST_EVENT_ID_HEADER,
+};
+use serde_json::{json, Map, Value};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use wiremock::{
+    http::{HeaderName, HeaderValue},
+    matchers::{body_json_string, header, method, path},
+    Mock, MockServer, ResponseTemplate,
 };
 
 // should send JSON-RPC messages via POST
@@ -84,7 +83,7 @@ async fn should_send_json_rpc_messages_via_post() {
 async fn should_send_batch_messages() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
@@ -101,12 +100,18 @@ async fn should_send_batch_messages() {
 
     let message_1: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id1".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test1", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test1".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
     let message_2: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id2".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test2", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test2".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
 
@@ -184,7 +189,7 @@ async fn should_store_session_id_received_during_initialization() {
 async fn should_terminate_session_with_delete_request() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -204,7 +209,7 @@ async fn should_terminate_session_with_delete_request() {
 async fn should_handle_405_unsupported_session_termination() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -224,7 +229,7 @@ async fn should_handle_405_unsupported_session_termination() {
 async fn should_handle_404_response_when_session_expires() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -235,7 +240,7 @@ async fn should_handle_404_response_when_session_expires() {
         .mount(&mock_server)
         .await;
 
-    let result = client.ping(None).await;
+    let result = client.ping(None, None).await;
 
     matches!(
         result,
@@ -248,7 +253,7 @@ async fn should_handle_404_response_when_session_expires() {
 async fn should_handle_non_streaming_json_response() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -265,11 +270,14 @@ async fn should_handle_non_streaming_json_response() {
         .mount(&mock_server)
         .await;
 
-    let request = RequestFromClient::CustomRequest(json!({"method": "test1", "params": {}}));
+    let request = RequestFromClient::CustomRequest(CustomRequest {
+        method: "test1".to_string(),
+        params: Some(Map::new()),
+    });
 
     let result = client.request(request, None).await.unwrap();
 
-    let ResultFromServer::ServerResult(ServerResult::Result(result)) = result else {
+    let ResultFromServer::Result(result) = result else {
         panic!("Wrong result variant!")
     };
 
@@ -360,7 +368,7 @@ async fn should_receive_server_initiated_messaged() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let result = hyper_runtime
-        .ping(&"AAA-BBB-CCC".to_string(), None)
+        .ping(&"AAA-BBB-CCC".to_string(), None, None)
         .await
         .unwrap();
 
@@ -370,15 +378,11 @@ async fn should_receive_server_initiated_messaged() {
         .find(|m| {
             matches!(
                 m,
-                MessageFromServer::RequestFromServer(RequestFromServer::ServerRequest(
-                    ServerRequest::PingRequest(_)
-                ))
+                MessageFromServer::RequestFromServer(RequestFromServer::PingRequest(_))
             )
         })
         .unwrap();
-    let MessageFromServer::RequestFromServer(RequestFromServer::ServerRequest(
-        ServerRequest::PingRequest(_),
-    )) = ping_request
+    let MessageFromServer::RequestFromServer(RequestFromServer::PingRequest(_)) = ping_request
     else {
         panic!("Request is not a match!")
     };
@@ -430,7 +434,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     let mut body = String::new();
     body.push_str("data: Connection established\n\n");
 
-    let response = ResponseTemplate::new(405)
+    let _response = ResponseTemplate::new(405)
         .set_body_raw(body.into_bytes(), "text/event-stream")
         .append_header("Connection", "keep-alive");
 
@@ -461,12 +465,18 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
 
     let message_1: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id1".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test1", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test1".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
     let message_2: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id2".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test2", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test2".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
 
@@ -489,18 +499,24 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
 async fn should_handle_multiple_concurrent_sse_streams() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
     let message_1: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id1".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test1", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test1".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
     let message_2: ClientMessage = ClientJsonrpcRequest::new(
         RequestId::String("id2".to_string()),
-        RequestFromClient::CustomRequest(json!({"method": "test2", "params": {}})),
+        RequestFromClient::CustomRequest(CustomRequest {
+            method: "test2".to_string(),
+            params: Some(Map::new()),
+        }),
     )
     .into();
 
@@ -520,7 +536,10 @@ async fn should_handle_multiple_concurrent_sse_streams() {
         .mount(&mock_server)
         .await;
 
-    let message_3 = RequestFromClient::CustomRequest(json!({"method": "test3", "params": {}}));
+    let message_3 = RequestFromClient::CustomRequest(CustomRequest {
+        method: "test3".to_string(),
+        params: Some(Map::new()),
+    });
     let request1 = client.send_batch(vec![message_1, message_2], None);
     let request2 = client.send(message_3.into(), None, None);
 
@@ -553,7 +572,7 @@ async fn should_handle_multiple_concurrent_sse_streams() {
 async fn should_throw_error_when_invalid_content_type_is_received() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
@@ -567,7 +586,7 @@ async fn should_throw_error_when_invalid_content_type_is_received() {
         .mount(&mock_server)
         .await;
 
-    let result = client.ping(None).await;
+    let result = client.ping(None, None).await;
 
     let Err(McpSdkError::Transport(TransportError::UnexpectedContentType(content_type))) = result
     else {
@@ -584,7 +603,7 @@ async fn should_always_send_specified_custom_headers() {
     headers.insert("X-Custom-Header".to_string(), "CustomValue".to_string());
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, Some(headers)).await;
 
@@ -598,7 +617,7 @@ async fn should_always_send_specified_custom_headers() {
         .mount(&mock_server)
         .await;
 
-    let _result = client.ping(None).await;
+    let _result = client.ping(None, None).await;
 
     let requests = mock_server.received_requests().await.unwrap();
 

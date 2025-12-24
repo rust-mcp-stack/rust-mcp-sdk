@@ -3,7 +3,8 @@ mod tools;
 
 use handler::MyServerHandler;
 use rust_mcp_sdk::event_store::InMemoryEventStore;
-use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions};
+use rust_mcp_sdk::mcp_icon;
+use rust_mcp_sdk::mcp_server::{hyper_server, HyperServerOptions, ToMcpServerHandler};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
@@ -32,9 +33,17 @@ async fn main() -> SdkResult<()> {
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Hello World MCP Server SSE".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Hello World MCP Server SSE".to_string()),
+            name: "Hello World MCP Server SSE".into(),
+            version: "0.1.0".into(),
+            title: Some("Hello World MCP Server SSE".into()),
+            description: Some("test server, by Rust MCP SDK".into()),
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "dark"
+            )],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -42,8 +51,8 @@ async fn main() -> SdkResult<()> {
             ..Default::default() // Using default values for other fields
         },
         meta: None,
-        instructions: Some("server instructions...".to_string()),
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+        instructions: Some("server instructions...".into()),
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
     // STEP 2: instantiate our custom handler for handling MCP messages
@@ -52,9 +61,9 @@ async fn main() -> SdkResult<()> {
     // STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
     let server = hyper_server::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
-            host: "127.0.0.1".to_string(),
+            host: "127.0.0.1".into(),
             ping_interval: Duration::from_secs(5),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             ..Default::default()

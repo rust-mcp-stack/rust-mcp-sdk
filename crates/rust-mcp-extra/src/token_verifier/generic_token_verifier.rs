@@ -213,7 +213,6 @@ impl GenericOauthTokenVerifier {
         };
 
         let client = reqwest::Client::new();
-        println!(">>> user_info_endpoint {:?} ", user_info_endpoint.as_str());
 
         let response = client
             .get(user_info_endpoint.to_owned())

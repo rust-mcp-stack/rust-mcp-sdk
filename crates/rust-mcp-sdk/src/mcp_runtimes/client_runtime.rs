@@ -2,27 +2,28 @@ pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
-use crate::mcp_traits::{IdGenerator, McpClient, McpClientHandler};
+use crate::mcp_traits::{McpClient, McpClientHandler};
+use crate::task_store::ClientTaskStore;
 use crate::utils::ensure_server_protocole_compatibility;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
     schema::{
         schema_utils::{
-            self, ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromClient,
-            ServerMessage, ServerMessages,
+            ClientMessage, ClientMessages, FromMessage, MessageFromClient, NotificationFromClient,
+            RequestFromClient, ServerMessage, ServerMessages,
         },
-        InitializeRequest, InitializeRequestParams, InitializeResult, InitializedNotification,
-        RequestId, RpcError, ServerResult,
+        InitializeRequestParams, InitializeResult, RequestId, RpcError,
     },
 };
 use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
+use rust_mcp_schema::schema_utils::ResultFromServer;
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
-use rust_mcp_transport::{IoStream, SessionId, StreamId, Transport, TransportDispatcher};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use rust_mcp_transport::{IoStream, SessionId, StreamId, TransportDispatcher};
+use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{watch, Mutex};
 
@@ -38,9 +39,25 @@ type TransportDispatcherType = dyn TransportDispatcher<
 >;
 type TransportType = Arc<TransportDispatcherType>;
 
+pub struct McpClientOptions<T>
+where
+    T: TransportDispatcher<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    >,
+{
+    pub client_details: InitializeRequestParams,
+    pub transport: T,
+    pub handler: Box<dyn McpClientHandler>,
+    pub task_store: Option<Arc<ClientTaskStore>>,
+}
+
 pub struct ClientRuntime {
     // A thread-safe map storing transport types
-    transport_map: tokio::sync::RwLock<HashMap<String, TransportType>>,
+    transport_map: tokio::sync::RwLock<Option<TransportType>>,
     // The handler for processing MCP messages
     handler: Box<dyn McpClientHandler>,
     // Information about the server
@@ -60,6 +77,7 @@ pub struct ClientRuntime {
     // Details about the connected server
     server_details_tx: watch::Sender<Option<InitializeResult>>,
     server_details_rx: watch::Receiver<Option<InitializeResult>>,
+    task_store: Option<Arc<ClientTaskStore>>,
 }
 
 impl ClientRuntime {
@@ -67,13 +85,12 @@ impl ClientRuntime {
         client_details: InitializeRequestParams,
         transport: TransportType,
         handler: Box<dyn McpClientHandler>,
+        task_store: Option<Arc<ClientTaskStore>>,
     ) -> Self {
-        let mut map: HashMap<String, TransportType> = HashMap::new();
-        map.insert(DEFAULT_STREAM_ID.to_string(), transport);
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
         Self {
-            transport_map: tokio::sync::RwLock::new(map),
+            transport_map: tokio::sync::RwLock::new(Some(transport)),
             handler,
             client_details,
             handlers: Mutex::new(vec![]),
@@ -85,6 +102,7 @@ impl ClientRuntime {
             stream_id_gen: FastIdGenerator::new(Some("s_")),
             server_details_tx,
             server_details_rx,
+            task_store: task_store.clone(),
         }
     }
 
@@ -93,12 +111,12 @@ impl ClientRuntime {
         client_details: InitializeRequestParams,
         transport_options: StreamableTransportOptions,
         handler: Box<dyn McpClientHandler>,
+        task_store: Option<Arc<ClientTaskStore>>,
     ) -> Self {
-        let map: HashMap<String, TransportType> = HashMap::new();
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
         Self {
-            transport_map: tokio::sync::RwLock::new(map),
+            transport_map: tokio::sync::RwLock::new(None),
             handler,
             client_details,
             handlers: Mutex::new(vec![]),
@@ -109,14 +127,19 @@ impl ClientRuntime {
             stream_id_gen: FastIdGenerator::new(Some("s_")),
             server_details_tx,
             server_details_rx,
+            task_store,
         }
     }
 
     async fn initialize_request(self: Arc<Self>) -> SdkResult<()> {
-        let request = InitializeRequest::new(self.client_details.clone());
-        let result: ServerResult = self.request(request.into(), None).await?.try_into()?;
+        let result: ResultFromServer = self
+            .request(
+                RequestFromClient::InitializeRequest(self.client_details.clone()),
+                None,
+            )
+            .await?;
 
-        if let ServerResult::InitializeResult(initialize_result) = result {
+        if let ResultFromServer::InitializeResult(initialize_result) = result {
             ensure_server_protocole_compatibility(
                 &self.client_details.protocol_version,
                 &initialize_result.protocol_version,
@@ -131,7 +154,7 @@ impl ClientRuntime {
             }
 
             // send a InitializedNotification to the server
-            self.send_notification(InitializedNotification::new(None).into())
+            self.send_notification(NotificationFromClient::InitializedNotification(None))
                 .await?;
         } else {
             return Err(RpcError::invalid_params()
@@ -149,10 +172,8 @@ impl ClientRuntime {
     ) -> SdkResult<Option<ClientMessage>> {
         let response = match message {
             ServerMessage::Request(jsonrpc_request) => {
-                let result = self
-                    .handler
-                    .handle_request(jsonrpc_request.request, self)
-                    .await;
+                let request_id = jsonrpc_request.request_id().clone();
+                let result = self.handler.handle_request(jsonrpc_request, self).await;
 
                 // create a response to send back to the server
                 let response: MessageFromClient = match result {
@@ -160,12 +181,12 @@ impl ClientRuntime {
                     Err(error_value) => MessageFromClient::Error(error_value),
                 };
 
-                let mcp_message = ClientMessage::from_message(response, Some(jsonrpc_request.id))?;
+                let mcp_message = ClientMessage::from_message(response, Some(request_id))?;
                 Some(mcp_message)
             }
             ServerMessage::Notification(jsonrpc_notification) => {
                 self.handler
-                    .handle_notification(jsonrpc_notification.notification, self)
+                    .handle_notification(jsonrpc_notification.into(), self)
                     .await?;
                 None
             }
@@ -173,15 +194,17 @@ impl ClientRuntime {
                 self.handler
                     .handle_error(&jsonrpc_error.error, self)
                     .await?;
-                if let Some(tx_response) = transport.pending_request_tx(&jsonrpc_error.id).await {
-                    tx_response
-                        .send(ServerMessage::Error(jsonrpc_error))
-                        .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
-                } else {
-                    tracing::warn!(
-                        "Received an error response with no corresponding request: {:?}",
-                        &jsonrpc_error.id
-                    );
+                if let Some(request_id) = jsonrpc_error.id.as_ref() {
+                    if let Some(tx_response) = transport.pending_request_tx(request_id).await {
+                        tx_response
+                            .send(ServerMessage::Error(jsonrpc_error))
+                            .map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
+                    } else {
+                        tracing::warn!(
+                            "Received an error response with no corresponding request: {:?}",
+                            &request_id
+                        );
+                    }
                 }
                 None
             }
@@ -205,7 +228,7 @@ impl ClientRuntime {
     async fn start_standalone(self: Arc<Self>) -> SdkResult<()> {
         let self_clone = self.clone();
         let transport_map = self_clone.transport_map.read().await;
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -319,17 +342,8 @@ impl ClientRuntime {
     ) -> SdkResult<()> {
         let mut transport_map = self.transport_map.write().await;
         tracing::trace!("save transport for stream id : {}", stream_id);
-        transport_map.insert(stream_id.to_string(), transport);
+        *transport_map = Some(transport);
         Ok(())
-    }
-
-    pub(crate) async fn transport_by_stream(&self, stream_id: &str) -> SdkResult<TransportType> {
-        let transport_map = self.transport_map.read().await;
-        transport_map.get(stream_id).cloned().ok_or_else(|| {
-            RpcError::internal_error()
-                .with_message(format!("Transport for key {stream_id} not found"))
-                .into()
-        })
     }
 
     #[cfg(feature = "streamable-http")]
@@ -346,10 +360,12 @@ impl ClientRuntime {
             ClientMessage,
         >,
     > {
+        use rust_mcp_schema::schema_utils::SdkError;
+
         let options = self
             .transport_options
             .as_ref()
-            .ok_or(schema_utils::SdkError::connection_closed())?;
+            .ok_or(SdkError::connection_closed())?;
         let transport = ClientStreamableTransport::new(options, session_id, standalone)?;
 
         Ok(transport)
@@ -429,6 +445,9 @@ impl ClientRuntime {
         timeout: Option<Duration>,
     ) -> SdkResult<Option<ServerMessages>> {
         use futures::stream::{AbortHandle, Abortable};
+        use rust_mcp_schema::schema_utils::McpMessage;
+
+        use crate::IdGenerator;
         let stream_id: StreamId = self.stream_id_gen.generate();
         let session_id = self.session_id.read().await.clone();
         let no_session_id = session_id.is_none();
@@ -436,17 +455,23 @@ impl ClientRuntime {
         let has_request = match &messages {
             ClientMessages::Single(client_message) => client_message.is_request(),
             ClientMessages::Batch(client_messages) => {
+                use rust_mcp_schema::schema_utils::McpMessage;
+
                 client_messages.iter().any(|m| m.is_request())
             }
         };
 
-        let transport = Arc::new(self.new_transport(session_id, false).await?);
+        let transport: Arc<
+            dyn TransportDispatcher<
+                ServerMessages,
+                MessageFromClient,
+                ServerMessage,
+                ClientMessages,
+                ClientMessage,
+            >,
+        > = Arc::new(self.new_transport(session_id, false).await?);
 
         let mut stream = transport.start().await?;
-
-        self.store_transport(&stream_id, transport).await?;
-
-        let transport = self.transport_by_stream(&stream_id).await?; //TODO: remove
 
         let send_task = async {
             let result = transport.send_message(messages, timeout).await?;
@@ -553,7 +578,7 @@ impl McpClient for ClientRuntime {
 
         let transport_map = self.transport_map.read().await;
 
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -572,6 +597,13 @@ impl McpClient for ClientRuntime {
             .map_err(|err| err.into())
     }
 
+    fn task_store(&self) -> Option<Arc<ClientTaskStore>> {
+        self.task_store.clone()
+    }
+
+    async fn session_id(&self) -> Option<SessionId> {
+        self.session_id.read().await.clone()
+    }
     async fn send_batch(
         &self,
         messages: Vec<ClientMessage>,
@@ -592,7 +624,7 @@ impl McpClient for ClientRuntime {
         }
 
         let transport_map = self.transport_map.read().await;
-        let transport = transport_map.get(DEFAULT_STREAM_ID).ok_or(
+        let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
@@ -603,6 +635,18 @@ impl McpClient for ClientRuntime {
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
+        let runtime_clone = self.clone();
+        if let Some(task_store) = runtime_clone.task_store() {
+            // send TaskStatusNotification  if task_store is present and supports subscribe()
+            if let Some(mut stream) = task_store.subscribe() {
+                tokio::spawn(async move {
+                    while let Some((params, _)) = stream.next().await {
+                        let _ = runtime_clone.notify_task_status(params).await;
+                    }
+                });
+            }
+        }
+
         #[cfg(feature = "streamable-http")]
         {
             if self.transport_options.is_some() {
@@ -642,9 +686,9 @@ impl McpClient for ClientRuntime {
         *is_shut_down_lock = true;
 
         let mut transport_map = self.transport_map.write().await;
-        let transports: Vec<_> = transport_map.drain().map(|(_, v)| v).collect();
+        let transport_option = transport_map.take();
         drop(transport_map);
-        for transport in transports {
+        if let Some(transport) = transport_option {
             let _ = transport.shut_down().await;
         }
 

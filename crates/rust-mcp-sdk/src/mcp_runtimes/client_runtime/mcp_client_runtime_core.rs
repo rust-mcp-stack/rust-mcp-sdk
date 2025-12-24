@@ -1,58 +1,68 @@
 use super::ClientRuntime;
+use super::McpClientOptions;
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
-        RequestFromServer, ResultFromClient, ServerMessage, ServerMessages,
+        ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer, ResultFromClient,
+        ServerMessage, ServerMessages,
     },
     InitializeRequestParams, RpcError,
 };
+#[cfg(feature = "streamable-http")]
+use crate::task_store::ClientTaskStore;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_client_handler_core::ClientHandlerCore,
     mcp_traits::{McpClient, McpClientHandler},
 };
 use async_trait::async_trait;
+use rust_mcp_schema::schema_utils::ServerJsonrpcRequest;
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::StreamableTransportOptions;
 use rust_mcp_transport::TransportDispatcher;
 use std::sync::Arc;
 
-/// Creates a new MCP client runtime with the specified configuration.
+/// Creates a new MCP client runtime with the specified options.
 ///
-/// This function initializes a client for (MCP) by accepting , client details, a transport ,
-/// and a handler for client-side logic.
+/// This function initializes an MCP client runtime by taking a bundled `McpClientOptions<T>` struct
+/// that contains all necessary configuration components.
 ///
-/// The resulting `ClientRuntime` is wrapped in an `Arc` for shared ownership across threads.
+/// The resulting `ClientRuntime` is wrapped in an `Arc` to enable safe sharing and concurrent use
+/// across asynchronous tasks.
 ///
 /// # Arguments
-/// * `client_details` - Client name , version and capabilities.
-/// * `transport` - An implementation of the `Transport` trait facilitating communication with the MCP server.
-/// * `handler` - An implementation of the `ClientHandlerCore` trait that defines the client's
-///   core behavior and response logic.
+///
+/// * `options` - A `McpClientOptions<T>` struct containing:
+///   - `client_details`: Details about the client, including name, version, and capabilities.
+///   - `transport`: An implementation of the `TransportDispatcher` trait for communication with the MCP server.
+///   - `handler`: The client's core handler (typically a boxed `dyn ClientHandlerCore` or similar)
+///     that defines the client's behavior and response logic.
+///   - `task_store`: Optional task storage for managing asynchronous operations (if applicable).
 ///
 /// # Returns
-/// An `Arc<ClientRuntime>` representing the initialized client, enabling shared access and
-/// asynchronous operation.
+///
+/// An `Arc<ClientRuntime>` representing the initialized client runtime, ready for shared ownership
+/// and asynchronous operation.
 ///
 /// # Examples
+///
 /// You can find a detailed example of how to use this function in the repository:
 ///
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio-core)
-pub fn create_client(
-    client_details: InitializeRequestParams,
-    transport: impl TransportDispatcher<
+pub fn create_client<T>(options: McpClientOptions<T>) -> Arc<ClientRuntime>
+where
+    T: TransportDispatcher<
         ServerMessages,
         MessageFromClient,
         ServerMessage,
         ClientMessages,
         ClientMessage,
     >,
-    handler: impl ClientHandlerCore,
-) -> Arc<ClientRuntime> {
+{
     Arc::new(ClientRuntime::new(
-        client_details,
-        Arc::new(transport),
-        Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
+        options.client_details,
+        Arc::new(options.transport),
+        options.handler,
+        options.task_store,
     ))
 }
 
@@ -61,15 +71,17 @@ pub fn with_transport_options(
     client_details: InitializeRequestParams,
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandlerCore,
+    task_store: Option<Arc<ClientTaskStore>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
+        task_store,
     ))
 }
 
-struct ClientCoreInternalHandler<H> {
+pub(crate) struct ClientCoreInternalHandler<H> {
     handler: H,
 }
 
@@ -83,7 +95,7 @@ impl ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> {
 impl McpClientHandler for ClientCoreInternalHandler<Box<dyn ClientHandlerCore>> {
     async fn handle_request(
         &self,
-        server_jsonrpc_request: RequestFromServer,
+        server_jsonrpc_request: ServerJsonrpcRequest,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
         // handle request and get the result

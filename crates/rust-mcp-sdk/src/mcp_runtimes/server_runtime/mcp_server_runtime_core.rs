@@ -1,16 +1,17 @@
 use super::ServerRuntime;
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
+use crate::mcp_runtimes::server_runtime::McpServerOptions;
 use crate::mcp_traits::{McpServer, McpServerHandler};
 use crate::schema::schema_utils::{
-    self, ClientMessage, MessageFromServer, NotificationFromClient, RequestFromClient,
-    ResultFromServer, ServerMessage,
+    ClientMessage, MessageFromServer, ResultFromServer, ServerMessage,
 };
 use crate::schema::{
     schema_utils::{ClientMessages, ServerMessages},
-    ClientRequest, InitializeResult, RpcError,
+    RpcError,
 };
 use async_trait::async_trait;
+use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
 use rust_mcp_transport::TransportDispatcher;
 use std::sync::Arc;
 
@@ -32,22 +33,17 @@ use std::sync::Arc;
 /// You can find a detailed example of how to use this function in the repository:
 ///
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio-core)
-pub fn create_server(
-    server_details: InitializeResult,
-    transport: impl TransportDispatcher<
+pub fn create_server<T>(options: McpServerOptions<T>) -> Arc<ServerRuntime>
+where
+    T: TransportDispatcher<
         ClientMessages,
         MessageFromServer,
         ClientMessage,
         ServerMessages,
         ServerMessage,
     >,
-    handler: impl ServerHandlerCore,
-) -> Arc<ServerRuntime> {
-    ServerRuntime::new(
-        server_details,
-        transport,
-        Arc::new(RuntimeCoreInternalHandler::new(Box::new(handler))),
-    )
+{
+    ServerRuntime::new(options)
 }
 
 pub(crate) struct RuntimeCoreInternalHandler<H> {
@@ -64,13 +60,11 @@ impl RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>> {
 impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>> {
     async fn handle_request(
         &self,
-        client_jsonrpc_request: RequestFromClient,
+        client_jsonrpc_request: ClientJsonrpcRequest,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
         // store the client details if the request is a client initialization request
-        if let schema_utils::RequestFromClient::ClientRequest(ClientRequest::InitializeRequest(
-            initialize_request,
-        )) = &client_jsonrpc_request
+        if let ClientJsonrpcRequest::InitializeRequest(initialize_request) = &client_jsonrpc_request
         {
             // keep a copy of the InitializeRequestParams which includes client_info and capabilities
             runtime
@@ -81,7 +75,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
 
         // handle request and get the result
         self.handler
-            .handle_request(client_jsonrpc_request, runtime)
+            .handle_request(client_jsonrpc_request.into(), runtime)
             .await
     }
     async fn handle_error(
@@ -94,7 +88,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
     }
     async fn handle_notification(
         &self,
-        client_jsonrpc_notification: NotificationFromClient,
+        client_jsonrpc_notification: ClientJsonrpcNotification,
         runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         // Trigger the `on_initialized()` callback if an `initialized_notification` is received from the client.
@@ -104,7 +98,7 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
 
         // handle notification
         self.handler
-            .handle_notification(client_jsonrpc_notification, runtime)
+            .handle_notification(client_jsonrpc_notification.into(), runtime)
             .await?;
         Ok(())
     }

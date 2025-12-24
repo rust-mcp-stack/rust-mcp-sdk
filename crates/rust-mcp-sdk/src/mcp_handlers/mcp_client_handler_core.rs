@@ -1,5 +1,7 @@
-use crate::schema::schema_utils::*;
-use crate::schema::*;
+use crate::{
+    mcp_client::client_runtime_core::ClientCoreInternalHandler, schema::*, McpClientHandler,
+    ToMcpClientHandlerCore,
+};
 use async_trait::async_trait;
 
 use crate::mcp_traits::McpClient;
@@ -18,7 +20,7 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
     /// A `ResultFromClient`, which represents the client's response to the server's request.
     async fn handle_request(
         &self,
-        request: RequestFromServer,
+        request: ServerJsonrpcRequest,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError>;
 
@@ -51,5 +53,11 @@ pub trait ClientHandlerCore: Send + Sync + 'static {
             tracing::error!("Process error: {error_message}");
         }
         Ok(())
+    }
+}
+
+impl<T: ClientHandlerCore + 'static> ToMcpClientHandlerCore for T {
+    fn to_mcp_client_handler(self) -> Box<dyn McpClientHandler + 'static> {
+        Box::new(ClientCoreInternalHandler::new(Box::new(self)))
     }
 }

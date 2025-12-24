@@ -13,7 +13,6 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "streamable-http",
     "sse",
     "hyper-server",
-    "2025_06_18",
 ] }
 
 tokio = { workspace = true }

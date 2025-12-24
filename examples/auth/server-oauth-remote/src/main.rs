@@ -12,6 +12,7 @@ use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
+use rust_mcp_sdk::{mcp_icon, ToMcpServerHandler};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
@@ -94,9 +95,17 @@ async fn main() -> SdkResult<()> {
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Remote Oauth Test MCP Server".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Remote Oauth Test MCP Server".to_string()),
+            name: "Remote Oauth Test MCP Server".into(),
+            version: "0.1.0".into(),
+            title: Some("Remote Oauth Test MCP Server".into()),
+            description: Some("Remote Oauth Test MCP Server, by Rust MCP SDK".into()),
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "dark"
+            )],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -104,8 +113,8 @@ async fn main() -> SdkResult<()> {
             ..Default::default() // Using default values for other fields
         },
         meta: None,
-        instructions: Some("server instructions...".to_string()),
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+        instructions: Some("server instructions...".into()),
+        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
     let handler = McpServerHandler {};
@@ -114,11 +123,11 @@ async fn main() -> SdkResult<()> {
 
     let server = hyper_server::create_server(
         server_details,
-        handler,
+        handler.to_mcp_server_handler(),
         HyperServerOptions {
-            host: "localhost".to_string(),
+            host: "localhost".into(),
             port: 3000,
-            custom_streamable_http_endpoint: Some("/".to_string()),
+            custom_streamable_http_endpoint: Some("/".into()),
             ping_interval: Duration::from_secs(5),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             auth: Some(Arc::new(oauth_metadata_provider)),              // enable authentication

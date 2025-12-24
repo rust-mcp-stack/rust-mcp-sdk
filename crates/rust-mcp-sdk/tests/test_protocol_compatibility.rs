@@ -3,9 +3,10 @@ pub mod common;
 
 mod protocol_compatibility_on_server {
 
-    use rust_mcp_sdk::mcp_server::ServerHandler;
-    use rust_mcp_sdk::schema::{InitializeRequest, InitializeResult, RpcError, INTERNAL_ERROR};
+    use rust_mcp_sdk::mcp_server::{McpServerOptions, ServerHandler, ToMcpServerHandler};
+    use rust_mcp_sdk::schema::{InitializeResult, RpcError, INTERNAL_ERROR};
 
+    use crate::common::task_runner::McpTaskRunner;
     use crate::common::{
         test_client_info,
         test_server_common::{test_server_details, TestServerHandler},
@@ -14,7 +15,9 @@ mod protocol_compatibility_on_server {
     async fn handle_initialize_request(
         client_protocol_version: &str,
     ) -> Result<InitializeResult, RpcError> {
-        let handler = TestServerHandler {};
+        let handler = TestServerHandler {
+            mcp_task_runner: McpTaskRunner::new(),
+        };
 
         let mut initialize_request = test_client_info();
         initialize_request.protocol_version = client_protocol_version.to_string();
@@ -23,14 +26,18 @@ mod protocol_compatibility_on_server {
             rust_mcp_sdk::StdioTransport::new(rust_mcp_sdk::TransportOptions::default()).unwrap();
 
         // mock unused runtime
-        let runtime = rust_mcp_sdk::mcp_server::server_runtime::create_server(
-            test_server_details(),
+        let runtime = rust_mcp_sdk::mcp_server::server_runtime::create_server(McpServerOptions {
+            server_details: test_server_details(),
             transport,
-            TestServerHandler {},
-        );
+            handler: TestServerHandler {
+                mcp_task_runner: McpTaskRunner::new(),
+            }
+            .to_mcp_server_handler(),
+            task_store: None,
+        });
 
         handler
-            .handle_initialize_request(InitializeRequest::new(initialize_request), runtime)
+            .handle_initialize_request(initialize_request, runtime)
             .await
     }
 

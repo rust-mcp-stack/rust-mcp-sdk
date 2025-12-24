@@ -46,10 +46,12 @@ reqwest = { workspace = true, default-features = false, features = [
     "cookies",
     "multipart",
 ], optional = true }
+time = {version="0.3.0", features = ["formatting", "local-offset"]}
 
 [dev-dependencies]
 wiremock = "0.5"
 tempfile = "3.23.0"
+tokio = { workspace=true, features = ["full", "test-util"] }
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",
@@ -66,8 +68,7 @@ default = [
     "sse",
     "streamable-http",
     "hyper-server",
-    "ssl",
-    "2025_06_18",
+    "ssl"
 ] # All features enabled by default
 
 sse = ["rust-mcp-transport/sse","http","http-body","http-body-util"]
@@ -82,36 +83,6 @@ ssl = ["axum-server/tls-rustls"]
 tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 macros = ["rust-mcp-macros/sdk"]
 
-# enables mcp protocol version 2025-06-18
-2025-06-18 = [
-    "rust-mcp-schema/2025_06_18",
-    "rust-mcp-macros/2025_06_18",
-    "rust-mcp-transport/2025_06_18",
-    "rust-mcp-schema/schema_utils",
-]
-# Alias: allow users to use underscores instead of hyphens
-2025_06_18 = ["2025-06-18"]
-
-# enables mcp protocol version 2025_03_26
-2025-03-26 = [
-    "rust-mcp-schema/2025_03_26",
-    "rust-mcp-macros/2025_03_26",
-    "rust-mcp-transport/2025_03_26",
-    "rust-mcp-schema/schema_utils",
-]
-# Alias: allow users to use underscores instead of hyphens
-2025_03_26 = ["2025-03-26"]
-
-
-# enables mcp protocol version 2024_11_05
-2024-11-05 = [
-    "rust-mcp-schema/2024_11_05",
-    "rust-mcp-macros/2024_11_05",
-    "rust-mcp-transport/2024_11_05",
-    "rust-mcp-schema/schema_utils",
-]
-# Alias: allow users to use underscores instead of hyphens
-2024_11_05 = ["2024-11-05"]
 
 [lints]
 workspace = true

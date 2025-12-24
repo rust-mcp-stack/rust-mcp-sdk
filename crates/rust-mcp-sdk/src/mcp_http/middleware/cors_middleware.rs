@@ -367,6 +367,7 @@ mod tests {
     use crate::{
         id_generator::{FastIdGenerator, UuidGenerator},
         mcp_http::{types::GenericBodyExt, MiddlewareNext},
+        mcp_icon,
         mcp_server::{ServerHandler, ToMcpServerHandler},
         schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities},
         session_store::InMemorySessionStore,
@@ -396,6 +397,14 @@ mod tests {
                     name: "server".to_string(),
                     title: None,
                     version: "0.1.0".to_string(),
+                    description: Some("test server, by Rust MCP SDK".to_string()),
+                    icons: vec![mcp_icon!(
+                        src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                        mime_type = "image/png",
+                        sizes = ["128x128"],
+                        theme = "dark"
+                    )],
+                    website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".to_string()),
                 },
             }),
             handler: handler.to_mcp_server_handler(),
@@ -403,6 +412,7 @@ mod tests {
             transport_options: Arc::new(rust_mcp_transport::TransportOptions::default()),
             enable_json_response: false,
             event_store: None,
+            task_store:None
         })
     }
 
