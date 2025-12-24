@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
     self,
-    schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-    RpcError,
+    schema_utils::{NotificationFromServer, ResultFromClient},
+    RpcError, ServerJsonrpcRequest,
 };
 use rust_mcp_sdk::{mcp_client::ClientHandlerCore, McpClient};
 pub struct MyClientHandler;
@@ -14,32 +14,34 @@ pub struct MyClientHandler;
 impl ClientHandlerCore for MyClientHandler {
     async fn handle_request(
         &self,
-        request: RequestFromServer,
+        request: ServerJsonrpcRequest,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
-            RequestFromServer::PingRequest(_) => {
+            ServerJsonrpcRequest::PingRequest(_) => {
                 return Ok(schema::Result::default().into());
             }
-            RequestFromServer::CreateMessageRequest(_create_message_request) => {
+            ServerJsonrpcRequest::CreateMessageRequest(_create_message_request) => {
                 Err(RpcError::internal_error()
                     .with_message("CreateMessageRequest handler is not implemented".to_string()))
             }
-            RequestFromServer::ListRootsRequest(_list_roots_request) => {
+            ServerJsonrpcRequest::ListRootsRequest(_list_roots_request) => {
                 Err(RpcError::internal_error()
                     .with_message("ListRootsRequest handler is not implemented".to_string()))
             }
-            RequestFromServer::ElicitRequest(_elicit_request) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::ElicitRequest(_elicit_request) => Err(RpcError::internal_error()
                 .with_message("ElicitRequest handler is not implemented".to_string())),
-            RequestFromServer::CustomRequest(_request) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::CustomRequest(_request) => Err(RpcError::internal_error()
                 .with_message("CustomRequest handler is not implemented".to_string())),
-            RequestFromServer::GetTaskRequest(_request) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::GetTaskRequest(_request) => Err(RpcError::internal_error()
                 .with_message("GetTaskRequest handler is not implemented".to_string())),
-            RequestFromServer::GetTaskPayloadRequest(_request) => Err(RpcError::internal_error()
-                .with_message("GetTaskPayloadRequest handler is not implemented".to_string())),
-            RequestFromServer::CancelTaskRequest(_request) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::GetTaskPayloadRequest(_request) => {
+                Err(RpcError::internal_error()
+                    .with_message("GetTaskPayloadRequest handler is not implemented".to_string()))
+            }
+            ServerJsonrpcRequest::CancelTaskRequest(_request) => Err(RpcError::internal_error()
                 .with_message("CancelTaskRequest handler is not implemented".to_string())),
-            RequestFromServer::ListTasksRequest(_request) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::ListTasksRequest(_request) => Err(RpcError::internal_error()
                 .with_message("ListTasksRequest handler is not implemented".to_string())),
         }
     }

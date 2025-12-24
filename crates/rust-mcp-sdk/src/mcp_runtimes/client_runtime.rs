@@ -2,14 +2,15 @@ pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
 use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
-use crate::mcp_traits::{IdGenerator, McpClient, McpClientHandler};
+use crate::mcp_traits::{McpClient, McpClientHandler};
+use crate::task_store::ClientTaskStore;
 use crate::utils::ensure_server_protocole_compatibility;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
     schema::{
         schema_utils::{
-            self, ClientMessage, ClientMessages, FromMessage, McpMessage, MessageFromClient,
-            NotificationFromClient, RequestFromClient, ServerMessage, ServerMessages,
+            ClientMessage, ClientMessages, FromMessage, MessageFromClient, NotificationFromClient,
+            RequestFromClient, ServerMessage, ServerMessages,
         },
         InitializeRequestParams, InitializeResult, RequestId, RpcError,
     },
@@ -38,6 +39,22 @@ type TransportDispatcherType = dyn TransportDispatcher<
 >;
 type TransportType = Arc<TransportDispatcherType>;
 
+pub struct McpClientOptions<T>
+where
+    T: TransportDispatcher<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    >,
+{
+    pub client_details: InitializeRequestParams,
+    pub transport: T,
+    pub handler: Box<dyn McpClientHandler>,
+    pub task_store: Option<Arc<ClientTaskStore>>,
+}
+
 pub struct ClientRuntime {
     // A thread-safe map storing transport types
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
@@ -60,6 +77,7 @@ pub struct ClientRuntime {
     // Details about the connected server
     server_details_tx: watch::Sender<Option<InitializeResult>>,
     server_details_rx: watch::Receiver<Option<InitializeResult>>,
+    task_store: Option<Arc<ClientTaskStore>>,
 }
 
 impl ClientRuntime {
@@ -67,6 +85,7 @@ impl ClientRuntime {
         client_details: InitializeRequestParams,
         transport: TransportType,
         handler: Box<dyn McpClientHandler>,
+        task_store: Option<Arc<ClientTaskStore>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -83,6 +102,7 @@ impl ClientRuntime {
             stream_id_gen: FastIdGenerator::new(Some("s_")),
             server_details_tx,
             server_details_rx,
+            task_store: task_store.clone(),
         }
     }
 
@@ -91,6 +111,7 @@ impl ClientRuntime {
         client_details: InitializeRequestParams,
         transport_options: StreamableTransportOptions,
         handler: Box<dyn McpClientHandler>,
+        task_store: Option<Arc<ClientTaskStore>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -106,6 +127,7 @@ impl ClientRuntime {
             stream_id_gen: FastIdGenerator::new(Some("s_")),
             server_details_tx,
             server_details_rx,
+            task_store,
         }
     }
 
@@ -151,10 +173,7 @@ impl ClientRuntime {
         let response = match message {
             ServerMessage::Request(jsonrpc_request) => {
                 let request_id = jsonrpc_request.request_id().clone();
-                let result = self
-                    .handler
-                    .handle_request(jsonrpc_request.into(), self)
-                    .await;
+                let result = self.handler.handle_request(jsonrpc_request, self).await;
 
                 // create a response to send back to the server
                 let response: MessageFromClient = match result {
@@ -341,10 +360,12 @@ impl ClientRuntime {
             ClientMessage,
         >,
     > {
+        use rust_mcp_schema::schema_utils::SdkError;
+
         let options = self
             .transport_options
             .as_ref()
-            .ok_or(schema_utils::SdkError::connection_closed())?;
+            .ok_or(SdkError::connection_closed())?;
         let transport = ClientStreamableTransport::new(options, session_id, standalone)?;
 
         Ok(transport)
@@ -424,6 +445,9 @@ impl ClientRuntime {
         timeout: Option<Duration>,
     ) -> SdkResult<Option<ServerMessages>> {
         use futures::stream::{AbortHandle, Abortable};
+        use rust_mcp_schema::schema_utils::McpMessage;
+
+        use crate::IdGenerator;
         let stream_id: StreamId = self.stream_id_gen.generate();
         let session_id = self.session_id.read().await.clone();
         let no_session_id = session_id.is_none();
@@ -431,6 +455,8 @@ impl ClientRuntime {
         let has_request = match &messages {
             ClientMessages::Single(client_message) => client_message.is_request(),
             ClientMessages::Batch(client_messages) => {
+                use rust_mcp_schema::schema_utils::McpMessage;
+
                 client_messages.iter().any(|m| m.is_request())
             }
         };
@@ -571,6 +597,13 @@ impl McpClient for ClientRuntime {
             .map_err(|err| err.into())
     }
 
+    fn task_store(&self) -> Option<Arc<ClientTaskStore>> {
+        self.task_store.clone()
+    }
+
+    async fn session_id(&self) -> Option<SessionId> {
+        self.session_id.read().await.clone()
+    }
     async fn send_batch(
         &self,
         messages: Vec<ClientMessage>,
@@ -602,6 +635,18 @@ impl McpClient for ClientRuntime {
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
+        let runtime_clone = self.clone();
+        if let Some(task_store) = runtime_clone.task_store() {
+            // send TaskStatusNotification  if task_store is present and supports subscribe()
+            if let Some(mut stream) = task_store.subscribe() {
+                tokio::spawn(async move {
+                    while let Some((params, _)) = stream.next().await {
+                        let _ = runtime_clone.notify_task_status(params).await;
+                    }
+                });
+            }
+        }
+
         #[cfg(feature = "streamable-http")]
         {
             if self.transport_options.is_some() {

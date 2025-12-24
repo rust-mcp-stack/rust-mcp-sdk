@@ -12,7 +12,6 @@ use crate::mcp_http::{GenericBodyExt, RequestExt};
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
 #[cfg(feature = "sse")]
-use crate::task_store::ServerTaskStore;
 use crate::{
     error::McpSdkError,
     mcp_http::{

@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_client::{client_runtime, ClientHandler},
+    mcp_client::{client_runtime, ClientHandler, McpClientOptions, ToMcpClientHandler},
     schema::*,
+    task_store::InMemoryTaskStore,
     *,
 };
 
@@ -47,7 +50,12 @@ async fn main() -> SdkResult<()> {
     let handler = MyClientHandler {};
 
     // Create and start the MCP client
-    let client = client_runtime::create_client(client_details, transport, handler);
+    let client = client_runtime::create_client(McpClientOptions {
+        client_details,
+        transport,
+        handler: handler.to_mcp_client_handler(),
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))), // support mcp tasks: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
+    });
     client.clone().start().await?;
 
     // use client methods to communicate with the MCP Server as you wish:

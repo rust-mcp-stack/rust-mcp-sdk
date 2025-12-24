@@ -1,35 +1,73 @@
 mod in_memory_task_store;
-use std::fmt::Debug;
-
-pub use in_memory_task_store::*;
-
 use async_trait::async_trait;
+use futures::Stream;
+pub use in_memory_task_store::*;
 use rust_mcp_schema::{
-    schema_utils::{RequestFromClient, RequestFromServer, ResultFromClient, ResultFromServer},
-    ListTasksResult, RequestId, Task, TaskStatus,
+    schema_utils::{
+        ClientJsonrpcRequest, ResultFromClient, ResultFromServer, ServerJsonrpcRequest,
+    },
+    ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams,
 };
+use std::{fmt::Debug, pin::Pin, sync::Arc};
 
-#[derive(::serde::Deserialize, ::serde::Serialize, Debug)]
+/// A stream of task status notifications, where each item contains the notification parameters
+/// and an optional session_id
+pub type TaskStatusStream =
+    Pin<Box<dyn Stream<Item = (TaskStatusNotificationParams, Option<String>)> + Send + 'static>>;
+
+#[async_trait]
+pub trait TaskStatusSignal: Send + Sync + 'static {
+    /// Publish a status change event
+    async fn publish_status_change(
+        &self,
+        event: TaskStatusNotificationParams,
+        session_id: Option<&String>,
+    );
+    /// Return a new independent stream of events
+    fn subscribe(&self) -> Option<TaskStatusStream> {
+        None
+    }
+}
+
+pub type TaskStatusCallback = Box<dyn Fn(&Task, Option<&String>) + Send + Sync + 'static>;
+
 pub struct CreateTaskOptions {
     ///Actual retention duration from creation in milliseconds, None for unlimited.
     pub ttl: Option<i64>,
-    ///Suggested polling interval in milliseconds.
-    #[serde(
-        rename = "pollInterval",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
     pub poll_interval: ::std::option::Option<i64>,
-    #[serde(flatten)]
     ///Additional context to pass to the task store.
-    pub context: Option<serde_json::Map<String, serde_json::Value>>,
+    pub meta: Option<serde_json::Map<String, serde_json::Value>>,
+    // pub context: Option<HashMap<String, Box<dyn Any + Send>>>,
+}
+
+pub struct TaskCreator<Req, Res>
+where
+    Req: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
+    Res: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
+{
+    pub request_id: RequestId,
+    pub request: Req,
+    pub session_id: Option<String>,
+    pub task_store: Arc<dyn TaskStore<Req, Res>>,
+}
+
+impl<Req, Res> TaskCreator<Req, Res>
+where
+    Req: Debug + Clone + serde::Deserialize<'static> + serde::Serialize + 'static,
+    Res: Debug + Clone + serde::Deserialize<'static> + serde::Serialize + 'static,
+{
+    pub async fn create_task(self, task_params: CreateTaskOptions) -> Task {
+        self.task_store
+            .create_task(task_params, self.request_id, self.request, self.session_id)
+            .await
+    }
 }
 
 /// A trait for storing and managing long-running tasks, storing and retrieving task state and results.
 /// Tasks were introduced in MCP Protocol version 2025-11-25.
-/// For more details, see: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
+/// For more details, see: <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
 #[async_trait]
-pub trait TaskStore<Req, Res>: Send + Sync
+pub trait TaskStore<Req, Res>: Send + Sync + TaskStatusSignal
 where
     Req: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
     Res: Debug + Clone + serde::Deserialize<'static> + serde::Serialize,
@@ -123,14 +161,10 @@ where
         cursor: Option<String>,
         session_id: Option<String>,
     ) -> ListTasksResult;
-
-    /// Optionally registers a callback to be invoked whenever a task's status changes.
-    ///
-    /// The callback, if provided, receives the task ID and the new status.
-    fn on_status_change(&self, _callback: Box<dyn Fn(&str, &TaskStatus) + Send + Sync + 'static>) {
-        unimplemented!("on_status_change is not implemented");
-    }
 }
 
-pub type ServerTaskStore = dyn TaskStore<RequestFromClient, ResultFromServer>;
-pub type ClientTaskStore = dyn TaskStore<RequestFromServer, ResultFromClient>;
+pub type ServerTaskCreator = TaskCreator<ClientJsonrpcRequest, ResultFromServer>;
+pub type ClientTaskCreator = TaskCreator<ServerJsonrpcRequest, ResultFromClient>;
+
+pub type ServerTaskStore = dyn TaskStore<ClientJsonrpcRequest, ResultFromServer>;
+pub type ClientTaskStore = dyn TaskStore<ServerJsonrpcRequest, ResultFromClient>;

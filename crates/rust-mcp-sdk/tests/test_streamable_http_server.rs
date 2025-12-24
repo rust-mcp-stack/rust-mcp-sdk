@@ -4,7 +4,7 @@ use crate::common::{
     test_server_common::{
         create_start_server, initialize_request, LaunchedServer, TestIdGenerator,
     },
-    TestTokenVerifier,
+    TestTokenVerifier, ONE_MILLISECOND,
 };
 use http::header::{ACCEPT, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE};
 use hyper::StatusCode;
@@ -12,20 +12,19 @@ use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     schema_utils::{
         ClientJsonrpcRequest, ClientJsonrpcResponse, ClientMessage, ClientMessages, FromMessage,
-        MessageFromClient, NotificationFromClient, NotificationFromServer, RequestFromClient,
-        RequestFromServer, ResultFromServer, RpcMessage, SdkError, SdkErrorCodes,
-        ServerJsonrpcNotification, ServerJsonrpcRequest, ServerJsonrpcResponse, ServerMessages,
+        MessageFromClient, NotificationFromClient, RequestFromClient, ResultFromServer, RpcMessage,
+        SdkError, SdkErrorCodes, ServerJsonrpcNotification, ServerJsonrpcRequest,
+        ServerJsonrpcResponse, ServerMessages,
     },
-    CallToolRequest, CallToolRequestParams, ClientRequest, ElicitResult, ElicitResultContent,
-    JsonrpcResultResponse, ListRootsRequest, ListRootsResult, ListToolsRequest, LoggingLevel,
-    LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
-    ServerRequest, ServerResult,
+    CallToolRequestParams, ElicitResult, ElicitResultContent, ListRootsResult, LoggingLevel,
+    LoggingMessageNotificationParams, RequestId, ServerRequest,
 };
 use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
     mcp_server::HyperServerOptions,
-    schema::{MessageFromServer, ResultFromClient},
+    schema::ResultFromClient,
+    task_store::InMemoryTaskStore,
 };
 use serde_json::{json, Map, Value};
 use std::{
@@ -40,10 +39,9 @@ use url::Url;
 #[path = "common/common.rs"]
 pub mod common;
 
-const ONE_MILLISECOND: Option<Duration> = Some(Duration::from_millis(1));
 pub const VALID_ACCESS_TOKEN: &str = "valid-access-token";
 
-async fn initialize_server(
+pub async fn initialize_server(
     enable_json_response: Option<bool>,
     auth_token_map: Option<HashMap<&str, AuthInfo>>,
 ) -> Result<(LaunchedServer, String), Box<dyn Error>> {
@@ -104,6 +102,7 @@ async fn initialize_server(
         ping_interval: Duration::from_secs(1),
         event_store: Some(Arc::new(InMemoryEventStore::default())),
         auth: oauth_metadata_provider,
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
 
         ..Default::default()
     };
@@ -251,7 +250,7 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -368,7 +367,7 @@ async fn should_reject_invalid_session_id() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-async fn get_standalone_stream(
+pub async fn get_standalone_stream(
     streamable_url: &str,
     session_id: &str,
     last_event_id: Option<&str>,
@@ -419,7 +418,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
     // Send a notification (server-initiated message) that should appear on SSE stream
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("Test notification"),
@@ -541,7 +540,7 @@ async fn should_not_close_get_sse_stream() {
 
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("First notification"),
@@ -569,7 +568,7 @@ async fn should_not_close_get_sse_stream() {
 
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("Second notification"),
@@ -834,7 +833,7 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -1050,7 +1049,7 @@ async fn should_return_json_response_for_a_single_request() {
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -1472,7 +1471,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification1"),
@@ -1485,7 +1484,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification2"),
@@ -1542,7 +1541,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification1"),
@@ -1575,7 +1574,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     // we send another notification while SSE is disconnected
     let _result = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification2"),

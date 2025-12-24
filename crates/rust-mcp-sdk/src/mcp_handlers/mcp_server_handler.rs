@@ -5,6 +5,7 @@ use crate::{
         schema_utils::{CallToolError, CustomNotification, CustomRequest},
         *,
     },
+    task_store::ServerTaskCreator,
     utils::capability_checks::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
@@ -238,6 +239,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_task_augmented_tool_call(
         &self,
         params: CallToolRequestParams,
+        task_creator: ServerTaskCreator,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CreateTaskResult, CallToolError> {
         if !runtime.capabilities().can_run_task_augmented_tools() {

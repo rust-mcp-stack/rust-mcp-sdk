@@ -5,19 +5,20 @@ use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{McpServer, McpServerHandler},
+    task_store::TaskCreator,
 };
 use crate::{
     mcp_runtimes::server_runtime::McpServerOptions,
     schema::{
         schema_utils::{
-            self, CallToolError, ClientMessage, ClientMessages, MessageFromServer,
-            NotificationFromClient, RequestFromClient, ResultFromServer, ServerMessage,
-            ServerMessages,
+            CallToolError, ClientMessage, ClientMessages, MessageFromServer, ResultFromServer,
+            ServerMessage, ServerMessages,
         },
         CallToolResult, InitializeResult, RpcError,
     },
 };
 use async_trait::async_trait;
+use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
 #[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
 use rust_mcp_transport::TransportDispatcher;
@@ -78,69 +79,110 @@ impl ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
     async fn handle_request(
         &self,
-        client_jsonrpc_request: RequestFromClient,
+        client_jsonrpc_request: ClientJsonrpcRequest,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ResultFromServer, RpcError> {
+        // prepare a TaskCreator in case request is task augmented and server is configured with a task_store
+        let task_creator = if client_jsonrpc_request.is_task_augmented() {
+            if !runtime.capabilities().can_run_task_augmented_tools() {
+                return Err(RpcError::invalid_request()
+                    .with_message("This MCP server does not support \"tasks\".".to_string()));
+            }
+
+            let Some(task_store) = runtime.task_store() else {
+                return Err(RpcError::invalid_request()
+                    .with_message("The server is not configured with a task store.".to_string()));
+            };
+
+            let session_id = {
+                #[cfg(feature = "hyper-server")]
+                {
+                    runtime.session_id()
+                }
+                #[cfg(not(feature = "hyper-server"))]
+                {
+                    None
+                }
+            };
+
+            Some(TaskCreator {
+                request_id: client_jsonrpc_request.request_id().to_owned(),
+                request: client_jsonrpc_request.clone(),
+                session_id,
+                task_store,
+            })
+        } else {
+            None
+        };
+
         match client_jsonrpc_request {
-            RequestFromClient::InitializeRequest(initialize_request) => self
+            ClientJsonrpcRequest::InitializeRequest(initialize_request) => self
                 .handler
-                .handle_initialize_request(initialize_request, runtime)
+                .handle_initialize_request(initialize_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::PingRequest(ping_request) => self
+            ClientJsonrpcRequest::PingRequest(ping_request) => self
                 .handler
-                .handle_ping_request(ping_request, runtime)
+                .handle_ping_request(ping_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::ListResourcesRequest(list_resources_request) => self
+            ClientJsonrpcRequest::ListResourcesRequest(list_resources_request) => self
                 .handler
-                .handle_list_resources_request(list_resources_request, runtime)
+                .handle_list_resources_request(list_resources_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::ListResourceTemplatesRequest(list_resource_templates_request) => {
+            ClientJsonrpcRequest::ListResourceTemplatesRequest(list_resource_templates_request) => {
                 self.handler
                     .handle_list_resource_templates_request(
-                        list_resource_templates_request,
+                        list_resource_templates_request.params,
                         runtime,
                     )
                     .await
                     .map(|value| value.into())
             }
-            RequestFromClient::ReadResourceRequest(read_resource_request) => self
+            ClientJsonrpcRequest::ReadResourceRequest(read_resource_request) => self
                 .handler
-                .handle_read_resource_request(read_resource_request, runtime)
+                .handle_read_resource_request(read_resource_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::SubscribeRequest(subscribe_request) => self
+            ClientJsonrpcRequest::SubscribeRequest(subscribe_request) => self
                 .handler
-                .handle_subscribe_request(subscribe_request, runtime)
+                .handle_subscribe_request(subscribe_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::UnsubscribeRequest(unsubscribe_request) => self
+            ClientJsonrpcRequest::UnsubscribeRequest(unsubscribe_request) => self
                 .handler
-                .handle_unsubscribe_request(unsubscribe_request, runtime)
+                .handle_unsubscribe_request(unsubscribe_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::ListPromptsRequest(list_prompts_request) => self
+            ClientJsonrpcRequest::ListPromptsRequest(list_prompts_request) => self
                 .handler
-                .handle_list_prompts_request(list_prompts_request, runtime)
+                .handle_list_prompts_request(list_prompts_request.params, runtime)
                 .await
                 .map(|value| value.into()),
 
-            RequestFromClient::GetPromptRequest(prompt_request) => self
+            ClientJsonrpcRequest::GetPromptRequest(prompt_request) => self
                 .handler
-                .handle_get_prompt_request(prompt_request, runtime)
+                .handle_get_prompt_request(prompt_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::ListToolsRequest(list_tools_request) => self
+            ClientJsonrpcRequest::ListToolsRequest(list_tools_request) => self
                 .handler
-                .handle_list_tools_request(list_tools_request, runtime)
+                .handle_list_tools_request(list_tools_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::CallToolRequest(call_tool_request) => {
+            ClientJsonrpcRequest::CallToolRequest(call_tool_request) => {
                 let result = if call_tool_request.is_task_augmented() {
+                    let Some(task_creator) = task_creator else {
+                        return Err(CallToolError::from_message("Error creating a task!").into());
+                    };
+
                     self.handler
-                        .handle_task_augmented_tool_call(call_tool_request, runtime)
+                        .handle_task_augmented_tool_call(
+                            call_tool_request.params,
+                            task_creator,
+                            runtime,
+                        )
                         .await
                         .map_or_else(
                             |err| {
@@ -151,7 +193,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                         )
                 } else {
                     self.handler
-                        .handle_call_tool_request(call_tool_request, runtime)
+                        .handle_call_tool_request(call_tool_request.params, runtime)
                         .await
                         .map_or_else(
                             |err| {
@@ -163,39 +205,39 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                 };
                 Ok(result)
             }
-            RequestFromClient::SetLevelRequest(set_level_request) => self
+            ClientJsonrpcRequest::SetLevelRequest(set_level_request) => self
                 .handler
-                .handle_set_level_request(set_level_request, runtime)
+                .handle_set_level_request(set_level_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::CompleteRequest(complete_request) => self
+            ClientJsonrpcRequest::CompleteRequest(complete_request) => self
                 .handler
-                .handle_complete_request(complete_request, runtime)
+                .handle_complete_request(complete_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::GetTaskRequest(get_task_request) => self
+            ClientJsonrpcRequest::GetTaskRequest(get_task_request) => self
                 .handler
-                .handle_get_task_request(get_task_request, runtime)
+                .handle_get_task_request(get_task_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::GetTaskPayloadRequest(get_task_payload_request) => self
+            ClientJsonrpcRequest::GetTaskPayloadRequest(get_task_payload_request) => self
                 .handler
-                .handle_get_task_payload_request(get_task_payload_request, runtime)
+                .handle_get_task_payload_request(get_task_payload_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::CancelTaskRequest(cancel_task_request) => self
+            ClientJsonrpcRequest::CancelTaskRequest(cancel_task_request) => self
                 .handler
-                .handle_cancel_task_request(cancel_task_request, runtime)
+                .handle_cancel_task_request(cancel_task_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::ListTasksRequest(list_tasks_request) => self
+            ClientJsonrpcRequest::ListTasksRequest(list_tasks_request) => self
                 .handler
-                .handle_list_task_request(list_tasks_request, runtime)
+                .handle_list_task_request(list_tasks_request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromClient::CustomRequest(custom_request) => self
+            ClientJsonrpcRequest::CustomRequest(custom_request) => self
                 .handler
-                .handle_custom_request(custom_request, runtime)
+                .handle_custom_request(custom_request.into(), runtime)
                 .await
                 .map(|value| value.into()),
         }
@@ -212,44 +254,49 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
 
     async fn handle_notification(
         &self,
-        client_jsonrpc_notification: NotificationFromClient,
+        client_jsonrpc_notification: ClientJsonrpcNotification,
         runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
         match client_jsonrpc_notification {
-            NotificationFromClient::CancelledNotification(cancelled_notification) => {
+            ClientJsonrpcNotification::CancelledNotification(cancelled_notification) => {
                 self.handler
-                    .handle_cancelled_notification(cancelled_notification, runtime)
+                    .handle_cancelled_notification(cancelled_notification.params, runtime)
                     .await?;
             }
-            NotificationFromClient::InitializedNotification(initialized_notification) => {
+            ClientJsonrpcNotification::InitializedNotification(initialized_notification) => {
                 self.handler
-                    .handle_initialized_notification(initialized_notification, runtime.clone())
+                    .handle_initialized_notification(
+                        initialized_notification.params,
+                        runtime.clone(),
+                    )
                     .await?;
                 self.handler.on_initialized(runtime).await;
             }
-            NotificationFromClient::ProgressNotification(progress_notification) => {
+            ClientJsonrpcNotification::ProgressNotification(progress_notification) => {
                 self.handler
-                    .handle_progress_notification(progress_notification, runtime)
+                    .handle_progress_notification(progress_notification.params, runtime)
                     .await?;
             }
-            NotificationFromClient::RootsListChangedNotification(
+            ClientJsonrpcNotification::RootsListChangedNotification(
                 roots_list_changed_notification,
             ) => {
                 self.handler
                     .handle_roots_list_changed_notification(
-                        roots_list_changed_notification,
+                        roots_list_changed_notification.params,
                         runtime,
                     )
                     .await?;
             }
-            NotificationFromClient::TaskStatusNotification(task_status_notification) => {
+            ClientJsonrpcNotification::TaskStatusNotification(task_status_notification) => {
                 self.handler
-                    .handle_task_status_notification(task_status_notification, runtime)
+                    .handle_task_status_notification(task_status_notification.params, runtime)
                     .await?;
             }
 
-            schema_utils::NotificationFromClient::CustomNotification(value) => {
-                self.handler.handle_custom_notification(value).await?;
+            ClientJsonrpcNotification::CustomNotification(value) => {
+                self.handler
+                    .handle_custom_notification(value.into())
+                    .await?;
             }
         }
         Ok(())

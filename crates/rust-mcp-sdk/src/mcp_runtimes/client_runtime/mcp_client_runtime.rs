@@ -1,13 +1,19 @@
 use super::ClientRuntime;
-use crate::schema::{
-    schema_utils::{
-        ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
-        RequestFromServer, ResultFromClient, ServerMessage, ServerMessages,
-    },
-    InitializeRequestParams, RpcError,
-};
+use super::McpClientOptions;
+use crate::task_store::TaskCreator;
 use crate::{error::SdkResult, mcp_client::ClientHandler, mcp_traits::McpClientHandler, McpClient};
+use crate::{
+    schema::{
+        schema_utils::{
+            ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
+            ResultFromClient, ServerMessage, ServerMessages,
+        },
+        InitializeRequestParams, RpcError,
+    },
+    task_store::ClientTaskStore,
+};
 use async_trait::async_trait;
+use rust_mcp_schema::schema_utils::ServerJsonrpcRequest;
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::StreamableTransportOptions;
 use rust_mcp_transport::TransportDispatcher;
@@ -34,21 +40,21 @@ use std::sync::Arc;
 /// You can find a detailed example of how to use this function in the repository:
 ///
 /// [Repository Example](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-stdio)
-pub fn create_client(
-    client_details: InitializeRequestParams,
-    transport: impl TransportDispatcher<
+pub fn create_client<T>(options: McpClientOptions<T>) -> Arc<ClientRuntime>
+where
+    T: TransportDispatcher<
         ServerMessages,
         MessageFromClient,
         ServerMessage,
         ClientMessages,
         ClientMessage,
     >,
-    handler: impl ClientHandler,
-) -> Arc<ClientRuntime> {
+{
     Arc::new(ClientRuntime::new(
-        client_details,
-        Arc::new(transport),
-        Box::new(ClientInternalHandler::new(Box::new(handler))),
+        options.client_details,
+        Arc::new(options.transport),
+        options.handler,
+        options.task_store,
     ))
 }
 
@@ -57,17 +63,19 @@ pub fn with_transport_options(
     client_details: InitializeRequestParams,
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandler,
+    task_store: Option<Arc<ClientTaskStore>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientInternalHandler::new(Box::new(handler))),
+        task_store,
     ))
 }
 
 /// Internal handler that wraps a `ClientHandler` trait object.
 /// This is used to handle incoming requests and notifications for the client.
-struct ClientInternalHandler<H> {
+pub(crate) struct ClientInternalHandler<H> {
     handler: H,
 }
 impl ClientInternalHandler<Box<dyn ClientHandler>> {
@@ -83,71 +91,96 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
     /// Handles a request received from the server by passing the request to self.handler
     async fn handle_request(
         &self,
-        server_jsonrpc_request: RequestFromServer,
+        server_jsonrpc_request: ServerJsonrpcRequest,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
+        runtime
+            .capabilities()
+            .can_handle_request(&server_jsonrpc_request)?;
+        // prepare a TaskCreator in case request is task augmented and client is configured with a task_store
+        let task_creator = if server_jsonrpc_request.is_task_augmented() {
+            let Some(task_store) = runtime.task_store() else {
+                return Err(RpcError::invalid_request()
+                    .with_message("The server is not configured with a task store.".to_string()));
+            };
+
+            Some(TaskCreator {
+                request_id: server_jsonrpc_request.request_id().to_owned(),
+                request: server_jsonrpc_request.clone(),
+                task_store,
+                session_id: runtime.session_id().await,
+            })
+        } else {
+            None
+        };
+
         match server_jsonrpc_request {
-            RequestFromServer::PingRequest(params) => self
+            ServerJsonrpcRequest::PingRequest(request) => self
                 .handler
-                .handle_ping_request(params, runtime)
+                .handle_ping_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::CreateMessageRequest(params) => {
-                if params.is_task_augmented() {
+            ServerJsonrpcRequest::CreateMessageRequest(request) => {
+                if request.params.is_task_augmented() {
                     self.handler
-                        .handle_task_augmented_create_message(params, runtime)
+                        .handle_task_augmented_create_message(request.params, runtime)
                         .await
                         .map(|value| value.into())
                 } else {
                     self.handler
-                        .handle_create_message_request(params, runtime)
+                        .handle_create_message_request(request.params, runtime)
                         .await
                         .map(|value| value.into())
                 }
             }
-            RequestFromServer::ListRootsRequest(params) => self
+            ServerJsonrpcRequest::ListRootsRequest(request) => self
                 .handler
-                .handle_list_roots_request(params, runtime)
+                .handle_list_roots_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::ElicitRequest(params) => {
-                if params.is_task_augmented() {
+            ServerJsonrpcRequest::ElicitRequest(request) => {
+                if request.params.is_task_augmented() {
+                    let Some(task_creator) = task_creator else {
+                        return Err(RpcError::internal_error()
+                            .with_message("Error creating a task!".to_string()));
+                    };
+
                     self.handler
-                        .handle_task_augmented_elicit_request(params, runtime)
+                        .handle_task_augmented_elicit_request(task_creator, request.params, runtime)
                         .await
                         .map(|value| value.into())
                 } else {
                     self.handler
-                        .handle_elicit_request(params, runtime)
+                        .handle_elicit_request(request.params, runtime)
                         .await
                         .map(|value| value.into())
                 }
             }
 
-            RequestFromServer::GetTaskRequest(params) => self
+            ServerJsonrpcRequest::GetTaskRequest(request) => self
                 .handler
-                .handle_get_task_request(params, runtime)
+                .handle_get_task_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::GetTaskPayloadRequest(params) => self
+            ServerJsonrpcRequest::GetTaskPayloadRequest(request) => self
                 .handler
-                .handle_get_task_payload_request(params, runtime)
+                .handle_get_task_payload_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::CancelTaskRequest(params) => self
+            ServerJsonrpcRequest::CancelTaskRequest(request) => self
                 .handler
-                .handle_cancel_task_request(params, runtime)
+                .handle_cancel_task_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            RequestFromServer::ListTasksRequest(params) => self
+            ServerJsonrpcRequest::ListTasksRequest(request) => self
                 .handler
-                .handle_list_tasks_request(params, runtime)
+                .handle_list_tasks_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
 
-            RequestFromServer::CustomRequest(params) => self
+            ServerJsonrpcRequest::CustomRequest(custom_request) => self
                 .handler
-                .handle_custom_request(params, runtime)
+                .handle_custom_request(custom_request.into(), runtime)
                 .await
                 .map(|value| value.into()),
         }

@@ -1,4 +1,5 @@
 use crate::error::SdkResult;
+use crate::task_store::ClientTaskStore;
 use crate::{
     schema::{
         schema_utils::{
@@ -19,6 +20,7 @@ use rust_mcp_schema::{
     schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
     TaskStatusNotificationParams,
 };
+use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
 
 #[async_trait]
@@ -27,6 +29,8 @@ pub trait McpClient: Sync + Send {
     fn set_server_details(&self, server_details: InitializeResult) -> SdkResult<()>;
 
     async fn terminate_session(&self);
+
+    fn task_store(&self) -> Option<Arc<ClientTaskStore>>;
 
     async fn shut_down(&self) -> SdkResult<()>;
     async fn is_shut_down(&self) -> bool;
@@ -154,6 +158,8 @@ pub trait McpClient: Sync + Send {
     fn instructions(&self) -> Option<String> {
         self.server_info()?.instructions
     }
+
+    async fn session_id(&self) -> Option<SessionId>;
 
     /// Returns the client's capabilities.
     fn capabilities(&self) -> &ClientCapabilities {

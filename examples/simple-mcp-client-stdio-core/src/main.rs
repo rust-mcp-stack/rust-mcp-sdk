@@ -3,12 +3,13 @@ mod inquiry_utils;
 
 use handler::MyClientHandler;
 use inquiry_utils::InquiryUtils;
+use rust_mcp_sdk::mcp_client::McpClientOptions;
 use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
     SetLevelRequestParams, LATEST_PROTOCOL_VERSION,
 };
 use rust_mcp_sdk::{error::SdkResult, mcp_client::client_runtime_core};
-use rust_mcp_sdk::{mcp_icon, McpClient, StdioTransport, TransportOptions};
+use rust_mcp_sdk::{mcp_icon, McpClient, StdioTransport, ToMcpClientHandlerCore, TransportOptions};
 use std::sync::Arc;
 
 const MCP_SERVER_TO_LAUNCH: &str = "@modelcontextprotocol/server-everything";
@@ -48,7 +49,12 @@ async fn main() -> SdkResult<()> {
     let handler = MyClientHandler {};
 
     // STEP 4: create a MCP client
-    let client = client_runtime_core::create_client(client_details, transport, handler);
+    let client = client_runtime_core::create_client(McpClientOptions {
+        client_details,
+        transport,
+        handler: handler.to_mcp_client_handler(),
+        task_store: None,
+    });
 
     // STEP 5: start the MCP client
     client.clone().start().await?;

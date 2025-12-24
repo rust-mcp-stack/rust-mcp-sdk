@@ -1,8 +1,10 @@
 mod mock_server;
+pub mod task_runner;
 mod test_client;
 mod test_server;
 use async_trait::async_trait;
 pub use mock_server::*;
+
 use reqwest::{Client, Response, Url};
 use rust_mcp_macros::{mcp_tool, JsonSchema};
 use rust_mcp_schema::ProtocolVersion;
@@ -23,6 +25,7 @@ pub use test_client::*;
 pub use test_server::*;
 
 pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything";
+pub const ONE_MILLISECOND: Option<Duration> = Some(Duration::from_millis(1));
 
 #[cfg(unix)]
 pub const UVX_SERVER_GIT: &str = "mcp-server-git";
@@ -348,6 +351,23 @@ pub mod sample_tools {
     use serde_json::json;
 
     //****************//
+    //  TaskAugmentedTool  //
+    //****************//
+    #[mcp_tool(
+        name = "task_augmented_tool",
+        description = "invokes a long running mcp task, the result will be available after task is finished",
+        idempotent_hint = false,
+        destructive_hint = false,
+        open_world_hint = false,
+        read_only_hint = false
+    )]
+    #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, rust_mcp_macros::JsonSchema)]
+    pub struct TaskAugmentedTool {
+        /// TaskJobInfo indicating final status of the task and task duratins.
+        pub job_info: TaskJobInfo,
+    }
+
+    //****************//
     //  SayHelloTool  //
     //****************//
     #[mcp_tool(
@@ -386,6 +406,8 @@ pub mod sample_tools {
     #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
     pub struct DisplayAuthInfo {}
     use rust_mcp_sdk::auth::AuthInfo;
+
+    use crate::common::task_runner::TaskJobInfo;
     impl DisplayAuthInfo {
         pub fn call_tool(
             &self,

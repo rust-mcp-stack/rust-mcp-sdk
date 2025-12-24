@@ -41,7 +41,8 @@ pub mod mcp_client {
     pub use super::mcp_handlers::mcp_client_handler_core::ClientHandlerCore;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
-    pub use super::mcp_runtimes::client_runtime::ClientRuntime;
+    pub use super::mcp_runtimes::client_runtime::{ClientRuntime, McpClientOptions};
+    pub use super::mcp_traits::{McpClientHandler, ToMcpClientHandler, ToMcpClientHandlerCore};
     pub use super::utils::ensure_server_protocole_compatibility;
 }
 

@@ -1,11 +1,10 @@
-use std::{sync::Arc, time::Duration};
-
 use crate::{
     error::SdkResult,
     mcp_server::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,
     },
+    task_store::ServerTaskStore,
 };
 use crate::{
     mcp_http::McpAppState,
@@ -19,6 +18,7 @@ use crate::{
     McpServer,
 };
 use axum_server::Handle;
+use futures::StreamExt;
 use rust_mcp_schema::{
     schema_utils::{CustomNotification, CustomRequest},
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, ElicitCompleteParams,
@@ -26,6 +26,7 @@ use rust_mcp_schema::{
     GetTaskResult, ProgressNotificationParams, TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
+use std::{sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 
 pub struct HyperRuntime {
@@ -56,6 +57,23 @@ impl HyperRuntime {
                 server.start_http(addr).await
             }
         });
+
+        // send a TaskStatusNotification if task_store is present and supports subscribe()
+        let state_clone = state.clone();
+        if let Some(task_store) = state_clone.task_store.clone() {
+            if let Some(mut stream) = task_store.subscribe() {
+                tokio::spawn(async move {
+                    while let Some((params, session_id_opt)) = stream.next().await {
+                        if let Some(session_id) = session_id_opt.as_ref() {
+                            if let Some(transport) = state_clone.session_store.get(session_id).await
+                            {
+                                let _ = transport.notify_task_status(params).await;
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(Self {
             state,
@@ -424,5 +442,9 @@ impl HyperRuntime {
     ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
         runtime.notify_log_message(params).await
+    }
+
+    pub fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
+        self.state.task_store.clone()
     }
 }

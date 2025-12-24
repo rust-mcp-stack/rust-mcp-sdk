@@ -1,11 +1,13 @@
 #[cfg(feature = "hyper-server")]
 pub mod test_server_common {
-    use crate::common::sample_tools::{DisplayAuthInfo, SayHelloTool};
+    use crate::common::sample_tools::{DisplayAuthInfo, SayHelloTool, TaskAugmentedTool};
+    use crate::common::task_runner::{McpTaskRunner, TaskJobInfo};
     use async_trait::async_trait;
     use rust_mcp_schema::schema_utils::{CallToolError, RequestFromClient};
     use rust_mcp_schema::{
-        CallToolRequest, CallToolRequestParams, CallToolResult, ListToolsRequest, ListToolsResult,
-        PaginatedRequestParams, ProtocolVersion, RpcError,
+        CallToolRequestParams, CallToolResult, CreateTaskResult, ListToolsResult,
+        PaginatedRequestParams, ProtocolVersion, RpcError, ServerTaskRequest, ServerTaskTools,
+        ServerTasks,
     };
     use rust_mcp_sdk::event_store::EventStore;
     use rust_mcp_sdk::id_generator::IdGenerator;
@@ -15,12 +17,14 @@ pub mod test_server_common {
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
         InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
+    use rust_mcp_sdk::task_store::{CreateTaskOptions, ServerTaskCreator};
     use rust_mcp_sdk::{
         mcp_server::{
             hyper_server, HyperServer, HyperServerOptions, ServerHandler, ToMcpServerHandler,
         },
         McpServer, SessionId,
     };
+    use serde_json::{Map, Value};
     use std::sync::{Arc, RwLock};
     use std::time::Duration;
     use tokio::time::timeout;
@@ -80,6 +84,10 @@ pub mod test_server_common {
             capabilities: ServerCapabilities {
                 // indicates that server support mcp tools
                 tools: Some(ServerCapabilitiesTools { list_changed: None }),
+                tasks: Some(ServerTasks{
+                    cancel: Some(Map::new()),
+                    list: Some(Map::new()),
+                    requests: Some(ServerTaskRequest{ tools: Some(ServerTaskTools{ call: Some(Map::new()) })} )}),
                 ..Default::default() // Using default values for other fields
             },
             meta: None,
@@ -88,7 +96,9 @@ pub mod test_server_common {
         }
     }
 
-    pub struct TestServerHandler;
+    pub struct TestServerHandler {
+        pub mcp_task_runner: McpTaskRunner,
+    }
 
     #[async_trait]
     impl ServerHandler for TestServerHandler {
@@ -100,7 +110,7 @@ pub mod test_server_common {
             Ok(ListToolsResult {
                 meta: None,
                 next_cursor: None,
-                tools: vec![SayHelloTool::tool()],
+                tools: vec![SayHelloTool::tool(), TaskAugmentedTool::tool()],
             })
         }
 
@@ -127,14 +137,48 @@ pub mod test_server_common {
                 _ => Ok(
                     CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into(),
                 ),
+                _ => Ok(
+                    CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into(),
+                ),
             }
+        }
+
+        async fn handle_task_augmented_tool_call(
+            &self,
+            params: CallToolRequestParams,
+            task_creator: ServerTaskCreator,
+            runtime: Arc<dyn McpServer>,
+        ) -> std::result::Result<CreateTaskResult, CallToolError> {
+            let task_meta = params.task.unwrap();
+            let task_store = runtime.task_store().unwrap();
+
+            let job_info: TaskJobInfo =
+                serde_json::from_value(Value::Object(params.arguments.unwrap())).unwrap();
+
+            let task = task_creator
+                .create_task(CreateTaskOptions {
+                    ttl: task_meta.ttl,
+                    poll_interval: None,
+                    meta: job_info.meta.clone(),
+                })
+                .await;
+
+            let task = self
+                .mcp_task_runner
+                .run_server_task(task, task_store, job_info, runtime.session_id())
+                .await;
+
+            Ok(CreateTaskResult { meta: None, task })
         }
     }
 
     pub fn create_test_server(options: HyperServerOptions) -> HyperServer {
         hyper_server::create_server(
             test_server_details(),
-            TestServerHandler {}.to_mcp_server_handler(),
+            TestServerHandler {
+                mcp_task_runner: McpTaskRunner::new(),
+            }
+            .to_mcp_server_handler(),
             options,
         )
     }
@@ -147,7 +191,10 @@ pub mod test_server_common {
         let event_store_clone = options.event_store.clone();
         let server = hyper_server::create_server(
             test_server_details(),
-            TestServerHandler {}.to_mcp_server_handler(),
+            TestServerHandler {
+                mcp_task_runner: McpTaskRunner::new(),
+            }
+            .to_mcp_server_handler(),
             options,
         );
 

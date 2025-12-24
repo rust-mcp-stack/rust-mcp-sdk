@@ -19,7 +19,7 @@ use crate::{
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
-    task_store::{ServerTaskStore, TaskStore},
+    task_store::ServerTaskStore,
 };
 use crate::{mcp_http::Middleware, schema::InitializeResult};
 use axum::Router;
@@ -62,7 +62,7 @@ pub struct HyperServerOptions {
     pub event_store: Option<Arc<dyn EventStore>>,
 
     /// Task store for task-augmented request support
-    /// https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
+    /// <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
     pub task_store: Option<Arc<ServerTaskStore>>,
 
     /// This setting only applies to streamable HTTP.
@@ -292,7 +292,7 @@ impl HyperServer {
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
             event_store: server_options.event_store.as_ref().map(Arc::clone),
-            task_store: server_options.task_store.clone(),
+            task_store: server_options.task_store.take(),
         });
 
         // populate middlewares

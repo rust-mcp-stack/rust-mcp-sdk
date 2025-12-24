@@ -1,6 +1,16 @@
 #[path = "common/common.rs"]
 pub mod common;
 
+use crate::common::{
+    create_sse_response, debug_wiremock, random_port,
+    test_client_common::{
+        initialize_client, InitializedClient, INITIALIZE_REQUEST, TEST_SESSION_ID,
+    },
+    test_server_common::{
+        create_start_server, LaunchedServer, TestIdGenerator, INITIALIZE_RESPONSE,
+    },
+    wait_for_n_requests, wiremock_request, MockBuilder, SimpleMockServer, SseEvent,
+};
 use common::test_client_common::create_client;
 use hyper::{Method, StatusCode};
 use rust_mcp_schema::{
@@ -8,7 +18,7 @@ use rust_mcp_schema::{
         ClientJsonrpcRequest, ClientMessage, CustomRequest, MessageFromServer, RequestFromClient,
         RequestFromServer, ResultFromServer, RpcMessage, ServerMessage,
     },
-    RequestId, ServerRequest, ServerResult,
+    RequestId,
 };
 use rust_mcp_sdk::{
     error::McpSdkError, mcp_server::HyperServerOptions, McpClient, TransportError,
@@ -20,17 +30,6 @@ use wiremock::{
     http::{HeaderName, HeaderValue},
     matchers::{body_json_string, header, method, path},
     Mock, MockServer, ResponseTemplate,
-};
-
-use crate::common::{
-    create_sse_response, debug_wiremock, random_port,
-    test_client_common::{
-        initialize_client, InitializedClient, INITIALIZE_REQUEST, TEST_SESSION_ID,
-    },
-    test_server_common::{
-        create_start_server, LaunchedServer, TestIdGenerator, INITIALIZE_RESPONSE,
-    },
-    wait_for_n_requests, wiremock_request, MockBuilder, SimpleMockServer, SseEvent,
 };
 
 // should send JSON-RPC messages via POST
@@ -84,7 +83,7 @@ async fn should_send_json_rpc_messages_via_post() {
 async fn should_send_batch_messages() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
@@ -190,7 +189,7 @@ async fn should_store_session_id_received_during_initialization() {
 async fn should_terminate_session_with_delete_request() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -210,7 +209,7 @@ async fn should_terminate_session_with_delete_request() {
 async fn should_handle_405_unsupported_session_termination() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -230,7 +229,7 @@ async fn should_handle_405_unsupported_session_termination() {
 async fn should_handle_404_response_when_session_expires() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -254,7 +253,7 @@ async fn should_handle_404_response_when_session_expires() {
 async fn should_handle_non_streaming_json_response() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(Some(TEST_SESSION_ID.to_string()), None).await;
 
@@ -277,8 +276,6 @@ async fn should_handle_non_streaming_json_response() {
     });
 
     let result = client.request(request, None).await.unwrap();
-
-    println!(">>> result {:?} ", result);
 
     let ResultFromServer::Result(result) = result else {
         panic!("Wrong result variant!")
@@ -437,7 +434,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     let mut body = String::new();
     body.push_str("data: Connection established\n\n");
 
-    let response = ResponseTemplate::new(405)
+    let _response = ResponseTemplate::new(405)
         .set_body_raw(body.into_bytes(), "text/event-stream")
         .append_header("Connection", "keep-alive");
 
@@ -502,7 +499,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
 async fn should_handle_multiple_concurrent_sse_streams() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
@@ -575,7 +572,7 @@ async fn should_handle_multiple_concurrent_sse_streams() {
 async fn should_throw_error_when_invalid_content_type_is_received() {
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, None).await;
 
@@ -606,7 +603,7 @@ async fn should_always_send_specified_custom_headers() {
     headers.insert("X-Custom-Header".to_string(), "CustomValue".to_string());
     let InitializedClient {
         client,
-        mcp_url,
+        mcp_url: _,
         mock_server,
     } = initialize_client(None, Some(headers)).await;
 

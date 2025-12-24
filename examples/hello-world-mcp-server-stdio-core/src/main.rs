@@ -3,6 +3,7 @@ mod tools;
 
 use handler::MyServerHandler;
 use rust_mcp_sdk::mcp_icon;
+use rust_mcp_sdk::mcp_server::McpServerOptions;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
@@ -50,11 +51,12 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     // STEP 4: create a MCP server
-    let server = server_runtime_core::create_server(
+    let server = server_runtime_core::create_server(McpServerOptions {
         server_details,
         transport,
-        handler.to_mcp_server_handler(),
-    );
+        handler: handler.to_mcp_server_handler(),
+        task_store: None,
+    });
 
     // STEP 5: Start the server
     if let Err(start_error) = server.start().await {

@@ -1,23 +1,36 @@
 use async_trait::async_trait;
 use rust_mcp_schema::{
     schema_utils::{MessageFromServer, RequestFromServer},
-    PingRequest, RequestParams, RpcError,
+    CreateTaskResult, ElicitRequestParams, ElicitResult, ElicitResultAction, ElicitResultContent,
+    ElicitResultContentPrimitive, LoggingMessageNotificationParams, PingRequest, RequestParams,
+    RpcError, TaskStatus, TaskStatusNotificationParams,
 };
-use rust_mcp_sdk::{mcp_client::ClientHandler, McpClient};
+use rust_mcp_sdk::{
+    mcp_client::ClientHandler,
+    schema::{NotificationFromServer, ResultFromClient},
+    task_store::{ClientTaskCreator, CreateTaskOptions},
+    McpClient,
+};
 use serde_json::json;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+
+use crate::common::task_runner::{McpTaskRunner, TaskJobInfo};
 
 #[cfg(feature = "hyper-server")]
 pub mod test_client_common {
     use rust_mcp_schema::{
-        schema_utils::MessageFromServer, ClientCapabilities, Implementation,
-        InitializeRequestParams, LATEST_PROTOCOL_VERSION,
+        schema_utils::MessageFromServer, ClientCapabilities, ClientElicitation, ClientRoots,
+        ClientSampling, ClientTaskElicitation, ClientTaskRequest, ClientTaskSampling, ClientTasks,
+        Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
     };
     use rust_mcp_sdk::{
         mcp_client::{client_runtime, ClientRuntime},
-        mcp_icon, McpClient, RequestOptions, SessionId, StreamableTransportOptions,
+        mcp_icon,
+        task_store::InMemoryTaskStore,
+        McpClient, RequestOptions, SessionId, StreamableTransportOptions,
     };
+    use serde_json::Map;
     use std::{collections::HashMap, sync::Arc, time::Duration};
     use tokio::sync::RwLock;
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -27,7 +40,8 @@ pub mod test_client_common {
     };
 
     use crate::common::{
-        create_sse_response, test_server_common::INITIALIZE_RESPONSE, wait_for_n_requests,
+        create_sse_response, task_runner::McpTaskRunner, test_server_common::INITIALIZE_RESPONSE,
+        wait_for_n_requests,
     };
 
     pub struct InitializedClient {
@@ -37,11 +51,21 @@ pub mod test_client_common {
     }
 
     pub const TEST_SESSION_ID: &str = "test-session-id";
-    pub const INITIALIZE_REQUEST: &str = r#"{"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"icons":[{"mimeType":"image/png","sizes":["128x128"],"src":"https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png","theme":"dark"}],"name":"simple-rust-mcp-client-sse","title":"Simple Rust MCP Client (SSE)","version":"0.1.0"},"protocolVersion":"2025-11-25"}}"#;
+
+    pub const INITIALIZE_REQUEST: &str = r#"{"id":0,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{"elicitation":{"form":{},"url":{}},"roots":{"listChanged":true},"sampling":{"context":{},"tools":{}},"tasks":{"cancel":{},"list":{},"requests":{"elicitation":{"create":{}},"sampling":{"createMessage":{}}}}},"clientInfo":{"icons":[{"mimeType":"image/png","sizes":["128x128"],"src":"https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png","theme":"dark"}],"name":"simple-rust-mcp-client-sse","title":"Simple Rust MCP Client (SSE)","version":"0.1.0"},"protocolVersion":"2025-11-25"}}"#;
 
     pub fn test_client_details() -> InitializeRequestParams {
         InitializeRequestParams {
-            capabilities: ClientCapabilities::default(),
+            // capabilities: ClientCapabilities::default(),
+            capabilities: {
+                ClientCapabilities{
+                    elicitation: Some(ClientElicitation{ form: Some(Map::new()), url: Some(Map::new()) }),
+                    experimental: None,
+                    roots: Some(ClientRoots{ list_changed: Some(true) }),
+                    sampling: Some(ClientSampling{ context: Some(Map::new()), tools: Some(Map::new()) }),
+                    tasks: Some(ClientTasks{ cancel:  Some(Map::new()), list:  Some(Map::new()),
+                        requests: Some(ClientTaskRequest{ elicitation: Some(ClientTaskElicitation{ create:Some( Map::new() )}), sampling: Some(ClientTaskSampling{ create_message: Some( Map::new() ) }) }) }),
+                }},
             client_info: Implementation {
                 name: "simple-rust-mcp-client-sse".to_string(),
                 version: "0.1.0".to_string(),
@@ -86,10 +110,15 @@ pub mod test_client_common {
         let message_history = Arc::new(RwLock::new(vec![]));
         let handler = super::TestClientHandler {
             message_history: message_history.clone(),
+            mcp_task_runner: McpTaskRunner::new(),
         };
 
-        let client =
-            client_runtime::with_transport_options(client_details, transport_options, handler);
+        let client = client_runtime::with_transport_options(
+            client_details,
+            transport_options,
+            handler,
+            Some(Arc::new(InMemoryTaskStore::new(None))),
+        );
 
         // client.clone().start().await.unwrap();
         (client, message_history)
@@ -129,6 +158,7 @@ pub mod test_client_common {
             .await;
 
         let mcp_url = format!("{}/mcp", mock_server.uri());
+
         let (client, _) = create_client(&mcp_url, custom_headers).await;
 
         client.clone().start().await.unwrap();
@@ -146,6 +176,7 @@ pub mod test_client_common {
 // Test handler
 pub struct TestClientHandler {
     message_history: Arc<RwLock<Vec<MessageFromServer>>>,
+    mcp_task_runner: McpTaskRunner,
 }
 
 impl TestClientHandler {
@@ -171,5 +202,78 @@ impl ClientHandler for TestClientHandler {
             meta: Some(json!({"meta_number":1515}).as_object().unwrap().to_owned()),
             extra: None,
         })
+    }
+
+    async fn handle_logging_message_notification(
+        &self,
+        params: LoggingMessageNotificationParams,
+        _runtime: &dyn McpClient,
+    ) -> std::result::Result<(), RpcError> {
+        self.register_message(&MessageFromServer::NotificationFromServer(
+            NotificationFromServer::LoggingMessageNotification(params.clone()),
+        ))
+        .await;
+        Ok(())
+    }
+
+    async fn handle_task_status_notification(
+        &self,
+        params: TaskStatusNotificationParams,
+        _runtime: &dyn McpClient,
+    ) -> std::result::Result<(), RpcError> {
+        self.register_message(&MessageFromServer::NotificationFromServer(
+            NotificationFromServer::TaskStatusNotification(params.clone()),
+        ))
+        .await;
+        Ok(())
+    }
+
+    async fn handle_task_augmented_elicit_request(
+        &self,
+        task_creator: ClientTaskCreator,
+        params: ElicitRequestParams,
+        runtime: &dyn McpClient,
+    ) -> std::result::Result<CreateTaskResult, RpcError> {
+        self.register_message(&MessageFromServer::RequestFromServer(
+            RequestFromServer::ElicitRequest(params.clone()),
+        ))
+        .await;
+
+        let ElicitRequestParams::FormParams(form_params) = params else {
+            panic!("Expected a form elicitation!")
+        };
+
+        let task_store = runtime.task_store().unwrap();
+
+        let task = task_creator
+            .create_task(CreateTaskOptions {
+                ttl: form_params.task.unwrap().ttl,
+                poll_interval: None,
+                meta: None,
+            })
+            .await;
+        let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+        content.insert(
+            "content".to_string(),
+            ElicitResultContentPrimitive::String("hello".to_string()).into(),
+        );
+        let result = ResultFromClient::ElicitResult(ElicitResult {
+            action: ElicitResultAction::Accept,
+            content: Some(content),
+            meta: None,
+        });
+        let job_info: TaskJobInfo = TaskJobInfo {
+            finish_in_ms: 300,
+            status_interval_ms: 100,
+            task_final_status: TaskStatus::Completed.to_string(),
+            task_result: Some(serde_json::to_string(&result).unwrap()),
+            meta: None,
+        };
+        let task = self
+            .mcp_task_runner
+            .run_client_task(task, task_store, job_info, runtime.session_id().await)
+            .await;
+
+        Ok(CreateTaskResult { meta: None, task })
     }
 }

@@ -329,9 +329,8 @@ impl ServerRuntime {
 
                 let result = self
                     .handler
-                    .handle_request(client_jsonrpc_request.into(), self.clone())
+                    .handle_request(client_jsonrpc_request, self.clone())
                     .await;
-                println!(">>>  {:?} ", result);
 
                 // create a response to send back to the client
                 let response: MessageFromServer = match result {
@@ -353,7 +352,7 @@ impl ServerRuntime {
             }
             ClientMessage::Notification(client_jsonrpc_notification) => {
                 self.handler
-                    .handle_notification(client_jsonrpc_notification.into(), self.clone())
+                    .handle_notification(client_jsonrpc_notification, self.clone())
                     .await?;
                 None
             }
@@ -627,7 +626,8 @@ impl ServerRuntime {
     {
         let (client_details_tx, client_details_rx) =
             watch::channel::<Option<InitializeRequestParams>>(None);
-        Arc::new(Self {
+
+        let runtime = Arc::new(Self {
             server_details: Arc::new(options.server_details),
             handler: options.handler,
             #[cfg(feature = "hyper-server")]
@@ -638,6 +638,20 @@ impl ServerRuntime {
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(None),
             task_store: options.task_store,
-        })
+        });
+
+        let runtime_clone = runtime.clone();
+        if let Some(task_store) = runtime_clone.task_store() {
+            // send TaskStatusNotification  if task_store is present and supports subscribe()
+            if let Some(mut stream) = task_store.subscribe() {
+                tokio::spawn(async move {
+                    while let Some((params, _)) = stream.next().await {
+                        let _ = runtime_clone.notify_task_status(params).await;
+                    }
+                });
+            }
+        }
+
+        runtime
     }
 }

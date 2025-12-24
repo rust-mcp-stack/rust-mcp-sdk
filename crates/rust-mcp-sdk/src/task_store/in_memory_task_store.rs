@@ -1,11 +1,14 @@
 use super::{CreateTaskOptions, TaskStore};
 use crate::id_generator::FastIdGenerator;
+use crate::task_store::TaskStatusSignal;
 use crate::utils::{current_utc_time, iso8601_time};
 use crate::IdGenerator;
 use async_trait::async_trait;
-use rust_mcp_schema::{ListTasksResult, RequestId, Task, TaskStatus};
+use futures::{stream, Stream};
+use rust_mcp_schema::{ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams};
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -20,17 +23,39 @@ where
 {
     id_gen: Arc<FastIdGenerator>,
     // Inner state protected by RwLock for concurrent access
-    inner: Arc<RwLock<InMemoryTaskStoreInner<Req, Res>>>,
+    inner: Arc<tokio::sync::RwLock<InMemoryTaskStoreInner<Req, Res>>>,
     page_size: usize,
-    // Removed global cleanup handle
+    broadcast: tokio::sync::broadcast::Sender<(TaskStatusNotificationParams, Option<String>)>,
 }
 
 #[derive(Debug)]
 struct TaskEntry<Req, Res> {
     task: Task,
-    request: Req,            // original request that created the task
-    result: Option<Res>,     // stored only after store_task_result
+    #[allow(unused)]
+    request: Req, // original request that created the task
+    result: Option<Res>, // stored only after store_task_result
+    #[allow(unused)]
     expires_at: Option<i64>, // Unix millis, for reference (optional now)
+    meta: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl<Req, Res> Display for TaskEntry<Req, Res> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "task_id: {}", self.task.task_id)?;
+        writeln!(f, "created_at: {}", self.task.created_at)?;
+        writeln!(f, "status: {}", self.task.status)?;
+        writeln!(f, "last_updated_at: {}", self.task.last_updated_at)?;
+        if let Some(message) = self.task.status_message.as_ref() {
+            writeln!(f, "status_message: {}", message)?;
+        }
+
+        if let Some(ttl) = self.task.ttl.as_ref() {
+            writeln!(f, "ttl: {}", ttl)?;
+        } else {
+            writeln!(f, "ttl: null")?;
+        }
+        Ok(())
+    }
 }
 
 struct InMemoryTaskStoreInner<Req, Res> {
@@ -43,20 +68,83 @@ struct InMemoryTaskStoreInner<Req, Res> {
 
 impl<Req, Res> InMemoryTaskStore<Req, Res>
 where
-    Req: Clone + Send + Sync + 'static,
-    Res: Clone + Send + Sync + 'static,
+    Req: Debug + Clone + Send + Sync + serde::Deserialize<'static> + serde::Serialize + 'static,
+    Res: Debug + Clone + Send + Sync + serde::Deserialize<'static> + serde::Serialize + 'static,
 {
     pub fn new(page_size: Option<usize>) -> Self {
-        let inner = Arc::new(RwLock::new(InMemoryTaskStoreInner {
-            tasks: HashMap::new(),
-            ordered_task_ids: HashMap::new(),
-        }));
-
         Self {
-            id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
-            inner,
+            inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
+                tasks: HashMap::new(),
+                ordered_task_ids: HashMap::new(),
+            })),
+            broadcast: tokio::sync::broadcast::channel(64).0,
             page_size: page_size.unwrap_or(DEFAULT_PAGE_SIZE),
+            id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
         }
+    }
+}
+
+impl<Req, Res> InMemoryTaskStore<Req, Res>
+where
+    Req: Debug + Clone + Send + Sync + serde::Deserialize<'static> + serde::Serialize + 'static,
+    Res: Debug + Clone + Send + Sync + serde::Deserialize<'static> + serde::Serialize + 'static,
+{
+    async fn notify_status_change(
+        &self,
+        task_entry: &TaskEntry<Req, Res>,
+        session_id: Option<&String>,
+    ) {
+        let task = &task_entry.task;
+        let params = TaskStatusNotificationParams {
+            created_at: task.created_at.to_owned(),
+            last_updated_at: task.last_updated_at.to_owned(),
+            meta: task_entry.meta.clone(),
+            poll_interval: task.poll_interval,
+            status: task.status,
+            status_message: task.status_message.clone(),
+            task_id: task.task_id.clone(),
+            ttl: task.ttl,
+        };
+        self.publish_status_change(params, session_id).await;
+    }
+}
+
+#[async_trait]
+impl<Req, Res> TaskStatusSignal for InMemoryTaskStore<Req, Res>
+where
+    Req: Clone + Debug + Send + Sync + 'static + serde::Deserialize<'static> + serde::Serialize,
+    Res: Clone + Debug + Send + Sync + 'static + serde::Deserialize<'static> + serde::Serialize,
+{
+    async fn publish_status_change(
+        &self,
+        event: TaskStatusNotificationParams,
+        session_id: Option<&String>,
+    ) {
+        let _ = self.broadcast.send((event, session_id.cloned()));
+    }
+
+    fn subscribe(
+        &self,
+    ) -> Option<
+        Pin<
+            Box<dyn Stream<Item = (TaskStatusNotificationParams, Option<String>)> + Send + 'static>,
+        >,
+    > {
+        let rx = self.broadcast.subscribe();
+        let stream = stream::unfold(rx, |mut rx| async move {
+            loop {
+                match rx.recv().await {
+                    Ok(item) => return Some((item, rx)),
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        tracing::warn!("Broadcast lagged: skipped {} messages", skipped);
+                        continue;
+                    }
+                }
+            }
+        });
+
+        Some(Box::pin(stream))
     }
 }
 
@@ -93,9 +181,10 @@ where
             expires_at: task_params
                 .ttl
                 .map(|ttl| current_utc_time(Some(ttl)).unix_timestamp()),
+            meta: task_params.meta,
         };
 
-        tracing::debug!("New task created: {:?}", entry);
+        tracing::debug!("New task created: {entry}");
 
         // Insert into tasks map
         let session_tasks = inner
@@ -166,9 +255,12 @@ where
         let mut inner = self.inner.write().await;
         if let Some(session_map) = inner.tasks.get_mut(&session_id) {
             if let Some(entry) = session_map.get_mut(task_id) {
-                entry.task.status = status.clone();
+                entry.task.status = status;
                 entry.result = Some(result);
                 entry.task.last_updated_at = iso8601_time(current_utc_time(None));
+                entry.task.status_message = None;
+                tracing::debug!("Task result stored: {entry}");
+                self.notify_status_change(entry, session_id.as_ref()).await;
             }
         }
     }
@@ -192,9 +284,13 @@ where
         let mut inner = self.inner.write().await;
         if let Some(session_map) = inner.tasks.get_mut(&session_id) {
             if let Some(entry) = session_map.get_mut(task_id) {
+                if entry.task.status != status {
+                    self.notify_status_change(entry, session_id.as_ref()).await;
+                }
                 entry.task.status = status;
                 entry.task.status_message = status_message;
                 entry.task.last_updated_at = iso8601_time(current_utc_time(None));
+                tracing::debug!("Task status updated: {entry}");
             }
         }
     }
@@ -219,7 +315,6 @@ where
         let start_idx = cursor
             .as_ref()
             .and_then(|c| ordered_ids.iter().position(|id| id == c))
-            .map(|pos| pos)
             .unwrap_or(0);
         let end_idx = (start_idx + self.page_size).min(ordered_ids.len());
         let page_ids = &ordered_ids[start_idx..end_idx];
@@ -249,16 +344,6 @@ where
     }
 }
 
-impl<Req, Res> Default for InMemoryTaskStore<Req, Res>
-where
-    Req: Clone + Send + Sync + 'static,
-    Res: Clone + Send + Sync + 'static,
-{
-    fn default() -> Self {
-        Self::new(Some(DEFAULT_PAGE_SIZE))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,7 +354,7 @@ mod tests {
         CreateTaskOptions {
             ttl: ttl_ms,
             poll_interval: Some(1000),
-            context: None,
+            meta: None,
         }
     }
 
@@ -545,7 +630,6 @@ mod tests {
         let page1 = store.list_tasks(None, None).await;
         assert_eq!(page1.tasks.len(), 3);
         assert!(page1.next_cursor.is_some());
-        println!(">>>  {:?} ", page1.next_cursor);
 
         let page2 = store.list_tasks(page1.next_cursor, None).await;
         assert_eq!(page2.tasks.len(), 3);
