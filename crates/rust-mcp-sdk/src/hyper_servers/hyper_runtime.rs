@@ -4,7 +4,7 @@ use crate::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,
     },
-    task_store::ServerTaskStore,
+    task_store::{GetTaskCallback, ServerTaskStore},
 };
 use crate::{
     mcp_http::McpAppState,
@@ -19,11 +19,12 @@ use crate::{
 };
 use axum_server::Handle;
 use futures::StreamExt;
+use http::status;
 use rust_mcp_schema::{
-    schema_utils::{CustomNotification, CustomRequest},
+    schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, ElicitCompleteParams,
     ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams, GetTaskPayloadParams,
-    GetTaskResult, ProgressNotificationParams, TaskStatusNotificationParams,
+    GetTaskResult, ProgressNotificationParams, RpcError, TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
@@ -75,7 +76,42 @@ impl HyperRuntime {
             }
         }
 
-        // if let Some(client_task_store) = state_clone.client_task_store.clone() {}
+        if let Some(client_task_store) = state.client_task_store.clone() {
+            let state_clone = state.clone();
+
+            let callback: GetTaskCallback = Box::new(move |task_id, session_id| {
+                let state_clone = state_clone.clone();
+                Box::pin(async move {
+                    let Some(session) = session_id.as_ref() else {
+                        return Err(RpcError::invalid_request()
+                            .with_message("No session id provided!".to_string())
+                            .into());
+                    };
+
+                    let Some(transport) = state_clone.session_store.get(session).await else {
+                        return Err(RpcError::invalid_request()
+                            .with_message("Invalid or broken session!".to_string())
+                            .into());
+                    };
+
+                    let result = transport
+                        .request_get_task(GetTaskParams {
+                            task_id: task_id.clone(),
+                        })
+                        .await?;
+
+                    if result.is_terminal() {
+                        // let task_payload = transport
+                        //     .request_get_task_payload(GetTaskPayloadParams { task_id })
+                        //     .await?;
+                        // task_payload
+                    }
+
+                    return Ok((result.status, result.poll_interval));
+                })
+            });
+            client_task_store.start_task_polling(callback);
+        }
 
         Ok(Self {
             state,
@@ -220,7 +256,7 @@ impl HyperRuntime {
         &self,
         session_id: &SessionId,
         params: GetTaskPayloadParams,
-    ) -> SdkResult<GenericResult> {
+    ) -> SdkResult<ClientTaskResult> {
         let runtime = self.runtime_by_session(session_id).await?;
         runtime.request_get_task_payload(params).await
     }

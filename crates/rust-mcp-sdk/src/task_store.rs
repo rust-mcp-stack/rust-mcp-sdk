@@ -98,6 +98,23 @@ where
         session_id: Option<String>,
     ) -> Task;
 
+    /// Begins active polling for task status updates in requestor mode.
+    /// This method spawns a long-running background task that drives the polling
+    /// schedule for all tasks managed by this store. It repeatedly invokes the
+    /// provided `get_task_callback` to query the **receiver** for the current status
+    /// of pending tasks.
+    ///
+    /// The polling loop should respect the `pollInterval` suggested by the receiver and
+    /// dynamically adjusts accordingly. Each task is polled until it reaches a
+    /// terminal state (`Completed`, `Failed`, or `Cancelled`), at which point it
+    /// is removed from the active polling schedule.
+    ///
+    /// This mechanism is used when the local side acts as the **requestor** in the
+    /// Model Context Protocol task flow — i.e., when a task-augmented request has
+    /// been sent to the remote side (the receiver) and the local side needs to
+    /// actively monitor progress via repeated `tasks/get` calls.
+    fn start_task_polling(&self, get_task_callback: GetTaskCallback);
+
     /// Gets the current status of a task.
     ///
     /// # Arguments

@@ -170,28 +170,12 @@ where
             inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
                 tasks: HashMap::new(),
                 ordered_task_ids: HashMap::new(),
-                poll_schedule: None,
+                poll_schedule: Some(BinaryHeap::new()),
             })),
             broadcast: tokio::sync::broadcast::channel(64).0,
             page_size: page_size.unwrap_or(DEFAULT_PAGE_SIZE),
             id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
         }
-    }
-
-    pub fn new_with_polling(get_task_callback: GetTaskCallback) -> Self {
-        let instance = Self {
-            inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
-                tasks: HashMap::new(),
-                ordered_task_ids: HashMap::new(),
-                poll_schedule: Some(BinaryHeap::new()),
-            })),
-            broadcast: tokio::sync::broadcast::channel(64).0,
-            page_size: DEFAULT_PAGE_SIZE,
-            id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
-        };
-
-        instance.watch_tasks_with_polling(instance.inner.clone(), get_task_callback);
-        instance
     }
 }
 
@@ -217,59 +201,6 @@ where
             ttl: task.ttl,
         };
         self.publish_status_change(params, session_id).await;
-    }
-
-    fn watch_tasks_with_polling(
-        &self,
-        inner: Arc<RwLock<InMemoryTaskStoreInner<Req, Res>>>,
-        get_task_callback: GetTaskCallback,
-    ) {
-        tokio::spawn(async move {
-            loop {
-                let mut to_reschedule: Vec<(TaskId, Option<SessionId>, i64)> = Vec::new();
-                let tasks_to_poll = {
-                    let mut guard = inner.write().await;
-                    guard.tasks_to_poll()
-                };
-
-                for (task_id, session_id) in tasks_to_poll {
-                    // TODO: avoid clone
-                    match get_task_callback(task_id.clone(), session_id.clone()).await {
-                        Ok(result) => {
-                            if result.0.is_terminal() {
-                            } else {
-                                to_reschedule.push((
-                                    task_id.clone(),
-                                    session_id,
-                                    result.1.unwrap_or(DEFAULT_POLL_INTERVAL),
-                                ));
-                            }
-                        }
-                        Err(_err) => {
-                            let guard = inner.read().await;
-                            // re-schedule if task still exists and not expired
-                            if let Some(get_task) = guard.get_task(&task_id, &session_id) {
-                                to_reschedule.push((
-                                    task_id,
-                                    session_id,
-                                    get_task.task.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
-                                ));
-                            }
-                        }
-                    }
-                }
-
-                if !to_reschedule.is_empty() {
-                    let mut guard = inner.write().await;
-                    guard.re_schedule(&mut to_reschedule)
-                }
-
-                let guard = inner.read().await;
-                let sleep_duration = guard.next_sleep_duration();
-
-                tokio::time::sleep(sleep_duration).await;
-            }
-        });
     }
 }
 
@@ -408,6 +339,56 @@ where
         }
 
         task
+    }
+
+    fn start_task_polling(&self, get_task_callback: GetTaskCallback) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            loop {
+                let mut to_reschedule: Vec<(TaskId, Option<SessionId>, i64)> = Vec::new();
+                let tasks_to_poll = {
+                    let mut guard = inner.write().await;
+                    guard.tasks_to_poll()
+                };
+
+                for (task_id, session_id) in tasks_to_poll {
+                    // TODO: avoid clone
+                    match get_task_callback(task_id.clone(), session_id.clone()).await {
+                        Ok(result) => {
+                            if result.0.is_terminal() {
+                            } else {
+                                to_reschedule.push((
+                                    task_id.clone(),
+                                    session_id,
+                                    result.1.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                ));
+                            }
+                        }
+                        Err(_err) => {
+                            let guard = inner.read().await;
+                            // re-schedule if task still exists and not expired
+                            if let Some(get_task) = guard.get_task(&task_id, &session_id) {
+                                to_reschedule.push((
+                                    task_id,
+                                    session_id,
+                                    get_task.task.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                if !to_reschedule.is_empty() {
+                    let mut guard = inner.write().await;
+                    guard.re_schedule(&mut to_reschedule)
+                }
+
+                let guard = inner.read().await;
+                let sleep_duration = guard.next_sleep_duration();
+
+                tokio::time::sleep(sleep_duration).await;
+            }
+        });
     }
 
     async fn get_task(&self, task_id: &str, session_id: Option<String>) -> Option<Task> {
@@ -865,9 +846,11 @@ mod polling_tests {
     async fn new_with_polling_initializes_polling_schedule() {
         pause();
 
-        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(
-            Box::new(|task_id, _| Box::pin(async { Ok((TaskStatus::Working, Some(500))) })),
-        );
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+
+        store.start_task_polling(Box::new(|task_id, _| {
+            Box::pin(async { Ok((TaskStatus::Working, Some(500))) })
+        }));
 
         let created = store
             .create_task(
@@ -913,8 +896,8 @@ mod polling_tests {
             })
         });
 
-        let store =
-            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback);
 
         // Create one task with short interval
         store
@@ -958,8 +941,8 @@ mod polling_tests {
             })
         });
 
-        let store =
-            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback);
 
         // Create tasks: short, medium, long
         let task_short = store
@@ -1050,8 +1033,8 @@ mod polling_tests {
             })
         });
 
-        let store =
-            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback);
 
         store
             .create_task(
@@ -1111,8 +1094,8 @@ mod polling_tests {
             })
         });
 
-        let store =
-            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback);
 
         store
             .create_task(
@@ -1158,8 +1141,8 @@ mod polling_tests {
             })
         });
 
-        let store =
-            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback);
 
         let task_a = store
             .create_task(

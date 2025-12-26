@@ -12,7 +12,9 @@ use crate::schema::{
 };
 use crate::task_store::{ClientTaskStore, CreateTaskOptions, ServerTaskStore};
 use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest, ServerJsonrpcRequest};
+use rust_mcp_schema::schema_utils::{
+    ClientTaskResult, CustomNotification, CustomRequest, ServerJsonrpcRequest,
+};
 use rust_mcp_schema::{
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
     ElicitCompleteParams, GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult,
@@ -300,7 +302,7 @@ pub trait McpServer: Sync + Send {
     async fn request_get_task_payload(
         &self,
         params: GetTaskPayloadParams,
-    ) -> SdkResult<GenericResult> {
+    ) -> SdkResult<ClientTaskResult> {
         let response = self
             .request(RequestFromServer::GetTaskPayloadRequest(params), None)
             .await?;
