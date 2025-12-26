@@ -5,9 +5,7 @@ use crate::utils::{current_utc_time, iso8601_time};
 use crate::{id_generator::FastIdGenerator, IdGenerator};
 use async_trait::async_trait;
 use futures::{future::BoxFuture, stream, Stream};
-use rust_mcp_schema::{
-    GetTaskResult, ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams,
-};
+use rust_mcp_schema::{ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams};
 use rust_mcp_transport::{SessionId, TaskId};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
@@ -17,14 +15,28 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
+/// Parameters returned by a task status polling callback.
+///
+/// Contains the latest known status of a task and its recommended poll interval
+/// (in milliseconds). The poll interval can be adjusted dynamically by the remote
+/// side to implement adaptive polling (e.g., longer intervals when idle).
+pub type TaskStatusUpdate = (TaskStatus, Option<i64>);
+// TaskStatusPoller
 pub type GetTaskCallback = Box<
-    dyn Fn(TaskId, Option<SessionId>) -> BoxFuture<'static, SdkResult<GetTaskResult>>
+    dyn Fn(TaskId, Option<SessionId>) -> BoxFuture<'static, SdkResult<TaskStatusUpdate>>
         + Send
         + Sync
         + 'static,
 >;
 
-type TaskPollingEntry = (Instant, i64, TaskId, Option<SessionId>);
+/// Represents a single scheduled polling operation for a task.
+/// The fields are ordered intentionally for correct priority queue behavior:
+/// - `next_poll_at`: The exact `Instant` when this task should be polled next.
+///   The `Reverse` wrapper ensures the earliest (smallest) `Instant` is popped first (min-heap).
+/// - `task_id`: Identifier of the task to poll.
+/// - `session_id`: Optional session context. `None` means the task is global (not bound to any session).
+///
+type ScheduledPoll = (Instant, TaskId, Option<SessionId>);
 
 const DEFAULT_PAGE_SIZE: usize = 50;
 const DEFAULT_POLL_INTERVAL: i64 = 1250;
@@ -79,7 +91,7 @@ struct InMemoryTaskStoreInner<Req, Res> {
     ordered_task_ids: HashMap<Option<String>, Vec<String>>,
     // A min-heap for scheduling task-status polling when this task store is used
     // to hold requester tasks while waiting for the other party to complete them.
-    pub poll_schedule: Option<BinaryHeap<Reverse<TaskPollingEntry>>>, // min-heap by (next_poll_time, poll_interval,...)
+    pub poll_schedule: Option<BinaryHeap<Reverse<ScheduledPoll>>>, // min-heap by (next_poll_time, poll_interval,...)
 }
 
 impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
@@ -95,15 +107,18 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
             let next_poll = now
                 .checked_add(Duration::from_millis(poll_interval as u64))
                 .unwrap_or(Instant::now());
-            poll_schedule.push(Reverse((next_poll, poll_interval, task_id, session_id)));
+            poll_schedule.push(Reverse((next_poll, task_id, session_id)));
         }
     }
 
-    pub(crate) fn task_exists(&self, task_id: &str, session_id: &Option<String>) -> bool {
+    pub(crate) fn get_task(
+        &self,
+        task_id: &str,
+        session_id: &Option<String>,
+    ) -> Option<&TaskEntry<Req, Res>> {
         self.tasks
             .get(session_id)
             .and_then(|session_map| session_map.get(task_id))
-            .is_some()
     }
 
     pub(crate) fn next_sleep_duration(&self) -> Duration {
@@ -118,7 +133,7 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
         Duration::from_millis(DEFAULT_POLL_INTERVAL as u64)
     }
 
-    pub(crate) fn tasks_to_poll(&mut self) -> Vec<(TaskId, Option<SessionId>, i64)> {
+    pub(crate) fn tasks_to_poll(&mut self) -> Vec<(TaskId, Option<SessionId>)> {
         let now = Instant::now();
 
         let Some(poll_schedule) = self.poll_schedule.as_mut() else {
@@ -128,15 +143,11 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
         let mut task_ids = Vec::new();
 
         while let Some(Reverse(entry)) = poll_schedule.peek() {
-            let (next_poll, poll_interval, task_id, session_id) = &entry;
+            let (next_poll, task_id, session_id) = &entry;
 
             if next_poll <= &now {
                 // Pop the task from the schedule
-                task_ids.push((
-                    task_id.clone(),
-                    session_id.clone(),
-                    poll_interval.to_owned(),
-                ));
+                task_ids.push((task_id.clone(), session_id.clone()));
                 poll_schedule.pop();
 
             // Add task id to the list
@@ -221,20 +232,28 @@ where
                     guard.tasks_to_poll()
                 };
 
-                for (task_id, session_id, poll_interval) in tasks_to_poll {
+                for (task_id, session_id) in tasks_to_poll {
                     // TODO: avoid clone
                     match get_task_callback(task_id.clone(), session_id.clone()).await {
                         Ok(result) => {
-                            if result.is_terminal() {
+                            if result.0.is_terminal() {
                             } else {
-                                to_reschedule.push((task_id.clone(), session_id, poll_interval));
+                                to_reschedule.push((
+                                    task_id.clone(),
+                                    session_id,
+                                    result.1.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                ));
                             }
                         }
                         Err(_err) => {
                             let guard = inner.read().await;
                             // re-schedule if task still exists and not expired
-                            if guard.task_exists(&task_id, &session_id) {
-                                to_reschedule.push((task_id, session_id, poll_interval));
+                            if let Some(get_task) = guard.get_task(&task_id, &session_id) {
+                                to_reschedule.push((
+                                    task_id,
+                                    session_id,
+                                    get_task.task.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                ));
                             }
                         }
                     }
@@ -336,12 +355,7 @@ where
                 .checked_add(Duration::from_millis(poll_interval as u64))
                 .unwrap_or(Instant::now());
 
-            schedule.push(Reverse((
-                next_poll,
-                poll_interval,
-                task_id.clone(),
-                session_id.clone(),
-            )));
+            schedule.push(Reverse((next_poll, task_id.clone(), session_id.clone())));
         }
 
         tracing::debug!("New task created: {entry}");
@@ -841,35 +855,10 @@ mod polling_tests {
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::Mutex;
-    use tokio::time::{advance, pause, resume};
-    use tracing::Instrument;
+    use tokio::time::{advance, pause};
 
     fn dummy_request() -> serde_json::Value {
         serde_json::json!({})
-    }
-
-    // Helper to build a Working GetTaskResult (to avoid repeating fields)
-    fn working_result(task_id: TaskId) -> GetTaskResult {
-        GetTaskResult {
-            created_at: "".to_string(),
-            last_updated_at: "".to_string(),
-            meta: None,
-            poll_interval: None,
-            status: TaskStatus::Working,
-            status_message: None,
-            task_id,
-            ttl: 60_000,
-            extra: None,
-        }
-    }
-
-    // Helper to build a Completed result
-    fn completed_result(task_id: TaskId) -> GetTaskResult {
-        GetTaskResult {
-            status: TaskStatus::Completed,
-            task_id: task_id.clone(),
-            ..working_result(task_id.clone())
-        }
     }
 
     #[tokio::test]
@@ -877,21 +866,7 @@ mod polling_tests {
         pause();
 
         let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(
-            Box::new(|task_id, _| {
-                Box::pin(async {
-                    Ok(GetTaskResult {
-                        created_at: "".to_string(),
-                        last_updated_at: "".to_string(),
-                        meta: None,
-                        poll_interval: Some(500),
-                        status: TaskStatus::Working,
-                        status_message: None,
-                        task_id,
-                        ttl: 60_000,
-                        extra: None,
-                    })
-                })
-            }),
+            Box::new(|task_id, _| Box::pin(async { Ok((TaskStatus::Working, Some(500))) })),
         );
 
         let created = store
@@ -920,9 +895,8 @@ mod polling_tests {
 
         // The task should have been rescheduled
         let peeked = schedule.peek().unwrap();
-        let (next_time, interval, task_id, _) = &peeked.0;
+        let (next_time, task_id, _) = &peeked.0;
         assert_eq!(task_id, &created.task_id);
-        assert_eq!(*interval, 500);
         assert!(next_time > &Instant::now());
     }
 
@@ -935,7 +909,7 @@ mod polling_tests {
             let count = count_clone.clone();
             Box::pin(async move {
                 *count.lock().await += 1;
-                Ok(working_result("dummy".to_string()))
+                Ok((TaskStatus::Working, Some(150)))
             })
         });
 
@@ -980,7 +954,7 @@ mod polling_tests {
             let order = order_clone.clone();
             Box::pin(async move {
                 order.lock().await.push(task_id.clone());
-                Ok(working_result(task_id))
+                Ok((TaskStatus::Working, Some(200)))
             })
         });
 
@@ -1069,9 +1043,9 @@ mod polling_tests {
                 *count.lock().await += 1;
                 let is_complete = *complete.lock().await;
                 if is_complete {
-                    Ok(completed_result(task_id))
+                    Ok((TaskStatus::Completed, Some(200)))
                 } else {
-                    Ok(working_result(task_id))
+                    Ok((TaskStatus::Working, Some(200)))
                 }
             })
         });
@@ -1132,7 +1106,7 @@ mod polling_tests {
                         .with_message("simulated failure".into())
                         .into())
                 } else {
-                    Ok(working_result("dummy".to_string()))
+                    Ok((TaskStatus::Working, Some(200)))
                 }
             })
         });
@@ -1180,7 +1154,7 @@ mod polling_tests {
             let order = order_clone.clone();
             Box::pin(async move {
                 order.lock().await.push(task_id.clone());
-                Ok(working_result(task_id))
+                Ok((TaskStatus::Working, Some(200)))
             })
         });
 
