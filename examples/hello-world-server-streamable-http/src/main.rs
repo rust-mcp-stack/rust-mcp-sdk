@@ -9,6 +9,7 @@ use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     LATEST_PROTOCOL_VERSION,
 };
+use rust_mcp_sdk::task_store::InMemoryTaskStore;
 use rust_mcp_sdk::{error::SdkResult, mcp_server::ServerHandler};
 use std::sync::Arc;
 use std::time::Duration;
@@ -66,6 +67,8 @@ async fn main() -> SdkResult<()> {
             host: "127.0.0.1".into(),
             ping_interval: Duration::from_secs(5),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+            task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+            client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
             ..Default::default()
         },
     );

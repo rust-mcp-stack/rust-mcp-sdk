@@ -10,13 +10,13 @@ use crate::schema::{
     LoggingMessageNotificationParams, NotificationParams, RequestId, RequestParams,
     ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
 };
-use crate::task_store::ServerTaskStore;
+use crate::task_store::{ClientTaskStore, CreateTaskOptions, ServerTaskStore};
 use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest};
+use rust_mcp_schema::schema_utils::{CustomNotification, CustomRequest, ServerJsonrpcRequest};
 use rust_mcp_schema::{
-    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, ElicitCompleteParams,
-    GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams,
-    TaskStatusNotificationParams,
+    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
+    ElicitCompleteParams, GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult,
+    ProgressNotificationParams, TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
@@ -35,7 +35,16 @@ pub trait McpServer: Sync + Send {
 
     async fn wait_for_initialization(&self);
 
+    /// Returns the server-side task store, if available.
+    ///
+    /// This store tracks tasks initiated by the client that are being processed by the server.
     fn task_store(&self) -> Option<Arc<ServerTaskStore>>;
+
+    /// Returns the client-side task store, if available.
+    ///
+    /// This store tracks tasks initiated by the server that are processed by the client.
+    /// It is responsible for polling task status until each task reaches a terminal state.
+    fn client_task_store(&self) -> Option<Arc<ClientTaskStore>>;
 
     /// Checks if the client supports sampling.
     ///
@@ -135,6 +144,12 @@ pub trait McpServer: Sync + Send {
         request: RequestFromServer,
         timeout: Option<Duration>,
     ) -> SdkResult<ResultFromClient> {
+        // keep a clone of the request for the task store
+        let request_clone = if request.is_task_augmented() {
+            Some(request.clone())
+        } else {
+            None
+        };
         // Send the request and receive the response.
         let response = self
             .send(MessageFromServer::RequestFromServer(request), None, timeout)
@@ -149,7 +164,33 @@ pub trait McpServer: Sync + Send {
             return Err(client_message.as_error()?.error.into());
         }
 
-        return Ok(client_message.as_response()?.result);
+        let client_response = client_message.as_response()?;
+
+        // track awaiting tasks in the client_task_store
+        if let ResultFromClient::CreateTaskResult(create_task_result) = &client_response.result {
+            if let Some(request_to_store) = request_clone {
+                if let Some(client_task_store) = self.client_task_store() {
+                    client_task_store
+                        .create_task(
+                            CreateTaskOptions {
+                                ttl: create_task_result.task.ttl,
+                                poll_interval: create_task_result.task.poll_interval,
+                                meta: create_task_result.meta.clone(),
+                            },
+                            client_response.id.clone(),
+                            ServerJsonrpcRequest::new(client_response.id, request_to_store),
+                            None,
+                        )
+                        .await;
+                }
+            } else {
+                return Err(RpcError::internal_error()
+                    .with_message("No eligible request found for task storage.".to_string())
+                    .into());
+            }
+        }
+
+        return Ok(client_response.result);
     }
 
     /// Sends an elicitation request to the client to prompt user input and returns the received response.
@@ -161,6 +202,42 @@ pub trait McpServer: Sync + Send {
             .request(RequestFromServer::ElicitRequest(params), None)
             .await?;
         ElicitResult::try_from(response).map_err(|err| err.into())
+    }
+
+    async fn request_elicitation_task(
+        &self,
+        params: ElicitRequestParams,
+    ) -> SdkResult<CreateTaskResult> {
+        if !params.is_task_augmented() {
+            return Err(RpcError::invalid_params()
+                .with_message(
+                    "Invalid parameters: the request is not identified as task-augmented."
+                        .to_string(),
+                )
+                .into());
+        }
+        let response = self
+            .request(RequestFromServer::ElicitRequest(params), None)
+            .await?;
+
+        let response = CreateTaskResult::try_from(response)?;
+
+        // if let Some(client_task_store) = self.client_task_store() {
+        //     client_task_store
+        //         .create_task(
+        //             CreateTaskOptions {
+        //                 ttl: response.task.ttl,
+        //                 poll_interval: response.task.poll_interval,
+        //                 meta: response.meta,
+        //             },
+        //             request_id,
+        //             request,
+        //             session_id,
+        //         )
+        //         .await;
+        // }
+
+        Ok(response)
     }
 
     /// Request a list of root URIs from the client. Roots allow

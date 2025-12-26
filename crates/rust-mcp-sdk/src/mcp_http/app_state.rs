@@ -1,6 +1,6 @@
 use crate::mcp_traits::McpServerHandler;
 use crate::session_store::SessionStore;
-use crate::task_store::ServerTaskStore;
+use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use crate::{id_generator::FastIdGenerator, mcp_traits::IdGenerator, schema::InitializeResult};
 use rust_mcp_transport::event_store::EventStore;
 use rust_mcp_transport::{SessionId, TransportOptions};
@@ -24,4 +24,5 @@ pub struct McpAppState {
     /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
     pub event_store: Option<Arc<dyn EventStore>>,
     pub task_store: Option<Arc<ServerTaskStore>>,
+    pub client_task_store: Option<Arc<ClientTaskStore>>,
 }

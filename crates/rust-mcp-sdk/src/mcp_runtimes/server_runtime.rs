@@ -10,7 +10,7 @@ use crate::schema::{
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
-use crate::task_store::ServerTaskStore;
+use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use crate::utils::AbortTaskOnDrop;
 use async_trait::async_trait;
 use futures::future::try_join_all;
@@ -52,6 +52,7 @@ pub struct ServerRuntime {
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
     task_store: Option<Arc<ServerTaskStore>>,
+    client_task_store: Option<Arc<ClientTaskStore>>,
 }
 
 pub struct McpServerOptions<T>
@@ -68,12 +69,17 @@ where
     pub transport: T,
     pub handler: Arc<dyn McpServerHandler>,
     pub task_store: Option<Arc<ServerTaskStore>>,
+    pub client_task_store: Option<Arc<ClientTaskStore>>,
 }
 
 #[async_trait]
 impl McpServer for ServerRuntime {
     fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
         self.task_store.clone()
+    }
+
+    fn client_task_store(&self) -> Option<Arc<ClientTaskStore>> {
+        self.client_task_store.clone()
     }
 
     /// Set the client details, storing them in client_details
@@ -596,6 +602,7 @@ impl ServerRuntime {
         session_id: SessionId,
         auth_info: Option<AuthInfo>,
         task_store: Option<Arc<ServerTaskStore>>,
+        client_task_store: Option<Arc<ClientTaskStore>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 
@@ -611,6 +618,7 @@ impl ServerRuntime {
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(auth_info),
             task_store,
+            client_task_store,
         })
     }
 
@@ -638,6 +646,7 @@ impl ServerRuntime {
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(None),
             task_store: options.task_store,
+            client_task_store: options.client_task_store,
         });
 
         let runtime_clone = runtime.clone();

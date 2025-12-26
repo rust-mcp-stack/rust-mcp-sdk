@@ -34,6 +34,7 @@ mod protocol_compatibility_on_server {
             }
             .to_mcp_server_handler(),
             task_store: None,
+            client_task_store: None,
         });
 
         handler

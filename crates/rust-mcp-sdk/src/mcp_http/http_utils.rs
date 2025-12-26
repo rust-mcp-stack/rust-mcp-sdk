@@ -385,6 +385,7 @@ pub(crate) async fn start_new_session(
         session_id.to_owned(),
         auth_info,
         state.task_store.clone(),
+        state.client_task_store.clone(),
     );
 
     tracing::info!("a new client joined : {}", &session_id);
@@ -746,6 +747,7 @@ pub(crate) async fn handle_sse_connection(
         session_id.to_owned(),
         auth_info,
         state.task_store.clone(),
+        state.client_task_store.clone(),
     );
 
     state

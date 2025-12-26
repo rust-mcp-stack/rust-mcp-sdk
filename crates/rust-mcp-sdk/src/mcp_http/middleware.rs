@@ -106,7 +106,8 @@ mod tests {
             transport_options: Arc::new(rust_mcp_transport::TransportOptions::default()),
             enable_json_response: false,
             event_store: None,
-            task_store:None
+            task_store:None,
+            client_task_store:None
         })
     }
 

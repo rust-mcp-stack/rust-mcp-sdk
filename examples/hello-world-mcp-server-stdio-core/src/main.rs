@@ -56,6 +56,7 @@ async fn main() -> SdkResult<()> {
         transport,
         handler: handler.to_mcp_server_handler(),
         task_store: None,
+        client_task_store: None,
     });
 
     // STEP 5: Start the server

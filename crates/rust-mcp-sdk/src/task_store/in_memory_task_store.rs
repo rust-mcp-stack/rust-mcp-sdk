@@ -1,21 +1,34 @@
 use super::{CreateTaskOptions, TaskStore};
-use crate::id_generator::FastIdGenerator;
+use crate::error::SdkResult;
 use crate::task_store::TaskStatusSignal;
 use crate::utils::{current_utc_time, iso8601_time};
-use crate::IdGenerator;
+use crate::{id_generator::FastIdGenerator, IdGenerator};
 use async_trait::async_trait;
-use futures::{stream, Stream};
-use rust_mcp_schema::{ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams};
-use std::collections::{BTreeMap, HashMap};
+use futures::{future::BoxFuture, stream, Stream};
+use rust_mcp_schema::{
+    GetTaskResult, ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams,
+};
+use rust_mcp_transport::{SessionId, TaskId};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::fmt::{Debug, Display};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-const DEFAULT_PAGE_SIZE: usize = 50;
+pub type GetTaskCallback = Box<
+    dyn Fn(TaskId, Option<SessionId>) -> BoxFuture<'static, SdkResult<GetTaskResult>>
+        + Send
+        + Sync
+        + 'static,
+>;
 
-#[derive(Clone)]
+type TaskPollingEntry = (Instant, i64, TaskId, Option<SessionId>);
+
+const DEFAULT_PAGE_SIZE: usize = 50;
+const DEFAULT_POLL_INTERVAL: i64 = 1250;
+
 pub struct InMemoryTaskStore<Req, Res>
 where
     Req: Clone + Send + Sync + 'static,
@@ -64,6 +77,76 @@ struct InMemoryTaskStoreInner<Req, Res> {
     // For simple reverse-chronological pagination (newest first)
     // session_id => Vec<task_id> sorted by created_at descending
     ordered_task_ids: HashMap<Option<String>, Vec<String>>,
+    // A min-heap for scheduling task-status polling when this task store is used
+    // to hold requester tasks while waiting for the other party to complete them.
+    pub poll_schedule: Option<BinaryHeap<Reverse<TaskPollingEntry>>>, // min-heap by (next_poll_time, poll_interval,...)
+}
+
+impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
+    pub(crate) fn re_schedule(&mut self, tasks: &mut Vec<(TaskId, Option<SessionId>, i64)>) {
+        let Some(poll_schedule) = self.poll_schedule.as_mut() else {
+            return;
+        };
+
+        let now = Instant::now();
+        let to_reschedule = tasks.drain(0..);
+
+        for (task_id, session_id, poll_interval) in to_reschedule {
+            let next_poll = now
+                .checked_add(Duration::from_millis(poll_interval as u64))
+                .unwrap_or(Instant::now());
+            poll_schedule.push(Reverse((next_poll, poll_interval, task_id, session_id)));
+        }
+    }
+
+    pub(crate) fn task_exists(&self, task_id: &str, session_id: &Option<String>) -> bool {
+        self.tasks
+            .get(session_id)
+            .and_then(|session_map| session_map.get(task_id))
+            .is_some()
+    }
+
+    pub(crate) fn next_sleep_duration(&self) -> Duration {
+        let now = Instant::now();
+
+        if let Some(poll_schedule) = self.poll_schedule.as_ref() {
+            if let Some(Reverse(entry)) = poll_schedule.peek() {
+                return entry.0.duration_since(now);
+            }
+        };
+
+        Duration::from_millis(DEFAULT_POLL_INTERVAL as u64)
+    }
+
+    pub(crate) fn tasks_to_poll(&mut self) -> Vec<(TaskId, Option<SessionId>, i64)> {
+        let now = Instant::now();
+
+        let Some(poll_schedule) = self.poll_schedule.as_mut() else {
+            return vec![];
+        };
+
+        let mut task_ids = Vec::new();
+
+        while let Some(Reverse(entry)) = poll_schedule.peek() {
+            let (next_poll, poll_interval, task_id, session_id) = &entry;
+
+            if next_poll <= &now {
+                // Pop the task from the schedule
+                task_ids.push((
+                    task_id.clone(),
+                    session_id.clone(),
+                    poll_interval.to_owned(),
+                ));
+                poll_schedule.pop();
+
+            // Add task id to the list
+            } else {
+                break; // Stop once the task's next_poll > now
+            }
+        }
+
+        task_ids
+    }
 }
 
 impl<Req, Res> InMemoryTaskStore<Req, Res>
@@ -76,11 +159,28 @@ where
             inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
                 tasks: HashMap::new(),
                 ordered_task_ids: HashMap::new(),
+                poll_schedule: None,
             })),
             broadcast: tokio::sync::broadcast::channel(64).0,
             page_size: page_size.unwrap_or(DEFAULT_PAGE_SIZE),
             id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
         }
+    }
+
+    pub fn new_with_polling(get_task_callback: GetTaskCallback) -> Self {
+        let instance = Self {
+            inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
+                tasks: HashMap::new(),
+                ordered_task_ids: HashMap::new(),
+                poll_schedule: Some(BinaryHeap::new()),
+            })),
+            broadcast: tokio::sync::broadcast::channel(64).0,
+            page_size: DEFAULT_PAGE_SIZE,
+            id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
+        };
+
+        instance.watch_tasks_with_polling(instance.inner.clone(), get_task_callback);
+        instance
     }
 }
 
@@ -106,6 +206,51 @@ where
             ttl: task.ttl,
         };
         self.publish_status_change(params, session_id).await;
+    }
+
+    fn watch_tasks_with_polling(
+        &self,
+        inner: Arc<RwLock<InMemoryTaskStoreInner<Req, Res>>>,
+        get_task_callback: GetTaskCallback,
+    ) {
+        tokio::spawn(async move {
+            loop {
+                let mut to_reschedule: Vec<(TaskId, Option<SessionId>, i64)> = Vec::new();
+                let tasks_to_poll = {
+                    let mut guard = inner.write().await;
+                    guard.tasks_to_poll()
+                };
+
+                for (task_id, session_id, poll_interval) in tasks_to_poll {
+                    // TODO: avoid clone
+                    match get_task_callback(task_id.clone(), session_id.clone()).await {
+                        Ok(result) => {
+                            if result.is_terminal() {
+                            } else {
+                                to_reschedule.push((task_id.clone(), session_id, poll_interval));
+                            }
+                        }
+                        Err(_err) => {
+                            let guard = inner.read().await;
+                            // re-schedule if task still exists and not expired
+                            if guard.task_exists(&task_id, &session_id) {
+                                to_reschedule.push((task_id, session_id, poll_interval));
+                            }
+                        }
+                    }
+                }
+
+                if !to_reschedule.is_empty() {
+                    let mut guard = inner.write().await;
+                    guard.re_schedule(&mut to_reschedule)
+                }
+
+                let guard = inner.read().await;
+                let sleep_duration = guard.next_sleep_duration();
+
+                tokio::time::sleep(sleep_duration).await;
+            }
+        });
     }
 }
 
@@ -183,6 +328,21 @@ where
                 .map(|ttl| current_utc_time(Some(ttl)).unix_timestamp()),
             meta: task_params.meta,
         };
+
+        // schedule the tasl for polling
+        if let Some(schedule) = inner.poll_schedule.as_mut() {
+            let poll_interval: i64 = task_params.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL);
+            let next_poll = Instant::now()
+                .checked_add(Duration::from_millis(poll_interval as u64))
+                .unwrap_or(Instant::now());
+
+            schedule.push(Reverse((
+                next_poll,
+                poll_interval,
+                task_id.clone(),
+                session_id.clone(),
+            )));
+        }
 
         tracing::debug!("New task created: {entry}");
 
@@ -670,5 +830,419 @@ mod tests {
         assert_eq!(ids[0], task3.task_id);
         assert_eq!(ids[1], task2.task_id);
         assert_eq!(ids[2], task1.task_id);
+    }
+}
+
+#[cfg(test)]
+mod polling_tests {
+    use super::*;
+    use crate::*;
+    use rust_mcp_schema::RpcError;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::Mutex;
+    use tokio::time::{advance, pause, resume};
+    use tracing::Instrument;
+
+    fn dummy_request() -> serde_json::Value {
+        serde_json::json!({})
+    }
+
+    // Helper to build a Working GetTaskResult (to avoid repeating fields)
+    fn working_result(task_id: TaskId) -> GetTaskResult {
+        GetTaskResult {
+            created_at: "".to_string(),
+            last_updated_at: "".to_string(),
+            meta: None,
+            poll_interval: None,
+            status: TaskStatus::Working,
+            status_message: None,
+            task_id,
+            ttl: 60_000,
+            extra: None,
+        }
+    }
+
+    // Helper to build a Completed result
+    fn completed_result(task_id: TaskId) -> GetTaskResult {
+        GetTaskResult {
+            status: TaskStatus::Completed,
+            task_id: task_id.clone(),
+            ..working_result(task_id.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn new_with_polling_initializes_polling_schedule() {
+        pause();
+
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(
+            Box::new(|task_id, _| {
+                Box::pin(async {
+                    Ok(GetTaskResult {
+                        created_at: "".to_string(),
+                        last_updated_at: "".to_string(),
+                        meta: None,
+                        poll_interval: Some(500),
+                        status: TaskStatus::Working,
+                        status_message: None,
+                        task_id,
+                        ttl: 60_000,
+                        extra: None,
+                    })
+                })
+            }),
+        );
+
+        let created = store
+            .create_task(
+                CreateTaskOptions {
+                    ttl: None,
+                    poll_interval: Some(500),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        // Advance just past the first poll time
+        advance(Duration::from_millis(600)).await;
+
+        // Force one loop iteration by sleeping a bit (the spawned task runs in background)
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let inner = store.inner.read().await;
+        assert!(inner.poll_schedule.is_some());
+        let schedule = inner.poll_schedule.as_ref().unwrap();
+        assert!(!schedule.is_empty(), "Heap should have scheduled the task");
+
+        // The task should have been rescheduled
+        let peeked = schedule.peek().unwrap();
+        let (next_time, interval, task_id, _) = &peeked.0;
+        assert_eq!(task_id, &created.task_id);
+        assert_eq!(*interval, 500);
+        assert!(next_time > &Instant::now());
+    }
+
+    #[tokio::test]
+    async fn new_with_polling_initializes_schedule_and_schedules_created_tasks() {
+        let poll_count = Arc::new(Mutex::new(0));
+        let count_clone = poll_count.clone();
+
+        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+            let count = count_clone.clone();
+            Box::pin(async move {
+                *count.lock().await += 1;
+                Ok(working_result("dummy".to_string()))
+            })
+        });
+
+        let store =
+            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+
+        // Create one task with short interval
+        store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(150),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        // Wait past the first poll
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let count = *poll_count.lock().await;
+        assert!(count >= 1, "Task should have been polled at least once");
+
+        // Wait a bit more — should be polled again
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let count2 = *poll_count.lock().await;
+        assert!(
+            count2 >= 2,
+            "Task should have been rescheduled and polled again"
+        );
+    }
+
+    #[tokio::test]
+    async fn polling_respects_different_intervals_shortest_first() {
+        let poll_order = Arc::new(Mutex::new(Vec::new()));
+        let order_clone = poll_order.clone();
+
+        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+            let order = order_clone.clone();
+            Box::pin(async move {
+                order.lock().await.push(task_id.clone());
+                Ok(working_result(task_id))
+            })
+        });
+
+        let store =
+            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+
+        // Create tasks: short, medium, long
+        let task_short = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(200),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        let task_medium = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(500),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                2.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        let task_long = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(1000),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                3.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        // Wait just past shortest interval → only short should fire
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        let order = poll_order.lock().await;
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0], task_short.task_id);
+        drop(order);
+        poll_order.lock().await.clear();
+
+        // Wait more → short again (~400ms total), medium at 500ms
+        tokio::time::sleep(Duration::from_millis(350)).await;
+
+        let order = poll_order.lock().await.clone();
+        assert_eq!(order.len(), 2);
+        assert_eq!(order[0], task_short.task_id); // second poll of short
+        assert_eq!(order[1], task_medium.task_id); // first poll of medium
+        drop(order);
+        poll_order.lock().await.clear();
+
+        // Wait more → long at 1000ms, short again at ~600ms
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let order = poll_order.lock().await.clone();
+        assert!(order.contains(&task_short.task_id));
+        assert!(order.contains(&task_long.task_id));
+    }
+
+    #[tokio::test]
+    async fn terminal_result_stops_rescheduling_that_task() {
+        let poll_count = Arc::new(Mutex::new(0));
+        let should_complete = Arc::new(Mutex::new(false));
+
+        let count_clone = poll_count.clone();
+        let complete_clone = should_complete.clone();
+
+        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+            let count = count_clone.clone();
+            let complete = complete_clone.clone();
+            Box::pin(async move {
+                *count.lock().await += 1;
+                let is_complete = *complete.lock().await;
+                if is_complete {
+                    Ok(completed_result(task_id))
+                } else {
+                    Ok(working_result(task_id))
+                }
+            })
+        });
+
+        let store =
+            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+
+        store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(200),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        // First poll → Working
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert_eq!(*poll_count.lock().await, 1);
+
+        // Second poll → still Working
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert_eq!(*poll_count.lock().await, 2);
+
+        // Now make it return terminal on next poll
+        *should_complete.lock().await = true;
+
+        // Third poll → should return Completed and NOT be rescheduled
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert_eq!(*poll_count.lock().await, 3);
+
+        // Wait much longer — no more polls
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        assert_eq!(
+            *poll_count.lock().await,
+            3,
+            "No further polling after terminal state"
+        );
+    }
+
+    #[tokio::test]
+    async fn error_in_callback_does_not_stop_rescheduling() {
+        let poll_count = Arc::new(Mutex::new(0));
+        let count_clone = poll_count.clone();
+
+        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+            let count = count_clone.clone();
+            Box::pin(async move {
+                let mut c = count.lock().await;
+                *c += 1;
+                // Fail on the 3rd poll
+                if *c == 3 {
+                    Err(RpcError::internal_error()
+                        .with_message("simulated failure".into())
+                        .into())
+                } else {
+                    Ok(working_result("dummy".to_string()))
+                }
+            })
+        });
+
+        let store =
+            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+
+        store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(200),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        tokio::time::sleep(Duration::from_millis(220)).await;
+        assert_eq!(*poll_count.lock().await, 1);
+
+        tokio::time::sleep(Duration::from_millis(220)).await;
+        assert_eq!(*poll_count.lock().await, 2);
+
+        // This one fails
+        tokio::time::sleep(Duration::from_millis(220)).await;
+        assert_eq!(*poll_count.lock().await, 3);
+
+        // But it should still be rescheduled
+        tokio::time::sleep(Duration::from_millis(220)).await;
+        assert_eq!(*poll_count.lock().await, 4);
+
+        tokio::time::sleep(Duration::from_millis(220)).await;
+        assert_eq!(*poll_count.lock().await, 5);
+    }
+
+    #[tokio::test]
+    async fn multiple_tasks_with_varying_intervals_are_polled_correctly_over_time() {
+        let poll_order = Arc::new(Mutex::new(Vec::new()));
+        let order_clone = poll_order.clone();
+
+        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+            let order = order_clone.clone();
+            Box::pin(async move {
+                order.lock().await.push(task_id.clone());
+                Ok(working_result(task_id))
+            })
+        });
+
+        let store =
+            InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new_with_polling(callback);
+
+        let task_a = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(300),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+        let task_b = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(500),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                2.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+        let task_c = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(800),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                3.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+
+        // Let run for ~1.2 seconds
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+
+        let order = poll_order.lock().await;
+        let polls: std::collections::HashMap<_, usize> =
+            order
+                .iter()
+                .fold(std::collections::HashMap::new(), |mut acc, id| {
+                    *acc.entry(id).or_insert(0) += 1;
+                    acc
+                });
+
+        // task_a (300ms): should be polled ~4 times (300,600,900,1200)
+        assert!(polls[&task_a.task_id] >= 3);
+
+        // task_b (500ms): ~2-3 times
+        assert!(polls[&task_b.task_id] >= 2);
+
+        // task_c (800ms): ~1-2 times
+        assert!(polls[&task_c.task_id] >= 1);
     }
 }

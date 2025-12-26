@@ -38,5 +38,8 @@ pub use utils::SseEvent;
 pub type SessionId = String;
 // Type alias for stream identifier (that will be used at the transport scope), represented as a String
 pub type StreamId = String;
+
+// Type alias for mcp task identifier, represented as a String
+pub type TaskId = String;
 // Type alias for event (MCP message) identifier, represented as a String
 pub type EventId = String;

@@ -77,6 +77,7 @@ async fn main() -> SdkResult<()> {
         handler,
         server_details,
         task_store: None,
+        client_task_store: None,
     });
     server.start().await
 }

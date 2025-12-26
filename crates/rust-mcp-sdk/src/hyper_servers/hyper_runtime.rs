@@ -75,6 +75,8 @@ impl HyperRuntime {
             }
         }
 
+        // if let Some(client_task_store) = state_clone.client_task_store.clone() {}
+
         Ok(Self {
             state,
             server_task,

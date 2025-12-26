@@ -19,7 +19,7 @@ use crate::{
     mcp_server::hyper_runtime::HyperRuntime,
     mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
-    task_store::ServerTaskStore,
+    task_store::{ClientTaskStore, ServerTaskStore},
 };
 use crate::{mcp_http::Middleware, schema::InitializeResult};
 use axum::Router;
@@ -61,9 +61,30 @@ pub struct HyperServerOptions {
     /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
     pub event_store: Option<Arc<dyn EventStore>>,
 
-    /// Task store for task-augmented request support
+    /// Task store for handling incoming task-augmented requests from the client.
+    /// In other words, for tasks executed on this server.
+    ///
+    /// When the server receives a task-augmented request (e.g., on `tools/call` or other supported methods),
+    /// it uses this store to create, manage, and track the lifecycle of the task. This includes generating
+    /// unique task IDs, storing task state, enforcing TTL, and providing status/results via `tasks/get`,
+    /// `tasks/result`, etc.
+    ///
+    /// See the MCP tasks specification for details:
     /// <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
     pub task_store: Option<Arc<ServerTaskStore>>,
+
+    /// Task store for managing outgoing task-augmented requests sent to the client.
+    /// In other words, for tasks executed on the client.
+    ///
+    /// When server (acting as requestor) sends a task-augmented request to the client, it uses this store
+    /// to track the task ID, poll for status updates using `tasks/get` (respecting the suggested `pollInterval`),
+    /// retrieve results via `tasks/result` once completed.
+    ///
+    /// Polling continues until the task reaches a terminal status (`completed`, `failed`, or `cancelled`).
+    ///
+    /// See the MCP tasks specification for details:
+    /// <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
+    pub client_task_store: Option<Arc<ClientTaskStore>>,
 
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
@@ -250,6 +271,7 @@ impl Default for HyperServerOptions {
             #[cfg(feature = "auth")]
             auth: None,
             task_store: None,
+            client_task_store: None,
         }
     }
 }
@@ -293,6 +315,7 @@ impl HyperServer {
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
             event_store: server_options.event_store.as_ref().map(Arc::clone),
             task_store: server_options.task_store.take(),
+            client_task_store: server_options.client_task_store.take(),
         });
 
         // populate middlewares

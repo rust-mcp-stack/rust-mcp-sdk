@@ -1,6 +1,9 @@
 use super::ServerRuntime;
 #[cfg(feature = "hyper-server")]
-use crate::{auth::AuthInfo, task_store::ServerTaskStore};
+use crate::{
+    auth::AuthInfo,
+    task_store::{ClientTaskStore, ServerTaskStore},
+};
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
@@ -62,8 +65,16 @@ pub(crate) fn create_server_instance(
     session_id: SessionId,
     auth_info: Option<AuthInfo>,
     task_store: Option<Arc<ServerTaskStore>>,
+    client_task_store: Option<Arc<ClientTaskStore>>,
 ) -> Arc<ServerRuntime> {
-    ServerRuntime::new_instance(server_details, handler, session_id, auth_info, task_store)
+    ServerRuntime::new_instance(
+        server_details,
+        handler,
+        session_id,
+        auth_info,
+        task_store,
+        client_task_store,
+    )
 }
 
 pub(crate) struct ServerRuntimeInternalHandler<H> {
