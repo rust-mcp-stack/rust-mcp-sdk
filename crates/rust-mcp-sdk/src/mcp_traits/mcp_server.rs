@@ -169,6 +169,8 @@ pub trait McpServer: Sync + Send {
         let client_response = client_message.as_response()?;
 
         // track awaiting tasks in the client_task_store
+        // CreateTaskResult indicates that a task-augmented request was sent
+        // we keep request tasks in client_task_store and poll until task is in terminal status
         if let ResultFromClient::CreateTaskResult(create_task_result) = &client_response.result {
             if let Some(request_to_store) = request_clone {
                 if let Some(client_task_store) = self.client_task_store() {
@@ -181,7 +183,7 @@ pub trait McpServer: Sync + Send {
                             },
                             client_response.id.clone(),
                             ServerJsonrpcRequest::new(client_response.id, request_to_store),
-                            None,
+                            self.session_id(),
                         )
                         .await;
                 }
@@ -223,21 +225,6 @@ pub trait McpServer: Sync + Send {
             .await?;
 
         let response = CreateTaskResult::try_from(response)?;
-
-        // if let Some(client_task_store) = self.client_task_store() {
-        //     client_task_store
-        //         .create_task(
-        //             CreateTaskOptions {
-        //                 ttl: response.task.ttl,
-        //                 poll_interval: response.task.poll_interval,
-        //                 meta: response.meta,
-        //             },
-        //             request_id,
-        //             request,
-        //             session_id,
-        //         )
-        //         .await;
-        // }
 
         Ok(response)
     }

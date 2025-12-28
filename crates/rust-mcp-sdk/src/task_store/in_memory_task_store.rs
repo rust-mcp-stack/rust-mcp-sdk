@@ -5,15 +5,19 @@ use crate::utils::{current_utc_time, iso8601_time};
 use crate::{id_generator::FastIdGenerator, IdGenerator};
 use async_trait::async_trait;
 use futures::{future::BoxFuture, stream, Stream};
-use rust_mcp_schema::{ListTasksResult, RequestId, Task, TaskStatus, TaskStatusNotificationParams};
+use rust_mcp_schema::{
+    ListTasksResult, RequestId, RpcError, Task, TaskStatus, TaskStatusNotificationParams,
+};
 use rust_mcp_transport::{SessionId, TaskId};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::fmt::{Debug, Display};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::{oneshot, RwLock};
+use tokio::task::JoinHandle;
 
 /// Parameters returned by a task status polling callback.
 ///
@@ -51,6 +55,7 @@ where
     inner: Arc<tokio::sync::RwLock<InMemoryTaskStoreInner<Req, Res>>>,
     page_size: usize,
     broadcast: tokio::sync::broadcast::Sender<(TaskStatusNotificationParams, Option<String>)>,
+    polling_task_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Debug)]
@@ -62,6 +67,7 @@ struct TaskEntry<Req, Res> {
     #[allow(unused)]
     expires_at: Option<i64>, // Unix millis, for reference (optional now)
     meta: Option<serde_json::Map<String, serde_json::Value>>,
+    result_tx: Option<tokio::sync::oneshot::Sender<(TaskStatus, Option<Res>)>>,
 }
 
 impl<Req, Res> Display for TaskEntry<Req, Res> {
@@ -121,6 +127,16 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
             .and_then(|session_map| session_map.get(task_id))
     }
 
+    pub(crate) fn remove_task(
+        &mut self,
+        task_id: &str,
+        session_id: &Option<String>,
+    ) -> Option<TaskEntry<Req, Res>> {
+        self.tasks
+            .get_mut(session_id)
+            .and_then(|session_map| session_map.remove(task_id))
+    }
+
     pub(crate) fn next_sleep_duration(&self) -> Duration {
         let now = Instant::now();
 
@@ -158,6 +174,24 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
 
         task_ids
     }
+
+    async fn subscribe_to_task(
+        &mut self,
+        task_id: &str,
+        session_id: &Option<String>,
+    ) -> Option<Receiver<(TaskStatus, Option<Res>)>> {
+        let Some(entry) = self
+            .tasks
+            .get_mut(session_id)
+            .and_then(|session_map| session_map.get_mut(task_id))
+        else {
+            return None;
+        };
+
+        let (tx_response, rx_response) = oneshot::channel::<(TaskStatus, Option<Res>)>();
+        entry.result_tx = Some(tx_response);
+        Some(rx_response)
+    }
 }
 
 impl<Req, Res> InMemoryTaskStore<Req, Res>
@@ -175,6 +209,7 @@ where
             broadcast: tokio::sync::broadcast::channel(64).0,
             page_size: page_size.unwrap_or(DEFAULT_PAGE_SIZE),
             id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
+            polling_task_handle: Mutex::new(None),
         }
     }
 }
@@ -277,6 +312,7 @@ where
                 .ttl
                 .map(|ttl| current_utc_time(Some(ttl)).unix_timestamp()),
             meta: task_params.meta,
+            result_tx: None,
         };
 
         // schedule the tasl for polling
@@ -289,7 +325,12 @@ where
             schedule.push(Reverse((next_poll, task_id.clone(), session_id.clone())));
         }
 
-        tracing::debug!("New task created: {entry}");
+        tracing::debug!(
+            "New task created: {entry} \n{}",
+            session_id
+                .as_ref()
+                .map_or(String::new(), |s| format!("Session: {s}"))
+        );
 
         // Insert into tasks map
         let session_tasks = inner
@@ -341,26 +382,51 @@ where
         task
     }
 
-    fn start_task_polling(&self, get_task_callback: GetTaskCallback) {
+    fn start_task_polling(&self, get_task_callback: GetTaskCallback) -> SdkResult<()> {
+        match self
+            .polling_task_handle
+            .lock()
+            .and_then(|v| Ok(v.is_some()))
+        {
+            Ok(has_value) if has_value => {
+                return Err(RpcError::internal_error()
+                    .with_message("Task polling is already running.")
+                    .into())
+            }
+            Err(err) => {
+                return Err(RpcError::internal_error()
+                    .with_message(err.to_string())
+                    .into())
+            }
+            _ => {}
+        }
+
         let inner = self.inner.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 let mut to_reschedule: Vec<(TaskId, Option<SessionId>, i64)> = Vec::new();
                 let tasks_to_poll = {
                     let mut guard = inner.write().await;
                     guard.tasks_to_poll()
                 };
-
                 for (task_id, session_id) in tasks_to_poll {
-                    // TODO: avoid clone
+                    // TODO: avoid cloning
                     match get_task_callback(task_id.clone(), session_id.clone()).await {
-                        Ok(result) => {
-                            if result.0.is_terminal() {
+                        Ok((task_status, poll_interval)) => {
+                            if *&task_status.is_terminal() {
+                                // remove the task and resolve awaiting task if in terminal state
+                                let mut guard = inner.write().await;
+                                let entry = guard.remove_task(&task_id, &session_id);
+                                if let Some(task_entry) = entry {
+                                    if let Some(result_tx) = task_entry.result_tx {
+                                        result_tx.send((task_status, task_entry.result));
+                                    }
+                                }
                             } else {
                                 to_reschedule.push((
                                     task_id.clone(),
                                     session_id,
-                                    result.1.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                    poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
                                 ));
                             }
                         }
@@ -389,6 +455,42 @@ where
                 tokio::time::sleep(sleep_duration).await;
             }
         });
+
+        let mut lock = match self.polling_task_handle.lock() {
+            Ok(value) => value,
+            Err(err) => {
+                return Err(RpcError::internal_error()
+                    .with_message(err.to_string())
+                    .into())
+            }
+        };
+
+        *lock = Some(handle);
+        Ok(())
+    }
+
+    async fn wait_for_task_result(
+        &self,
+        task_id: &str,
+        session_id: Option<String>,
+    ) -> SdkResult<(TaskStatus, Option<Res>)> {
+        let rx_option = {
+            let mut guard = self.inner.write().await;
+            guard.subscribe_to_task(task_id, &session_id).await
+        };
+
+        let Some(rx) = rx_option else {
+            return Err(RpcError::internal_error()
+                .with_message("task does not exists!")
+                .into());
+        };
+
+        match rx.await {
+            Ok(result) => Ok(result),
+            Err(err) => Err(RpcError::internal_error()
+                .with_message(err.to_string())
+                .into()),
+        }
     }
 
     async fn get_task(&self, task_id: &str, session_id: Option<String>) -> Option<Task> {
@@ -405,17 +507,22 @@ where
         task_id: &str,
         status: TaskStatus,
         result: Res,
-        session_id: Option<String>,
+        session_id: Option<&String>,
     ) -> () {
         let mut inner = self.inner.write().await;
-        if let Some(session_map) = inner.tasks.get_mut(&session_id) {
+        if let Some(session_map) = inner.tasks.get_mut(&session_id.map(|v| v.to_string())) {
             if let Some(entry) = session_map.get_mut(task_id) {
+                let status_has_changed = entry.task.status != status;
+
                 entry.task.status = status;
-                entry.result = Some(result);
+                entry.result = Some(result.clone());
                 entry.task.last_updated_at = iso8601_time(current_utc_time(None));
                 entry.task.status_message = None;
                 tracing::debug!("Task result stored: {entry}");
-                self.notify_status_change(entry, session_id.as_ref()).await;
+
+                if status_has_changed {
+                    self.notify_status_change(entry, session_id).await;
+                }
             }
         }
     }
@@ -833,6 +940,7 @@ mod polling_tests {
     use super::*;
     use crate::*;
     use rust_mcp_schema::RpcError;
+    use serde_json::Value;
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::Mutex;
@@ -1086,7 +1194,7 @@ mod polling_tests {
                 // Fail on the 3rd poll
                 if *c == 3 {
                     Err(RpcError::internal_error()
-                        .with_message("simulated failure".into())
+                        .with_message("simulated failure")
                         .into())
                 } else {
                     Ok((TaskStatus::Working, Some(200)))
@@ -1201,5 +1309,51 @@ mod polling_tests {
 
         // task_c (800ms): ~1-2 times
         assert!(polls[&task_c.task_id] >= 1);
+    }
+
+    #[tokio::test]
+    async fn await_for_task_result() {
+        let poll_count = Arc::new(Mutex::new(0));
+        let count_clone = poll_count.clone();
+
+        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+            let count = count_clone.clone();
+            Box::pin(async move {
+                *count.lock().await += 1;
+                Ok((TaskStatus::Completed, Some(150)))
+            })
+        });
+
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
+        store.start_task_polling(callback).unwrap();
+
+        // Create one task with short interval
+        let task = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: Some(150),
+                    ttl: Some(60_000),
+                    meta: None,
+                },
+                1.into(),
+                dummy_request(),
+                None,
+            )
+            .await;
+        store
+            .store_task_result(
+                &task.task_id,
+                TaskStatus::Completed,
+                Value::from("task result"),
+                None,
+            )
+            .await;
+        let result = store
+            .wait_for_task_result(&task.task_id, None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.0, TaskStatus::Completed);
+        assert_eq!(result.1, Some(Value::from("task result")));
     }
 }

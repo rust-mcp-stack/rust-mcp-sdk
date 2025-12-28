@@ -229,14 +229,13 @@ pub async fn read_sse_event_from_stream(
     }
 }
 
-// return sse event as (id, event, data) tuple
+/// return sse event as (id, event, data) tuple
 pub async fn read_sse_event(
     response: Response,
     event_count: usize,
 ) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut stream = response.bytes_stream();
     let events = read_sse_event_from_stream(&mut stream, event_count).await;
-    // drop(stream);
     events
 }
 

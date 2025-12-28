@@ -10,6 +10,8 @@ use rust_mcp_schema::{
 };
 use std::{fmt::Debug, pin::Pin, sync::Arc};
 
+use crate::error::SdkResult;
+
 /// A stream of task status notifications, where each item contains the notification parameters
 /// and an optional session_id
 pub type TaskStatusStream =
@@ -113,7 +115,32 @@ where
     /// Model Context Protocol task flow — i.e., when a task-augmented request has
     /// been sent to the remote side (the receiver) and the local side needs to
     /// actively monitor progress via repeated `tasks/get` calls.
-    fn start_task_polling(&self, get_task_callback: GetTaskCallback);
+    fn start_task_polling(&self, get_task_callback: GetTaskCallback) -> SdkResult<()>;
+
+    /// Waits asynchronously for the result of a task.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_id` - The unique identifier of the task whose result is awaited.
+    /// * `session_id` - Optional session identifier used to disambiguate or scope the task.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Res)` if the task completes successfully and sends its result.
+    /// * `Err(SdkError)` if:
+    ///   - the task does not exist,
+    ///   - the task result channel is dropped before sending,
+    ///   - or an internal error occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an internal RPC error if the task does not exist or if the sender
+    /// side of the oneshot channel is dropped before producing a result.
+    async fn wait_for_task_result(
+        &self,
+        task_id: &str,
+        session_id: Option<String>,
+    ) -> SdkResult<(TaskStatus, Option<Res>)>;
 
     /// Gets the current status of a task.
     ///
@@ -137,7 +164,7 @@ where
         task_id: &str,
         status: TaskStatus,
         result: Res,
-        session_id: Option<String>,
+        session_id: Option<&String>,
     ) -> ();
 
     /// Retrieves the stored result of a task.

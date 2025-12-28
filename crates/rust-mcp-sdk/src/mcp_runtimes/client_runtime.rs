@@ -158,7 +158,7 @@ impl ClientRuntime {
                 .await?;
         } else {
             return Err(RpcError::invalid_params()
-                .with_message("Incorrect response to InitializeRequest!".into())
+                .with_message("Incorrect response to InitializeRequest!")
                 .into());
         }
 

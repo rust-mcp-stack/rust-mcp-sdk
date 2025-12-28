@@ -4,7 +4,7 @@ use crate::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,
     },
-    task_store::{GetTaskCallback, ServerTaskStore},
+    task_store::{ClientTaskStore, GetTaskCallback, ServerTaskStore},
 };
 use crate::{
     mcp_http::McpAppState,
@@ -19,12 +19,12 @@ use crate::{
 };
 use axum_server::Handle;
 use futures::StreamExt;
-use http::status;
 use rust_mcp_schema::{
     schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
-    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, ElicitCompleteParams,
-    ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams, GetTaskPayloadParams,
-    GetTaskResult, ProgressNotificationParams, RpcError, TaskStatusNotificationParams,
+    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
+    ElicitCompleteParams, ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams,
+    GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams, RpcError,
+    TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
@@ -78,9 +78,11 @@ impl HyperRuntime {
 
         if let Some(client_task_store) = state.client_task_store.clone() {
             let state_clone = state.clone();
+            let task_store_clone = client_task_store.clone();
 
             let callback: GetTaskCallback = Box::new(move |task_id, session_id| {
                 let state_clone = state_clone.clone();
+                let task_store_clone = task_store_clone.clone();
                 Box::pin(async move {
                     let Some(session) = session_id.as_ref() else {
                         return Err(RpcError::invalid_request()
@@ -101,16 +103,28 @@ impl HyperRuntime {
                         .await?;
 
                     if result.is_terminal() {
-                        // let task_payload = transport
-                        //     .request_get_task_payload(GetTaskPayloadParams { task_id })
-                        //     .await?;
-                        // task_payload
-                    }
+                        let task_payload = transport
+                            .request_get_task_payload(GetTaskPayloadParams {
+                                task_id: task_id.clone(),
+                            })
+                            .await?;
 
-                    return Ok((result.status, result.poll_interval));
+                        task_store_clone
+                            .store_task_result(
+                                task_id.as_str(),
+                                result.status,
+                                task_payload.into(),
+                                Some(session),
+                            )
+                            .await;
+
+                        return Ok((result.status, result.poll_interval));
+                    } else {
+                        return Ok((result.status, result.poll_interval));
+                    }
                 })
             });
-            client_task_store.start_task_polling(callback);
+            client_task_store.start_task_polling(callback)?;
         }
 
         Ok(Self {
@@ -191,6 +205,15 @@ impl HyperRuntime {
     ) -> SdkResult<ElicitResult> {
         let runtime = self.runtime_by_session(session_id).await?;
         runtime.request_elicitation(params).await
+    }
+
+    pub async fn request_elicitation_task(
+        &self,
+        session_id: &SessionId,
+        params: ElicitRequestParams,
+    ) -> SdkResult<CreateTaskResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_elicitation_task(params).await
     }
 
     /// Request a list of root URIs from the client. Roots allow
@@ -484,5 +507,9 @@ impl HyperRuntime {
 
     pub fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
         self.state.task_store.clone()
+    }
+
+    pub fn client_task_store(&self) -> Option<Arc<ClientTaskStore>> {
+        self.state.client_task_store.clone()
     }
 }

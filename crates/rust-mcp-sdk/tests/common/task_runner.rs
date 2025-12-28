@@ -66,7 +66,7 @@ impl McpTaskRunner {
                                     &task_id_clone,
                                     final_status,
                                     serde_json::from_str(&result).unwrap(),
-                                    session_id.clone(),
+                                    session_id.as_ref(),
                                 )
                                 .await
                         }
@@ -151,7 +151,7 @@ impl McpTaskRunner {
                                     &task_id_clone,
                                     final_status,
                                     serde_json::from_str(&result).unwrap(),
-                                    session_id.clone(),
+                                    session_id.as_ref(),
                                 )
                                 .await
                         }

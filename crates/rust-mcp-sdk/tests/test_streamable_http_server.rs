@@ -103,7 +103,7 @@ pub async fn initialize_server(
         event_store: Some(Arc::new(InMemoryEventStore::default())),
         auth: oauth_metadata_provider,
         task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
-
+        client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
         ..Default::default()
     };
 
