@@ -76,6 +76,7 @@ impl HyperRuntime {
             }
         }
 
+        // Task polling for server initiated tasks
         if let Some(client_task_store) = state.client_task_store.clone() {
             let state_clone = state.clone();
             let task_store_clone = client_task_store.clone();

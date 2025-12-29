@@ -419,7 +419,8 @@ where
                                 let entry = guard.remove_task(&task_id, &session_id);
                                 if let Some(task_entry) = entry {
                                     if let Some(result_tx) = task_entry.result_tx {
-                                        result_tx.send((task_status, task_entry.result));
+                                        // if fails, then listener is gone, no need to retry
+                                        let _ = result_tx.send((task_status, task_entry.result));
                                     }
                                 }
                             } else {
