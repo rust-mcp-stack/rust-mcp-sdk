@@ -329,8 +329,6 @@ impl ServerRuntime {
             >,
         >,
     ) -> SdkResult<Option<ServerMessage>> {
-        println!(">>> hanfle  {:?} ", message);
-
         let response = match message {
             // Handle a client request
             ClientMessage::Request(client_jsonrpc_request) => {

@@ -1,19 +1,16 @@
 use crate::error::SdkResult;
-use crate::task_store::{ClientTaskStore, ServerTaskStore};
-use crate::{
-    schema::{
-        schema_utils::{
-            ClientMessage, McpMessage, MessageFromClient, NotificationFromClient,
-            RequestFromClient, ResultFromServer, ServerMessage,
-        },
-        CallToolRequestParams, CallToolResult, CompleteRequestParams, GenericResult,
-        GetPromptRequestParams, Implementation, InitializeRequestParams, InitializeResult,
-        NotificationParams, PaginatedRequestParams, ReadResourceRequestParams, RequestId,
-        RequestParams, RpcError, ServerCapabilities, SetLevelRequestParams, SubscribeRequestParams,
-        UnsubscribeRequestParams,
+use crate::schema::{
+    schema_utils::{
+        ClientMessage, McpMessage, MessageFromClient, NotificationFromClient, RequestFromClient,
+        ResultFromServer, ServerMessage,
     },
-    utils::capability_checks::assert_server_request_capabilities,
+    CallToolRequestParams, CallToolResult, CompleteRequestParams, GenericResult,
+    GetPromptRequestParams, Implementation, InitializeRequestParams, InitializeResult,
+    NotificationParams, PaginatedRequestParams, ReadResourceRequestParams, RequestId,
+    RequestParams, RpcError, ServerCapabilities, SetLevelRequestParams, SubscribeRequestParams,
+    UnsubscribeRequestParams,
 };
+use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::ServerTaskResult;
 use rust_mcp_schema::{

@@ -10,15 +10,12 @@ use hyper::StatusCode;
 use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     schema_utils::{ClientJsonrpcRequest, RequestFromClient},
-    CallToolResult, ClientTaskElicitation, CreateTaskResult, ElicitRequest, ElicitRequestParams,
-    ElicitResult, ElicitResultAction, ElicitResultContent, ElicitResultContentPrimitive,
-    GetTaskResult, RequestId, Task, TaskMetadata, TaskStatus,
+    CallToolResult, CreateTaskResult, ElicitRequestParams, ElicitResult, ElicitResultAction,
+    ElicitResultContent, ElicitResultContentPrimitive, GetTaskResult, RequestId, Task,
+    TaskMetadata, TaskStatus,
 };
-use rust_mcp_sdk::{
-    schema::{
-        ClientJsonrpcResponse, ResultFromServer, ServerJsonrpcNotification, ServerJsonrpcResponse,
-    },
-    task_store::TaskStore,
+use rust_mcp_sdk::schema::{
+    ClientJsonrpcResponse, ResultFromServer, ServerJsonrpcNotification, ServerJsonrpcResponse,
 };
 use serde_json::json;
 use std::{collections::HashMap, panic, sync::Arc, time::Duration};
