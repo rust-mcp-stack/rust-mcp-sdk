@@ -4,25 +4,27 @@ use crate::common::{
     test_server_common::{
         create_start_server, initialize_request, LaunchedServer, TestIdGenerator,
     },
-    TestTokenVerifier,
+    TestTokenVerifier, ONE_MILLISECOND,
 };
 use http::header::{ACCEPT, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE};
 use hyper::StatusCode;
+use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     schema_utils::{
         ClientJsonrpcRequest, ClientJsonrpcResponse, ClientMessage, ClientMessages, FromMessage,
-        NotificationFromServer, RequestFromServer, ResultFromServer, RpcMessage, SdkError,
-        SdkErrorCodes, ServerJsonrpcNotification, ServerJsonrpcRequest, ServerJsonrpcResponse,
-        ServerMessages,
+        MessageFromClient, NotificationFromClient, RequestFromClient, ResultFromServer, RpcMessage,
+        SdkError, SdkErrorCodes, ServerJsonrpcNotification, ServerJsonrpcRequest,
+        ServerJsonrpcResponse, ServerMessages,
     },
-    CallToolRequest, CallToolRequestParams, ListRootsResult, ListToolsRequest, LoggingLevel,
-    LoggingMessageNotificationParams, RequestId, RootsListChangedNotification, ServerNotification,
-    ServerRequest, ServerResult,
+    CallToolRequestParams, ElicitResult, ElicitResultContent, ListRootsResult, LoggingLevel,
+    LoggingMessageNotificationParams, RequestId, ServerRequest,
 };
 use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
     mcp_server::HyperServerOptions,
+    schema::ResultFromClient,
+    task_store::InMemoryTaskStore,
 };
 use serde_json::{json, Map, Value};
 use std::{
@@ -37,15 +39,14 @@ use url::Url;
 #[path = "common/common.rs"]
 pub mod common;
 
-const ONE_MILLISECOND: Option<Duration> = Some(Duration::from_millis(1));
 pub const VALID_ACCESS_TOKEN: &str = "valid-access-token";
 
-async fn initialize_server(
+pub async fn initialize_server(
     enable_json_response: Option<bool>,
     auth_token_map: Option<HashMap<&str, AuthInfo>>,
 ) -> Result<(LaunchedServer, String), Box<dyn Error>> {
     let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
+        ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request());
 
     let port = random_port();
 
@@ -101,7 +102,8 @@ async fn initialize_server(
         ping_interval: Duration::from_secs(1),
         event_store: Some(Arc::new(InMemoryEventStore::default())),
         auth: oauth_metadata_provider,
-
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+        client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
         ..Default::default()
     };
 
@@ -223,8 +225,10 @@ async fn should_reject_batch_initialize_request() {
 async fn should_handle_post_requests_via_sse_response_correctly() {
     let (server, session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -242,12 +246,11 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
-    let ResultFromServer::ServerResult(ServerResult::ListToolsResult(result)) = message.result
-    else {
+    let ResultFromServer::ListToolsResult(result) = message.result else {
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -270,9 +273,11 @@ async fn should_call_a_tool_and_return_the_result() {
 
     let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::Integer(1),
-        CallToolRequest::new(CallToolRequestParams {
+        RequestFromClient::CallToolRequest(CallToolRequestParams {
             arguments: Some(map),
             name: "say_hello".to_string(),
+            meta: None,
+            task: None,
         })
         .into(),
     );
@@ -293,8 +298,7 @@ async fn should_call_a_tool_and_return_the_result() {
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
-    let ResultFromServer::ServerResult(ServerResult::CallToolResult(result)) = message.result
-    else {
+    let ResultFromServer::CallToolResult(result) = message.result else {
         panic!("invalid CallToolResult")
     };
 
@@ -313,8 +317,10 @@ async fn should_call_a_tool_and_return_the_result() {
 async fn should_reject_requests_without_a_valid_session_id() {
     let (server, _session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -338,8 +344,10 @@ async fn should_reject_requests_without_a_valid_session_id() {
 async fn should_reject_invalid_session_id() {
     let (server, _session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -359,7 +367,7 @@ async fn should_reject_invalid_session_id() {
     server.hyper_runtime.await_server().await.unwrap()
 }
 
-async fn get_standalone_stream(
+pub async fn get_standalone_stream(
     streamable_url: &str,
     session_id: &str,
     last_event_id: Option<&str>,
@@ -410,12 +418,13 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
     // Send a notification (server-initiated message) that should appear on SSE stream
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("Test notification"),
                 level: rust_mcp_schema::LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await
@@ -424,10 +433,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
     let events = read_sse_event(response, 1).await.unwrap();
     let message: ServerJsonrpcNotification = serde_json::from_str(&events[0].2).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification) = message else {
         panic!("invalid message received!");
     };
 
@@ -508,20 +514,18 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
 
     let message1: ServerJsonrpcRequest = serde_json::from_str(&events[0].2).unwrap();
 
-    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
-    else {
+    let ServerJsonrpcRequest::ListRootsRequest(_) = message1 else {
         panic!("invalid message received!");
     };
 
     let message2: ServerJsonrpcRequest = serde_json::from_str(&events[1].2).unwrap();
 
-    let RequestFromServer::ServerRequest(ServerRequest::ListRootsRequest(_)) = message1.request
-    else {
+    let ServerJsonrpcRequest::ListRootsRequest(_) = message1 else {
         panic!("invalid message received!");
     };
 
     // ensure request_ids are unique
-    assert!(message2.id != message1.id);
+    assert!(message2.request_id() != message1.request_id());
 
     hyper_server.graceful_shutdown(ONE_MILLISECOND);
 }
@@ -536,12 +540,13 @@ async fn should_not_close_get_sse_stream() {
 
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("First notification"),
                 level: rust_mcp_schema::LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await
@@ -551,10 +556,7 @@ async fn should_not_close_get_sse_stream() {
     let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
     let message: ServerJsonrpcNotification = serde_json::from_str(&event.2).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification) = message else {
         panic!("invalid message received!");
     };
 
@@ -566,12 +568,13 @@ async fn should_not_close_get_sse_stream() {
 
     server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("Second notification"),
                 level: rust_mcp_schema::LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await
@@ -580,10 +583,7 @@ async fn should_not_close_get_sse_stream() {
     let event = read_sse_event_from_stream(&mut stream, 1).await.unwrap()[0].clone();
     let message: ServerJsonrpcNotification = serde_json::from_str(&event.2).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification_2,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification_2) = message else {
         panic!("invalid message received!");
     };
 
@@ -642,8 +642,10 @@ async fn should_reject_get_requests() {
 async fn reject_post_requests_without_accept_header() {
     let (server, session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None).into(),
+    );
 
     let mut headers = HashMap::new();
     headers.insert("Accept", "application/json");
@@ -676,8 +678,10 @@ async fn reject_post_requests_without_accept_header() {
 async fn should_reject_unsupported_content_type() {
     let (server, session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None),
+    );
 
     let mut headers = HashMap::new();
     headers.insert("Content-Type", "text/plain");
@@ -712,8 +716,20 @@ async fn should_handle_batch_notification_messages_with_202_response() {
     let (server, session_id) = initialize_server(None, None).await.unwrap();
 
     let batch_notification = ClientMessages::Batch(vec![
-        ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
-        ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
+        ClientMessage::from_message(
+            MessageFromClient::NotificationFromClient(
+                NotificationFromClient::RootsListChangedNotification(None),
+            ),
+            None,
+        )
+        .unwrap(),
+        ClientMessage::from_message(
+            MessageFromClient::NotificationFromClient(
+                NotificationFromClient::RootsListChangedNotification(None),
+            ),
+            None,
+        )
+        .unwrap(),
     ]);
 
     let response = send_post_request(
@@ -753,17 +769,21 @@ async fn should_properly_handle_invalid_json_data() {
 async fn should_send_response_messages_to_the_connection_that_sent_the_request() {
     let (server, session_id) = initialize_server(None, None).await.unwrap();
 
-    let json_rpc_message_1: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message_1: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None).into(),
+    );
 
     let mut map = Map::new();
     map.insert("name".to_string(), Value::String("Ali".to_string()));
 
     let json_rpc_message_2: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::Integer(1),
-        CallToolRequest::new(CallToolRequestParams {
+        RequestFromClient::CallToolRequest(CallToolRequestParams {
             arguments: Some(map),
             name: "say_hello".to_string(),
+            meta: None,
+            task: None,
         })
         .into(),
     );
@@ -794,8 +814,7 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
-    let ResultFromServer::ServerResult(ServerResult::CallToolResult(result)) = message.result
-    else {
+    let ResultFromServer::CallToolResult(result) = message.result else {
         panic!("invalid CallToolResult")
     };
 
@@ -810,12 +829,11 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
-    let ResultFromServer::ServerResult(ServerResult::ListToolsResult(result)) = message.result
-    else {
+    let ResultFromServer::ListToolsResult(result) = message.result else {
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -892,8 +910,10 @@ async fn should_accept_requests_without_protocol_version_header() {
     headers.insert("Content-Type", "application/json");
     headers.insert("Accept", "application/json, text/event-stream");
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None).into(),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -920,8 +940,10 @@ async fn should_reject_requests_with_unsupported_protocol_version() {
     headers.insert("Accept", "application/json, text/event-stream");
     headers.insert("mcp-protocol-version", "1999-15-21");
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None).into(),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -1000,8 +1022,10 @@ async fn should_handle_protocol_version_validation_for_delete_requests() {
 async fn should_return_json_response_for_a_single_request() {
     let (server, session_id) = initialize_server(Some(true), None).await.unwrap();
 
-    let json_rpc_message: ClientJsonrpcRequest =
-        ClientJsonrpcRequest::new(RequestId::Integer(1), ListToolsRequest::new(None).into());
+    let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
+        RequestId::Integer(1),
+        RequestFromClient::ListToolsRequest(None).into(),
+    );
 
     let response = send_post_request(
         &server.streamable_url,
@@ -1021,12 +1045,11 @@ async fn should_return_json_response_for_a_single_request() {
 
     let message = response.json::<ServerJsonrpcResponse>().await.unwrap();
 
-    let ResultFromServer::ServerResult(ServerResult::ListToolsResult(result)) = message.result
-    else {
+    let ResultFromServer::ListToolsResult(result) = message.result else {
         panic!("invalid ListToolsResult")
     };
 
-    assert_eq!(result.tools.len(), 1);
+    assert_eq!(result.tools.len(), 2);
 
     let tool = &result.tools[0];
     assert_eq!(tool.name, "say_hello");
@@ -1046,23 +1069,31 @@ async fn should_return_json_response_for_a_batch_request() {
 
     let json_rpc_message_1: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_1".to_string()),
-        ListToolsRequest::new(None).into(),
+        RequestFromClient::ListToolsRequest(None).into(),
     );
 
     let mut map = Map::new();
     map.insert("name".to_string(), Value::String("Ali".to_string()));
     let json_rpc_message_3: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_2".to_string()),
-        CallToolRequest::new(CallToolRequestParams {
+        RequestFromClient::CallToolRequest(CallToolRequestParams {
             arguments: Some(map),
             name: "say_hello".to_string(),
+            meta: None,
+            task: None,
         })
         .into(),
     );
 
     let batch_message = ClientMessages::Batch(vec![
         json_rpc_message_1.into(),
-        ClientMessage::from_message(RootsListChangedNotification::new(None), None).unwrap(),
+        ClientMessage::from_message(
+            MessageFromClient::NotificationFromClient(
+                NotificationFromClient::RootsListChangedNotification(None),
+            ),
+            None,
+        )
+        .unwrap(),
         json_rpc_message_3.into(),
     ]);
 
@@ -1096,9 +1127,7 @@ async fn should_return_json_response_for_a_batch_request() {
         result_1.request_id().unwrap(),
         RequestId::String("req_1".to_string())
     );
-    let ResultFromServer::ServerResult(ServerResult::ListToolsResult(_)) =
-        result_1.as_response().unwrap().result
-    else {
+    let ResultFromServer::ListToolsResult(_) = result_1.as_response().unwrap().result else {
         panic!("Expected a ListToolsResult");
     };
 
@@ -1107,9 +1136,7 @@ async fn should_return_json_response_for_a_batch_request() {
         result_2.request_id().unwrap(),
         RequestId::String("req_2".to_string())
     );
-    let ResultFromServer::ServerResult(ServerResult::CallToolResult(_)) =
-        result_2.as_response().unwrap().result
-    else {
+    let ResultFromServer::CallToolResult(_) = result_2.as_response().unwrap().result else {
         panic!("Expected a CallToolResult");
     };
 
@@ -1124,16 +1151,18 @@ async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
 
     let json_rpc_message_1: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_1".to_string()),
-        ListToolsRequest::new(None).into(),
+        RequestFromClient::ListToolsRequest(None).into(),
     );
 
     let mut map = Map::new();
     map.insert("name".to_string(), Value::String("Ali".to_string()));
     let json_rpc_message_2: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::String("req_2".to_string()),
-        CallToolRequest::new(CallToolRequestParams {
+        RequestFromClient::CallToolRequest(CallToolRequestParams {
             arguments: Some(map),
             name: "say_hello".to_string(),
+            meta: None,
+            task: None,
         })
         .into(),
     );
@@ -1171,9 +1200,7 @@ async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
         result_1.request_id().unwrap(),
         RequestId::String("req_1".to_string())
     );
-    let ResultFromServer::ServerResult(ServerResult::ListToolsResult(_)) =
-        result_1.as_response().unwrap().result
-    else {
+    let ResultFromServer::ListToolsResult(_) = result_1.as_response().unwrap().result else {
         panic!("Expected a ListToolsResult");
     };
 
@@ -1182,9 +1209,7 @@ async fn should_handle_batch_request_messages_with_sse_stream_for_responses() {
         result_2.request_id().unwrap(),
         RequestId::String("req_2".to_string())
     );
-    let ResultFromServer::ServerResult(ServerResult::CallToolResult(_)) =
-        result_2.as_response().unwrap().result
-    else {
+    let ResultFromServer::CallToolResult(_) = result_2.as_response().unwrap().result else {
         panic!("Expected a CallToolResult");
     };
 }
@@ -1446,24 +1471,26 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification1"),
                 level: LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await;
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification2"),
                 level: LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await;
@@ -1477,10 +1504,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 
     let message: ServerJsonrpcNotification = serde_json::from_str(&data).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification1,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification1) = message else {
         panic!("invalid message received!");
     };
 
@@ -1501,10 +1525,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
 
     // deserialize the message returned by event_store
     let message: ServerJsonrpcNotification = serde_json::from_str(&events.messages[0]).unwrap();
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification2,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification2) = message else {
         panic!("invalid message in store!");
     };
     assert_eq!(notification2.params.data.as_str().unwrap(), "notification2");
@@ -1520,12 +1541,13 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
 
     let _ = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification1"),
                 level: LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await;
@@ -1537,10 +1559,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
 
     let message: ServerJsonrpcNotification = serde_json::from_str(&data).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification1,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification1) = message else {
         panic!("invalid message received!");
     };
 
@@ -1555,12 +1574,13 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     // we send another notification while SSE is disconnected
     let _result = server
         .hyper_runtime
-        .send_logging_message(
+        .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
                 data: json!("notification2"),
                 level: LoggingLevel::Info,
                 logger: None,
+                meta: None,
             },
         )
         .await;
@@ -1574,10 +1594,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     assert_eq!(events.len(), 1);
     let message: ServerJsonrpcNotification = serde_json::from_str(&events[0].2).unwrap();
 
-    let NotificationFromServer::ServerNotification(ServerNotification::LoggingMessageNotification(
-        notification1,
-    )) = message.notification
-    else {
+    let ServerJsonrpcNotification::LoggingMessageNotification(notification1) = message else {
         panic!("invalid message received!");
     };
 
@@ -1661,11 +1678,12 @@ async fn should_call_a_tool_with_auth_info_when_authenticated() {
 
     let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::Integer(1),
-        CallToolRequest::new(CallToolRequestParams {
+        RequestFromClient::CallToolRequest(CallToolRequestParams {
             arguments: None,
             name: "display_auth_info".to_string(),
-        })
-        .into(),
+            meta: None,
+            task: None,
+        }),
     );
 
     let response = send_post_request(
@@ -1691,8 +1709,7 @@ async fn should_call_a_tool_with_auth_info_when_authenticated() {
 
     assert!(matches!(message.id, RequestId::Integer(1)));
 
-    let ResultFromServer::ServerResult(ServerResult::CallToolResult(result)) = message.result
-    else {
+    let ResultFromServer::CallToolResult(result) = message.result else {
         panic!("invalid CallToolResult")
     };
 
@@ -1708,6 +1725,95 @@ async fn should_call_a_tool_with_auth_info_when_authenticated() {
         .iter()
         .all(|s| ["mcp", "mcp:tools"].contains(&s.as_str().unwrap())),);
 }
+
+#[tokio::test]
+async fn should_handle_elicitation() {
+    #[mcp_elicit(message = "Please enter your info", mode = form)]
+    #[derive(JsonSchema)]
+    pub struct UserInfo {
+        #[json_schema(title = "Name", min_length = 5, max_length = 100)]
+        pub name: String,
+        #[json_schema(title = "Email", format = "email")]
+        pub email: Option<String>,
+        #[json_schema(title = "Age", minimum = 15, maximum = 125)]
+        pub age: i32,
+        #[json_schema(title = "Tags")]
+        pub tags: Vec<String>,
+    }
+
+    common::init_tracing();
+    let (server, session_id) = initialize_server(Some(false), None).await.unwrap();
+    let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+    content.insert("name".to_string(), "Alice".into());
+    content.insert("email".to_string(), "alice@Borderland.com".into());
+    content.insert("age".to_string(), 25.into());
+    content.insert("tags".to_string(), vec!["rust", "c++"].into());
+
+    let elicit_response: ElicitResult = ElicitResult {
+        action: rust_mcp_schema::ElicitResultAction::Accept,
+        content: Some(content),
+        meta: None,
+    };
+
+    let elicit_rpc_response = ClientJsonrpcResponse::new(
+        RequestId::Integer(0),
+        ResultFromClient::ElicitResult(elicit_response.clone()),
+    );
+
+    // send a response bac after 500ms delay, to simulate client response
+    let sid_clone = session_id.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(521)).await;
+        let _response = send_post_request(
+            &server.streamable_url,
+            &serde_json::to_string(&elicit_rpc_response).unwrap(),
+            Some(&sid_clone),
+            None,
+        )
+        .await
+        .expect("Request failed");
+    });
+
+    server
+        .hyper_runtime
+        .request_elicitation(&session_id, UserInfo::elicit_request_params())
+        .await
+        .unwrap();
+
+    let message_str = read_sse_event(response, 1)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .2
+        .clone();
+
+    let message: ServerRequest = serde_json::from_str(&message_str).unwrap();
+    assert!(matches!(message, ServerRequest::ElicitRequest(_)));
+
+    // create UserInfo from ElicitResult content
+    let user: UserInfo = UserInfo::from_elicit_result_content(elicit_response.content).unwrap();
+
+    assert_eq!(user.name, "Alice");
+    assert_eq!(user.age, 25);
+    assert_eq!(user.tags, vec!["rust", "c++"]);
+    assert_eq!(user.email.as_ref().unwrap(), "alice@Borderland.com");
+
+    println!("name: {}", user.name);
+    println!("age: {}", user.age);
+    println!(
+        "email: {}",
+        user.email.clone().unwrap_or("not provider".into())
+    );
+    println!("tags: {}", user.tags.join(","));
+
+    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.hyper_runtime.await_server().await.unwrap();
+}
+
 // should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
 // NA: should reject second initialization request

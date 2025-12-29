@@ -69,7 +69,7 @@ impl InquiryUtils {
             return Ok(());
         }
 
-        let tools = self.client.list_tools(None).await?;
+        let tools = self.client.request_tool_list(None).await?;
         self.print_header("Tools");
         self.print_list(
             tools
@@ -93,7 +93,7 @@ impl InquiryUtils {
             return Ok(());
         }
 
-        let prompts = self.client.list_prompts(None).await?;
+        let prompts = self.client.request_prompt_list(None).await?;
 
         self.print_header("Prompts");
         self.print_list(
@@ -117,7 +117,7 @@ impl InquiryUtils {
             return Ok(());
         }
 
-        let resources = self.client.list_resources(None).await?;
+        let resources = self.client.request_resource_list(None).await?;
 
         self.print_header("Resources");
 
@@ -147,7 +147,7 @@ impl InquiryUtils {
             return Ok(());
         }
 
-        let templates = self.client.list_resource_templates(None).await?;
+        let templates = self.client.request_resource_template_list(None).await?;
 
         self.print_header("Resource Templates");
 
@@ -185,9 +185,11 @@ impl InquiryUtils {
         // invoke the tool
         let result = self
             .client
-            .call_tool(CallToolRequestParams {
+            .request_tool_call(CallToolRequestParams {
                 name: "add".to_string(),
                 arguments: Some(params),
+                meta: None,
+                task: None,
             })
             .await?;
 
@@ -204,7 +206,7 @@ impl InquiryUtils {
         for ping_index in 1..=max_pings {
             print!("Ping the server ({ping_index} out of {max_pings})...");
             std::io::stdout().flush().unwrap();
-            let ping_result = self.client.ping(None).await;
+            let ping_result = self.client.ping(None, None).await;
             print!(
                 "\rPing the server ({} out of {}) : {}",
                 ping_index,

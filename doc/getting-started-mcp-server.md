@@ -175,11 +175,7 @@ impl ServerHandler for MyServerHandler {
     }
 
     //Handles incoming CallToolRequest and processes it using the appropriate tool.
-    async fn handle_call_tool_request(
-        &self,
-        request: CallToolRequest,
-        _runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
+    async fn handle_call_tool_request(&self, request: CallToolRequest) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =
             GreetingTools::try_from(request.params).map_err(CallToolError::new)?;
@@ -216,7 +212,9 @@ use rust_mcp_sdk::schema::{
     ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
-    McpServer, StdioTransport, TransportOptions, error::SdkResult, mcp_server::server_runtime,
+    error::SdkResult,
+    mcp_server::{server_runtime, ServerRuntime, ToMcpServerHandler},
+    McpServer, StdioTransport, TransportOptions,
 };
 
 #[tokio::main]
@@ -246,7 +244,7 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     //create the MCP server
-    let server = server_runtime::create_server(server_details, transport, handler);
+    let server = server_runtime::create_server(server_details, transport, handler.to_mcp_server_handler());
 
     // Start the server
     server.start().await

@@ -11,26 +11,22 @@
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
 ](examples/hello-world-mcp-server-stdio)
 
-A high-performance, asynchronous toolkit for building MCP servers and clients.
-Focus on your app's logic while **rust-mcp-sdk** takes care of the rest!
 
-**rust-mcp-sdk** provides the necessary components for developing both servers and clients in the MCP ecosystem.
-Leveraging the [rust-mcp-schema](https://github.com/rust-mcp-stack/rust-mcp-schema) crate simplifies the process of building robust and reliable MCP servers and clients, ensuring consistency and minimizing errors in data handling and message processing.
-
-
-**rust-mcp-sdk**  supports all three official versions of the MCP protocol.
-By default, it uses the **2025-06-18** version, but earlier versions can be enabled via Cargo features.
-
-🚀 The **rust-mcp-sdk** includes a lightweight [Axum](https://github.com/tokio-rs/axum) based server that handles all core functionality seamlessly. Switching between `stdio` and `Streamable HTTP` is straightforward, requiring minimal code changes. The server is designed to efficiently handle multiple concurrent client connections and offers built-in support for SSL.
+A high-performance, asynchronous Rust toolkit for building MCP servers and clients.
+Focus on your application logic - rust-mcp-sdk handles the protocol, transports, and the rest!
+This SDK fully implements the latest MCP protocol version ([2025-11-25](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema)), with backward compatibility built-in. `rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem. It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.
 
 
-**Features**
-- ✅ Stdio, SSE and Streamable HTTP Support
-- ✅ Supports multiple MCP protocol versions
+**Key Features**
+- ✅ Latest MCP protocol specification supported: 2025-11-25
+- ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
+- ✅ Lightweight Axum-based server for Streamable HTTP and SSE
+- ✅ Multi-client concurrency
 - ✅ DNS Rebinding Protection
+- ✅ Resumability
+- ✅ MCP [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) support
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
-- ✅ Resumability
 - ✅ OAuth Authentication for MCP Servers
   - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
     - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
@@ -41,24 +37,26 @@ By default, it uses the **2025-06-18** version, but earlier versions can be enab
 **⚠️** Project is currently under development and should be used at your own risk.
 
 ## Table of Contents
-- [Getting Started](#getting-started)
+- [Quick Start](#quick-start)
+  - [Minimal MCP Server (Stdio)]([#minimal-mcp-server-stdio](#minimal-mcp-server-stdio))
+  - [Minimal MCP Server (Streamable HTTP)](#minimal-mcp-server-streamable-http)
+  - [Minimal MCP Client (Stdio)](#minimal-mcp-client-stdio)
 - [Usage Examples](#usage-examples)
-  - [MCP Server (stdio)](#mcp-server-stdio)
-  - [MCP Server (Streamable HTTP)](#mcp-server-streamable-http)
-  - [MCP Client (stdio)](#mcp-client-stdio)
-  - [MCP Client (Streamable HTTP)](#mcp-client-streamable-http)
-  - [MCP Client (sse)](#mcp-client-sse)
-- [Authentication](#authentication)
 - [Macros](#macros)
+  - [mcp_tool](#mcp_tool)
+  - [tool_box](#-tool_box)
+  - [mcp_icon](#-mcp_icon)
+- [Authentication](#authentication)
+  - [RemoteAuthProvider](#remoteauthprovider)
+  - [OAuthProxy](#oauthproxy)
 - [HyperServerOptions](#hyperserveroptions)
-  - [Security Considerations](#security-considerations)
+- [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
-    - [MCP protocol versions with corresponding features](#mcp-protocol-versions-with-corresponding-features)
   -  [Default Features](#default-features)
   -  [Using Only the server Features](#using-only-the-server-features)
   -  [Using Only the client Features](#using-only-the-client-features)
-- [Choosing Between Standard and Core Handlers traits](#choosing-between-standard-and-core-handlers-traits)
+- [Handler Traits](#handlers-traits)
   - [Choosing Between **ServerHandler** and **ServerHandlerCore**](#choosing-between-serverhandler-and-serverhandlercore)
   - [Choosing Between **ClientHandler** and **ClientHandlerCore**](#choosing-between-clienthandler-and-clienthandlercore)
 - [Projects using Rust MCP SDK](#projects-using-rust-mcp-sdk)
@@ -67,329 +65,338 @@ By default, it uses the **2025-06-18** version, but earlier versions can be enab
 - [License](#license)
 
 
-## Getting Started
-
-If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)
 
 
-## Usage Examples
 
-### MCP Server (stdio)
+## Quick Start
 
-Create a MCP server with a `tool` that will print a `Hello World!` message:
+<!-- x-release-please-start-version -->
 
-```rust
-#[tokio::main]
-async fn main() -> SdkResult<()> {
-
-    // STEP 1: Define server details and capabilities
-    let server_details = InitializeResult {
-        // server name and version
-        server_info: Implementation {
-            name: "Hello World MCP Server".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Hello World MCP Server".to_string()),
-        },
-        capabilities: ServerCapabilities {
-            // indicates that server support mcp tools
-            tools: Some(ServerCapabilitiesTools { list_changed: None }),
-            ..Default::default() // Using default values for other fields
-        },
-        meta: None,
-        instructions: Some("server instructions...".to_string()),
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
-    };
-
-    // STEP 2: create a std transport with default options
-    let transport = StdioTransport::new(TransportOptions::default())?;
-
-    // STEP 3: instantiate our custom handler for handling MCP messages
-    let handler = MyServerHandler {};
-
-    // STEP 4: create a MCP server
-    let server: ServerRuntime = server_runtime::create_server(server_details, transport, handler);
-
-    // STEP 5: Start the server
-    server.start().await
-
-}
+Add to your Cargo.toml:
+```toml
+[dependencies]
+rust-mcp-sdk = "0.9.0"  # Check crates.io for the latest version
 ```
-
-See hello-world-mcp-server-stdio example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
-
-![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
-
-### MCP Server (Streamable HTTP)
-
-Creating an MCP server in `rust-mcp-sdk` with the `sse` transport allows multiple clients to connect simultaneously with no additional setup.
-Simply create a Hyper Server using `hyper_server::create_server()` and pass in the same handler and HyperServerOptions.
+<!-- x-release-please-end -->
 
 
-💡 By default, both **Streamable HTTP** and **SSE** transports are enabled for backward compatibility. To disable the SSE transport , set the `sse_support` to false in the `HyperServerOptions`.
+## Minimal MCP Server (Stdio)
+```rs
+use async_trait::async_trait;
+use rust_mcp_sdk::{*,error::SdkResult,macros,mcp_server::{server_runtime, ServerHandler},schema::*,};
 
-
-```rust
-
-// STEP 1: Define server details and capabilities
-let server_details = InitializeResult {
-    // server name and version
-    server_info: Implementation {
-        name: "Hello World MCP Server".to_string(),
-        version: "0.1.0".to_string(),
-        title: Some("Hello World MCP Server".to_string()),
-    },
-    capabilities: ServerCapabilities {
-        // indicates that server support mcp tools
-        tools: Some(ServerCapabilitiesTools { list_changed: None }),
-        ..Default::default() // Using default values for other fields
-    },
-    meta: None,
-    instructions: Some("server instructions...".to_string()),
-    protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
-};
-
-// STEP 2: instantiate our custom handler for handling MCP messages
-let handler = MyServerHandler {};
-
-// STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
-let server = hyper_server::create_server(
-    server_details,
-    handler,
-    HyperServerOptions {
-        host: "127.0.0.1".to_string(),
-        sse_support: false,
-        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
-        ..Default::default()
-    },
-);
-
-// STEP 4: Start the server
-server.start().await?;
-
-Ok(())
-```
-
-
-The implementation of `MyServerHandler` is the same regardless of the transport used and could be as simple as the following:
-
-```rust
-
-// STEP 1: Define a rust_mcp_schema::Tool ( we need one with no parameters for this example)
-#[mcp_tool(name = "say_hello_world", description = "Prints \"Hello World!\" message")]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+// Define a mcp tool
+#[macros::mcp_tool(name = "say_hello", description = "returns \"Hello from Rust MCP SDK!\" message ")]
+#[derive(Debug, ::serde::Deserialize, ::serde::Serialize, macros::JsonSchema)]
 pub struct SayHelloTool {}
 
-// STEP 2: Implement ServerHandler trait for a custom handler
-// For this example , we only need handle_list_tools_request() and handle_call_tool_request() methods.
-pub struct MyServerHandler;
+// define a custom handler
+#[derive(Default)]
+struct HelloHandler;
 
+// implement ServerHandler
 #[async_trait]
-impl ServerHandler for MyServerHandler {
-    // Handle ListToolsRequest, return list of available tools as ListToolsResult
-    async fn handle_list_tools_request(&self, request: ListToolsRequest, runtime: Arc<dyn McpServer>) -> Result<ListToolsResult, RpcError> {
-
+impl ServerHandler for HelloHandler {
+    // Handles requests to list available tools.
+    async fn handle_list_tools_request(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _runtime: std::sync::Arc<dyn McpServer>,
+    ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             tools: vec![SayHelloTool::tool()],
             meta: None,
             next_cursor: None,
         })
-
     }
-
-    /// Handles requests to call a specific tool.
-    async fn handle_call_tool_request( &self, request: CallToolRequest, runtime: Arc<dyn McpServer> ) -> Result<CallToolResult, CallToolError> {
-
-        if request.tool_name() == SayHelloTool::tool_name() {
-            Ok( CallToolResult::text_content( vec![TextContent::from("Hello World!".to_string())]  ))
+    // Handles requests to call a specific tool.
+    async fn handle_call_tool_request(&self,
+        params: CallToolRequestParams,
+        _runtime: std::sync::Arc<dyn McpServer>,
+    ) -> std::result::Result<CallToolResult, CallToolError> {
+        if params.name == "say_hello" {
+            Ok(CallToolResult::text_content(vec!["Hello from Rust MCP SDK!".into()]))
         } else {
-            Err(CallToolError::unknown_tool(request.tool_name().to_string()))
+            Err(CallToolError::unknown_tool(params.name))
         }
-
     }
-}
-```
-
----
-
-👉 For a more detailed example of a [Hello World MCP](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio) Server that supports multiple tools and provides more type-safe handling of `CallToolRequest`, check out: **[examples/hello-world-mcp-server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server)**
-
-See hello-world-server-streamable-http example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
-
-![mcp-server in rust](assets/examples/hello-world-server-streamable-http.gif)
-
----
-
-### MCP Client (stdio)
-
-Create an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools, then uses the add tool provided by the server to sum 120 and 28, printing the result.
-
-```rust
-
-// STEP 1: Custom Handler to handle incoming MCP Messages
-pub struct MyClientHandler;
-
-#[async_trait]
-impl ClientHandler for MyClientHandler {
-    // To check out a list of all the methods in the trait that you can override, take a look at https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_client_handler.rs
 }
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
+    // Define server details and capabilities
+    let server_info = InitializeResult {
+        server_info: Implementation {
+            name: "hello-rust-mcp".into(),
+            version: "0.1.0".into(),
+            title: Some("Hello World MCP Server".into()),
+            description: Some("A minimal Rust MCP server".into()),
+            icons: vec![mcp_icon!(src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "light")],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
+        },
+        capabilities: ServerCapabilities { tools: Some(ServerCapabilitiesTools { list_changed: None }), ..Default::default() },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        instructions: None,
+        meta:None
+    };
 
-    // Step2 : Define client details and capabilities
+    let transport = StdioTransport::new(TransportOptions::default())?;
+    let handler = HelloHandler::default().to_mcp_server_handler();
+    let server = server_runtime::create_server(server_info, transport, handler);
+    server.start().await
+}
+```
+
+## Minimal MCP Server (Streamable HTTP)
+Creating an MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup.
+The setup is nearly identical to the stdio example shown above. You only need to create a Hyper server via `hyper_server::create_server()` and pass in the same handler and `HyperServerOptions`.
+💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `HyperServerOptions`.
+
+```rust
+use async_trait::async_trait;
+use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,macros,
+    mcp_server::{hyper_server, HyperServerOptions, ServerHandler},schema::*,    
+};
+
+// Define a mcp tool
+#[macros::mcp_tool(
+    name = "say_hello",
+    description = "returns \"Hello from Rust MCP SDK!\" message "
+)]
+#[derive(Debug, ::serde::Deserialize, ::serde::Serialize, macros::JsonSchema)]
+pub struct SayHelloTool {}
+
+// define a custom handler
+#[derive(Default)]
+struct HelloHandler;
+
+// implement ServerHandler
+#[async_trait]
+impl ServerHandler for HelloHandler {
+    // Handles requests to list available tools.
+    async fn handle_list_tools_request(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _runtime: std::sync::Arc<dyn McpServer>,
+    ) -> std::result::Result<ListToolsResult, RpcError> {
+        Ok(ListToolsResult {tools: vec![SayHelloTool::tool()],meta: None,next_cursor: None})
+    }
+    // Handles requests to call a specific tool.
+    async fn handle_call_tool_request(
+        &self,
+        params: CallToolRequestParams,
+        _runtime: std::sync::Arc<dyn McpServer>,
+    ) -> std::result::Result<CallToolResult, CallToolError> {
+        if params.name == "say_hello" {Ok(CallToolResult::text_content(vec!["Hello from Rust MCP SDK!".into()]))
+        } else {
+            Err(CallToolError::unknown_tool(params.name))
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // Define server details and capabilities
+    let server_info = InitializeResult {
+        server_info: Implementation {
+            name: "hello-rust-mcp".into(),
+            version: "0.1.0".into(),
+            title: Some("Hello World MCP Server".into()),
+            description: Some("A minimal Rust MCP server".into()),
+            icons: vec![mcp_icon!(src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "light")],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
+        },
+        capabilities: ServerCapabilities { tools: Some(ServerCapabilitiesTools { list_changed: None }), ..Default::default() },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        instructions: None,
+        meta:None
+    };
+
+    let handler = HelloHandler::default().to_mcp_server_handler();
+    let server = hyper_server::create_server(
+        server_info,
+        handler,
+        HyperServerOptions {
+            host: "127.0.0.1".to_string(),
+            event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+            ..Default::default()
+        },
+    );
+    server.start().await?;
+    Ok(())
+}
+```
+
+
+## Minimal MCP Client (Stdio)
+Following is implementation of an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools provided by the server.
+
+
+```rust
+use async_trait::async_trait;
+use rust_mcp_sdk::{*, error::SdkResult,
+    mcp_client::{client_runtime, ClientHandler},
+    schema::*,
+};
+
+// Custom Handler to handle incoming MCP Messages
+pub struct MyClientHandler;
+#[async_trait]
+impl ClientHandler for MyClientHandler {
+    // To see all the trait methods you can override,
+    // check out:
+    // https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_client_handler.rs
+}
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // Client details and capabilities
     let client_details: InitializeRequestParams = InitializeRequestParams {
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
             name: "simple-rust-mcp-client".into(),
             version: "0.1.0".into(),
+            description: None,
+            icons: vec![],
+            title: None,
+            website_url: None,
         },
-        protocol_version: LATEST_PROTOCOL_VERSION.into(),
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        meta: None,
     };
 
-    // Step3 : Create a transport, with options to launch @modelcontextprotocol/server-everything MCP Server
+    //  Create a transport, with options to launch @modelcontextprotocol/server-everything MCP Server
     let transport = StdioTransport::create_with_server_launch(
-        "npx",
-        vec![ "-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
-        None, TransportOptions::default()
+        "npx",vec!["-y".to_string(),"@modelcontextprotocol/server-everything@latest".to_string()],
+        None,
+        TransportOptions::default(),
     )?;
 
-    // STEP 4: instantiate our custom handler for handling MCP messages
+    // instantiate our custom handler for handling MCP messages
     let handler = MyClientHandler {};
 
-    // STEP 5: create a MCP client
-    let client = client_runtime::create_client(client_details, transport, handler);
-
-    // STEP 6: start the MCP client
+    // Create and start the MCP client
+    let client = client_runtime::create_client(client_details, transport, handler);    
     client.clone().start().await?;
 
+    // use client methods to communicate with the MCP Server as you wish:
 
-    // STEP 7: use client methods to communicate with the MCP Server as you wish
-
+    let server_version = client.server_version().unwrap();    
+    
     // Retrieve and display the list of tools available on the server
-    let server_version = client.server_version().unwrap();
-    let tools = client.list_tools(None).await?.tools;
-
-    println!("List of tools for {}@{}", server_version.name, server_version.version);
-
+    let tools = client.request_tool_list(None).await?.tools;
+    println!( "List of tools for {}@{}",server_version.name, server_version.version);
     tools.iter().enumerate().for_each(|(tool_index, tool)| {
-        println!("  {}. {} : {}",
-            tool_index + 1,
-            tool.name,
-            tool.description.clone().unwrap_or_default()
-        );
+        println!("  {}. {} : {}", tool_index + 1, tool.name, tool.description.clone().unwrap_or_default());
     });
 
-    println!("Call \"add\" tool with 100 and 28 ...");
-    // Create a `Map<String, Value>` to represent the tool parameters
-    let params = json!({"a": 100,"b": 28}).as_object().unwrap().clone();
-    let request = CallToolRequestParams { name: "add".to_string(),arguments: Some(params)};
-
-    // invoke the tool
-    let result = client.call_tool(request).await?;
-
-    println!("{}",result.content.first().unwrap().as_text_content()?.text);
-
     client.shut_down().await?;
-
     Ok(())
 }
-
 ```
 
-Here is the output :
+## Usage Examples
 
-![rust-mcp-sdk-client-output](assets/examples/mcp-client-sample-code.jpg)
+👉 For full examples (stdio, Streamable HTTP, clients, auth, etc.), see the [examples/](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples) directory.
 
-> your results may vary slightly depending on the version of the MCP Server in use when you run it.
+👉 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)  
 
-### MCP Client (Streamable HTTP)
+See [hello-world-mcp-server-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/hello-world-mcp-server-stdio) example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
+
+![mcp-server in rust](assets/examples/hello-world-mcp-server.gif)
+
+
+## Macros
+Enable with the `macros` feature.  
+
+[rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) includes several helpful macros that simplify common tasks when building MCP servers and clients. For example, they can automatically generate tool specifications and tool schemas right from your structs, or assist with elicitation requests and responses making them completely type safe. 
+
+### ◾`mcp_tool`
+Generate a [Tool](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Tool.html) from a struct, with rich metadata (icons, execution hints, etc.).
+
+example usage:
 ```rs
+#[mcp_tool(
+   name = "write_file",
+   title = "Write File Tool",
+   description = "Create a new file or completely overwrite an existing file with new content.",
+   destructive_hint = false idempotent_hint = false open_world_hint = false read_only_hint = false,
+   meta = r#"{ "key" : "value", "string_meta" : "meta value", "numeric_meta" : 15}"#,
+   execution(task_support = "optional"),
+   icons = [(src = "https:/website.com/write.png", mime_type = "image/png", sizes = ["128x128"], theme = "light")]
+)]
+#[derive(rust_mcp_macros::JsonSchema)]
+pub struct WriteFileTool {
+    /// The target file's path for writing content.
+    pub path: String,
+    /// The string content to be written to the file
+    pub content: String,
+}
+```
 
-// STEP 1: Custom Handler to handle incoming MCP Messages
-pub struct MyClientHandler;
+📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
-#[async_trait]
-impl ClientHandler for MyClientHandler {
-    // To check out a list of all the methods in the trait that you can override, take a look at https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_client_handler.rs
+### ◾ `tool_box!()` 
+Automatically generates an enum based on the provided list of tools, making it easier to organize and manage them, especially when your application includes a large number of tools.
+
+```rs
+tool_box!(GreetingTools, [SayHelloTool, SayGoodbyeTool]);
+
+let tools: Vec<Tool> = GreetingTools::tools();
+``
+
+💻 For a real-world example, check out [tools/](https://github.com/rust-mcp-stack/rust-mcp-filesystem/tree/main/src/tools) and 
+[handle_call_tool_request(...)](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L195) in [rust-mcp-filesystem](https://github.com/rust-mcp-stack/rust-mcp-filesystem) project 
+
+### ◾ [mcp_elicit](https://crates.io/crates/rust-mcp-macros)
+Generates type-safe elicitation (Form or URL mode) for user input.
+
+example usage:
+```rs
+#[mcp_elicit(message = "Please enter your info", mode = form)]
+#[derive(JsonSchema)]
+pub struct UserInfo {
+    #[json_schema(title = "Name", min_length = 5, max_length = 100)]
+    pub name: String,
+    #[json_schema(title = "Email", format = "email")]
+    pub email: Option<String>,
+    #[json_schema(title = "Age", minimum = 15, maximum = 125)]
+    pub age: i32,
+    #[json_schema(title = "Tags")]
+    pub tags: Vec<String>,
 }
 
-#[tokio::main]
-async fn main() -> SdkResult<()> {
+// Sends a request to the client asking the user to provide input
+let result: ElicitResult = server.request_elicitation(UserInfo::elicit_request_params()).await?;
 
-    // Step2 : Define client details and capabilities
-    let client_details: InitializeRequestParams = InitializeRequestParams {
-        capabilities: ClientCapabilities::default(),
-        client_info: Implementation {
-            name: "simple-rust-mcp-client-sse".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Simple Rust MCP Client (SSE)".to_string()),
-        },
-        protocol_version: LATEST_PROTOCOL_VERSION.into(),
-    };
+// Convert result.content into a UserInfo instance
+let user_info = UserInfo::from_elicit_result_content(result.content)?; 
 
-    // Step 3: Create transport options to connect to an MCP server via Streamable HTTP.
-    let transport_options = StreamableTransportOptions {
-        mcp_url: MCP_SERVER_URL.to_string(),
-        request_options: RequestOptions {
-            ..RequestOptions::default()
-        },
-    };
+println!("name: {}", user_info.name);
+println!("age: {}", user_info.age);
+println!("email: {}",user.email.clone().unwrap_or("not provider".into()));
+println!("tags: {}", user_info.tags.join(",")); 
+```
+📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
-    // STEP 4: instantiate the custom handler that is responsible for handling MCP messages
-    let handler = MyClientHandler {};
+### ◾ `mcp_icon!()`
+A convenient icon builder for implementations and tools, offering full attribute support including theme, size, mime, and more.
 
-    // STEP 5: create the client with transport options and the handler
-    let client = client_runtime::with_transport_options(client_details, transport_options, handler);
-
-    // STEP 6: start the MCP client
-    client.clone().start().await?;
-
-    // STEP 7: use client methods to communicate with the MCP Server as you wish
-
-    // Retrieve and display the list of tools available on the server
-    let server_version = client.server_version().unwrap();
-    let tools = client.list_tools(None).await?.tools;
-    println!("List of tools for {}@{}", server_version.name, server_version.version);
-
-    tools.iter().enumerate().for_each(|(tool_index, tool)| {
-        println!("  {}. {} : {}",
-            tool_index + 1,
-            tool.name,
-            tool.description.clone().unwrap_or_default()
+example usage:
+```rs
+let icon: crate::schema::Icon = mcp_icon!(
+            src = "http://website.com/icon.png",
+            mime_type = "image/png",
+            sizes = ["64x64"],
+            theme = "dark"
         );
-    });
-
-    println!("Call \"add\" tool with 100 and 28 ...");
-    // Create a `Map<String, Value>` to represent the tool parameters
-    let params = json!({"a": 100,"b": 28}).as_object().unwrap().clone();
-    let request = CallToolRequestParams { name: "add".to_string(),arguments: Some(params)};
-
-    // invoke the tool
-    let result = client.call_tool(request).await?;
-
-    println!("{}",result.content.first().unwrap().as_text_content()?.text);
-
-    client.shut_down().await?;
-
-    Ok(())
 ```
-👉 see [examples/simple-mcp-client-streamable-http](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-streamable-http) for a complete working example.
-
-
-### MCP Client (sse)
-Creating an MCP client using the `rust-mcp-sdk` with the SSE transport is almost identical to the [stdio example](#mcp-client-stdio) , with one exception at `step 3`. Instead of creating a `StdioTransport`, you simply create a `ClientSseTransport`. The rest of the code remains the same:
-
-```diff
-- let transport = StdioTransport::create_with_server_launch(
--    "npx",
--    vec![ "-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
--    None, TransportOptions::default()
--)?;
-+ let transport = ClientSseTransport::new(MCP_SERVER_URL, ClientSseTransportOptions::default())?;
-```
-
-👉 see [examples/simple-mcp-client-sse](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/examples/simple-mcp-client-sse) for a complete working example.
-
 
 ## Authentication
 MCP server can verify tokens issued by other systems, integrate with external identity providers, or manage the entire authentication process itself. Each option offers a different balance of simplicity, security, and control.
@@ -404,120 +411,12 @@ MCP server can verify tokens issued by other systems, integrate with external id
  - [WorkOS autn example](crates/rust-mcp-extra/README.md#workos-authkit)
  
 
-  
  ### OAuthProxy  
  OAuthProxy enables authentication with OAuth providers that don’t support Dynamic Client Registration (DCR).It accepts any client registration request, handles the DCR on your server side and then uses your pre-registered app credentials upstream.The proxy also forwards callbacks, allowing dynamic redirect URIs to work with providers that require fixed ones.
  
 > ⚠️ OAuthProxy support is still in development, please use RemoteAuthProvider for now.
- 
-
-## Macros
-[rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) includes several helpful macros that simplify common tasks when building MCP servers and clients. For example, they can automatically generate tool specifications and tool schemas right from your structs, or assist with elicitation requests and responses making them completely type safe.
-
-> To use these macros, ensure the `macros` feature is enabled in your Cargo.toml.
-
-### mcp_tool
-`mcp_tool` is a procedural macro attribute that helps generating rust_mcp_schema::Tool from a struct.
-
-Usage example:
-```rust
-#[mcp_tool(
-    name = "move_file",
-    title="Move File",
-    description = concat!("Move or rename files and directories. Can move files between directories ",
-"and rename them in a single operation. If the destination exists, the ",
-"operation will fail. Works across different directories and can be used ",
-"for simple renaming within the same directory. ",
-"Both source and destination must be within allowed directories."),
-    destructive_hint = false,
-    idempotent_hint = false,
-    open_world_hint = false,
-    read_only_hint = false
-)]
-#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, JsonSchema)]
-pub struct MoveFileTool {
-    /// The source path of the file to move.
-    pub source: String,
-    /// The destination path to move the file to.
-    pub destination: String,
-}
-
-// Now we can call `tool()` method on it to get a Tool instance
-let rust_mcp_sdk::schema::Tool = MoveFileTool::tool();
-
-```
-
-💻 For a real-world example, check out any of the tools available at: https://github.com/rust-mcp-stack/rust-mcp-filesystem/tree/main/src/tools
 
 
-### tool_box
-`tool_box` generates an enum from a provided list of tools, making it easier to organize and manage them, especially when your application includes a large number of tools.
-
-It accepts an array of tools and generates an enum where each tool becomes a variant of the enum.
-
-Generated enum has a `tools()` function that returns a `Vec<Tool>` , and a `TryFrom<CallToolRequestParams>` trait implementation that could be used to convert a ToolRequest into a Tool instance.
-
-Usage example:
-```rust
-    // Accepts an array of tools and generates an enum named `FileSystemTools`,
-    // where each tool becomes a variant of the enum.
-    tool_box!(FileSystemTools, [ReadFileTool, MoveFileTool, SearchFilesTool]);
-
-    // now in the app, we can use the FileSystemTools, like:
-    let all_tools: Vec<Tool> = FileSystemTools::tools();
-```
-
-💻 To see a real-world example of that please see :
-- `tool_box` macro usage:  [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/tools.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/tools.rs)
-- using `tools()` in list tools request :  [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L67)
-- using `try_from` in call tool_request: [https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L100)
-
-
-
-### mcp_elicit
-The `mcp_elicit` macro generates implementations for the annotated struct to facilitate data elicitation. It enables struct to generate `ElicitRequestedSchema` and also parsing a map of field names to `ElicitResultContentValue` values back into the struct, supporting both required and optional fields. The generated implementation includes:
-
-- A `message()` method returning the elicitation message as a string.
-- A `requested_schema()` method returning an `ElicitRequestedSchema` based on the struct’s JSON schema.
-- A `from_content_map()` method to convert a map of `ElicitResultContentValue` values into a struct instance.
-
-### Attributes
-
-- `message` - An optional string (or `concat!(...)` expression) to prompt the user or system for input. Defaults to an empty string if not provided.
-
-Usage example:
-```rust
-// A struct that could be used to send elicit request and get the input from the user
-#[mcp_elicit(message = "Please enter your info")]
-#[derive(JsonSchema)]
-pub struct UserInfo {
-    #[json_schema(
-        title = "Name",
-        description = "The user's full name",
-        min_length = 5,
-        max_length = 100
-    )]
-    pub name: String,
-    /// Is user a student?
-    #[json_schema(title = "Is student?", default = true)]
-    pub is_student: Option<bool>,
-
-    /// User's favorite color
-    pub favorate_color: Colors,
-}
-
-// send a Elicit Request , ask for UserInfo data and convert the result back to a valid UserInfo instance
-let result: ElicitResult = server
-    .elicit_input(UserInfo::message(), UserInfo::requested_schema())
-    .await?;
-
-// Create a UserInfo instance using data provided by the user on the client side
-let user_info = UserInfo::from_content_map(result.content)?;
-
-```
-
-💻 For mre info please see :
-- https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-macros
 
 ## HyperServerOptions
 
@@ -531,89 +430,22 @@ A typical example of creating a HyperServer that exposes the MCP server via Stre
 
 let server = hyper_server::create_server(
     server_details,
-    handler,
+    handler.to_mcp_server_handler(),
     HyperServerOptions {
         host: "127.0.0.1".to_string(),
-        enable_ssl: true,
+        port: 8080,
+        event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+        auth: Some(Arc::new(auth_provider)), // enable authentication
+        sse_support: false,
         ..Default::default()
     },
 );
 
 server.start().await?;
-
 ```
 
-Here is a list of available options with descriptions for configuring the HyperServer:
-```rs
+📝 Refer to [HyperServerOptions](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/hyper_servers/server.rs#L43) for a complete overview of HyperServerOptions attributes and options.
 
-pub struct HyperServerOptions {
-    /// Hostname or IP address the server will bind to (default: "127.0.0.1")
-    pub host: String,
-
-    /// Hostname or IP address the server will bind to (default: "8080")
-    pub port: u16,
-
-    /// Optional thread-safe session id generator to generate unique session IDs.
-    pub session_id_generator: Option<Arc<dyn IdGenerator<SessionId>>>,
-
-    /// Optional custom path for the Streamable HTTP endpoint (default: `/mcp`)
-    pub custom_streamable_http_endpoint: Option<String>,
-
-    /// Shared transport configuration used by the server
-    pub transport_options: Arc<TransportOptions>,
-
-    /// Event store for resumability support
-    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
-    pub event_store: Option<Arc<dyn EventStore>>,
-
-    /// This setting only applies to streamable HTTP.
-    /// If true, the server will return JSON responses instead of starting an SSE stream.
-    /// This can be useful for simple request/response scenarios without streaming.
-    /// Default is false (SSE streams are preferred).
-    pub enable_json_response: Option<bool>,
-
-    /// Interval between automatic ping messages sent to clients to detect disconnects
-    pub ping_interval: Duration,
-
-    /// Enables SSL/TLS if set to `true`
-    pub enable_ssl: bool,
-
-    /// Path to the SSL/TLS certificate file (e.g., "cert.pem").
-    /// Required if `enable_ssl` is `true`.
-    pub ssl_cert_path: Option<String>,
-
-    /// Path to the SSL/TLS private key file (e.g., "key.pem").
-    /// Required if `enable_ssl` is `true`.
-    pub ssl_key_path: Option<String>,
-
-    /// List of allowed host header values for DNS rebinding protection.
-    /// If not specified, host validation is disabled.
-    pub allowed_hosts: Option<Vec<String>>,
-
-    /// List of allowed origin header values for DNS rebinding protection.
-    /// If not specified, origin validation is disabled.
-    pub allowed_origins: Option<Vec<String>>,
-
-    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is false for backwards compatibility.
-    pub dns_rebinding_protection: bool,
-
-    /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
-    pub sse_support: bool,
-
-    /// Optional custom path for the Server-Sent Events (SSE) endpoint (default: `/sse`)
-    /// Applicable only if sse_support is true
-    pub custom_sse_endpoint: Option<String>,
-
-    /// Optional custom path for the MCP messages endpoint for sse (default: `/messages`)
-    /// Applicable only if sse_support is true
-    pub custom_messages_endpoint: Option<String>,
-
-    /// Optional authentication provider for protecting MCP server.
-    pub auth: Option<Arc<dyn AuthProvider>>,
-}
-
-```
 
 ### Security Considerations
 
@@ -637,28 +469,19 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
-
 - `stdio`: Enables support for the `standard input/output (stdio)` transport.
 - `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
 
 
-#### MCP Protocol Versions with Corresponding Features
-
-- `2025_06_18` : Activates MCP Protocol version 2025-06-18 (enabled by default)
-- `2025_03_26` : Activates MCP Protocol version 2025-03-26
-- `2024_11_05` : Activates MCP Protocol version 2024-11-05
-
-> Note: MCP protocol versions are mutually exclusive-only one can be active at any given time.
-
 ### Default Features
 
-When you add rust-mcp-sdk as a dependency without specifying any features, all features are included, with the latest MCP Protocol version enabled by default:
+When you add rust-mcp-sdk as a dependency without specifying any features, all features are enabled by default
 
 <!-- x-release-please-start-version -->
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.2.0"
+rust-mcp-sdk = "0.9.0"
 ```
 
 <!-- x-release-please-end -->

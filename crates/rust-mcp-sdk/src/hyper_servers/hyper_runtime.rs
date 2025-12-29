@@ -1,29 +1,35 @@
-use std::{sync::Arc, time::Duration};
-
-use crate::{
-    mcp_http::McpAppState,
-    mcp_server::HyperServer,
-    schema::{
-        schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-        CreateMessageRequestParams, CreateMessageResult, InitializeRequestParams,
-        ListRootsRequestParams, ListRootsResult, LoggingMessageNotificationParams,
-        PromptListChangedNotificationParams, ResourceListChangedNotificationParams,
-        ResourceUpdatedNotificationParams, ToolListChangedNotificationParams,
-    },
-    McpServer,
-};
-
-use axum_server::Handle;
-use rust_mcp_transport::SessionId;
-use tokio::task::JoinHandle;
-
 use crate::{
     error::SdkResult,
     mcp_server::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,
     },
+    session_store::SessionStore,
+    task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller},
 };
+use crate::{
+    mcp_http::McpAppState,
+    mcp_server::HyperServer,
+    schema::{
+        schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
+        CreateMessageRequestParams, CreateMessageResult, InitializeRequestParams, ListRootsResult,
+        LoggingMessageNotificationParams, NotificationParams, RequestParams,
+        ResourceUpdatedNotificationParams,
+    },
+    McpServer,
+};
+use axum_server::Handle;
+use futures::StreamExt;
+use rust_mcp_schema::{
+    schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
+    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
+    ElicitCompleteParams, ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams,
+    GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams, RpcError,
+    TaskStatusNotificationParams,
+};
+use rust_mcp_transport::SessionId;
+use std::{sync::Arc, time::Duration};
+use tokio::task::JoinHandle;
 
 pub struct HyperRuntime {
     pub(crate) state: Arc<McpAppState>,
@@ -32,6 +38,36 @@ pub struct HyperRuntime {
 }
 
 impl HyperRuntime {
+    fn task_poller_callback(
+        client_task_store: Arc<ClientTaskStore>,
+        session_store: Arc<dyn SessionStore>,
+    ) -> TaskStatusPoller {
+        let session_store = session_store.clone();
+        let task_store_clone = client_task_store.clone();
+
+        let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
+            let session_store_clone = session_store.clone();
+            let task_store_clone = task_store_clone.clone();
+            Box::pin(async move {
+                let Some(session) = session_id.as_ref() else {
+                    return Err(RpcError::invalid_request()
+                        .with_message("No session id provided!".to_string())
+                        .into());
+                };
+
+                let Some(runtime) = session_store_clone.get(session).await else {
+                    return Err(RpcError::invalid_request()
+                        .with_message("Invalid or broken session!".to_string())
+                        .into());
+                };
+
+                runtime
+                    .poll_task_status(task_id, session_id, task_store_clone)
+                    .await
+            })
+        });
+        callback
+    }
     pub async fn create(server: HyperServer) -> SdkResult<Self> {
         let addr = server.options.resolve_server_address().await?;
         let state = server.state();
@@ -53,6 +89,31 @@ impl HyperRuntime {
                 server.start_http(addr).await
             }
         });
+
+        // send a TaskStatusNotification if task_store is present and supports subscribe()
+        let state_clone = state.clone();
+        if let Some(task_store) = state_clone.task_store.clone() {
+            if let Some(mut stream) = task_store.subscribe() {
+                tokio::spawn(async move {
+                    while let Some((params, session_id_opt)) = stream.next().await {
+                        if let Some(session_id) = session_id_opt.as_ref() {
+                            if let Some(transport) = state_clone.session_store.get(session_id).await
+                            {
+                                let _ = transport.notify_task_status(params).await;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Task polling for server initiated tasks
+        if let Some(client_task_store) = state.client_task_store.clone() {
+            let session_store = state.session_store.clone();
+            let callback: TaskStatusPoller =
+                Self::task_poller_callback(Arc::clone(&client_task_store), session_store);
+            client_task_store.start_task_polling(callback)?;
+        }
 
         Ok(Self {
             state,
@@ -85,6 +146,11 @@ impl HyperRuntime {
         )
     }
 
+    /// Sends a request to the client and processes the response.
+    ///
+    /// This function sends a `RequestFromServer` message to the client, waits for the response,
+    /// and handles the result. If the response is empty or of an invalid type, an error is returned.
+    /// Otherwise, it returns the result from the client.
     pub async fn send_request(
         &self,
         session_id: &SessionId,
@@ -104,75 +170,52 @@ impl HyperRuntime {
         runtime.send_notification(notification).await
     }
 
+    pub async fn client_info(
+        &self,
+        session_id: &SessionId,
+    ) -> SdkResult<Option<InitializeRequestParams>> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        Ok(runtime.client_info())
+    }
+
+    /*******************
+          Requests
+    *******************/
+
+    /// Sends an elicitation request to the client to prompt user input and returns the received response.
+    ///
+    /// The requested_schema argument allows servers to define the structure of the expected response using a restricted subset of JSON Schema.
+    /// To simplify client user experience, elicitation schemas are limited to flat objects with primitive properties only
+    pub async fn request_elicitation(
+        &self,
+        session_id: &SessionId,
+        params: ElicitRequestParams,
+    ) -> SdkResult<ElicitResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_elicitation(params).await
+    }
+
+    pub async fn request_elicitation_task(
+        &self,
+        session_id: &SessionId,
+        params: ElicitRequestParams,
+    ) -> SdkResult<CreateTaskResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_elicitation_task(params).await
+    }
+
     /// Request a list of root URIs from the client. Roots allow
     /// servers to ask for specific directories or files to operate on. A common example
     /// for roots is providing a set of repositories or directories a server should operate on.
     /// This request is typically used when the server needs to understand the file system
     /// structure or access specific locations that the client has permission to read from
-    pub async fn list_roots(
+    pub async fn request_root_list(
         &self,
         session_id: &SessionId,
-        params: Option<ListRootsRequestParams>,
+        params: Option<RequestParams>,
     ) -> SdkResult<ListRootsResult> {
         let runtime = self.runtime_by_session(session_id).await?;
-        runtime.list_roots(params).await
-    }
-
-    pub async fn send_logging_message(
-        &self,
-        session_id: &SessionId,
-        params: LoggingMessageNotificationParams,
-    ) -> SdkResult<()> {
-        let runtime = self.runtime_by_session(session_id).await?;
-        runtime.send_logging_message(params).await
-    }
-
-    /// An optional notification from the server to the client, informing it that
-    /// the list of prompts it offers has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    pub async fn send_prompt_list_changed(
-        &self,
-        session_id: &SessionId,
-        params: Option<PromptListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let runtime = self.runtime_by_session(session_id).await?;
-        runtime.send_prompt_list_changed(params).await
-    }
-
-    /// An optional notification from the server to the client,
-    /// informing it that the list of resources it can read from has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    pub async fn send_resource_list_changed(
-        &self,
-        session_id: &SessionId,
-        params: Option<ResourceListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let runtime = self.runtime_by_session(session_id).await?;
-        runtime.send_resource_list_changed(params).await
-    }
-
-    /// A notification from the server to the client, informing it that
-    /// a resource has changed and may need to be read again.
-    ///  This should only be sent if the client previously sent a resources/subscribe request.
-    pub async fn send_resource_updated(
-        &self,
-        session_id: &SessionId,
-        params: ResourceUpdatedNotificationParams,
-    ) -> SdkResult<()> {
-        let runtime = self.runtime_by_session(session_id).await?;
-        runtime.send_resource_updated(params).await
-    }
-
-    /// An optional notification from the server to the client, informing it that
-    /// the list of tools it offers has changed.
-    /// This may be issued by servers without any previous subscription from the client.
-    pub async fn send_tool_list_changed(
-        &self,
-        session_id: &SessionId,
-        params: Option<ToolListChangedNotificationParams>,
-    ) -> SdkResult<()> {
-        let runtime = self.runtime_by_session(session_id).await?;
-        runtime.send_tool_list_changed(params).await
+        runtime.request_root_list(params).await
     }
 
     /// A ping request to check that the other party is still alive.
@@ -188,10 +231,11 @@ impl HyperRuntime {
     pub async fn ping(
         &self,
         session_id: &SessionId,
+        params: Option<RequestParams>,
         timeout: Option<Duration>,
     ) -> SdkResult<crate::schema::Result> {
         let runtime = self.runtime_by_session(session_id).await?;
-        runtime.ping(timeout).await
+        runtime.ping(params, timeout).await
     }
 
     /// A request from the server to sample an LLM via the client.
@@ -199,20 +243,261 @@ impl HyperRuntime {
     /// The client should also inform the user before beginning sampling,
     /// to allow them to inspect the request (human in the loop)
     /// and decide whether to approve it.
+    pub async fn request_message_creation(
+        &self,
+        session_id: &SessionId,
+        params: CreateMessageRequestParams,
+    ) -> SdkResult<CreateMessageResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_message_creation(params).await
+    }
+
+    ///Send a request to retrieve the state of a task.
+    pub async fn request_get_task(
+        &self,
+        session_id: &SessionId,
+        params: GetTaskParams,
+    ) -> SdkResult<GetTaskResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_get_task(params).await
+    }
+
+    ///Send a request to retrieve the result of a completed task.
+    pub async fn request_get_task_payload(
+        &self,
+        session_id: &SessionId,
+        params: GetTaskPayloadParams,
+    ) -> SdkResult<ClientTaskResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_get_task_payload(params).await
+    }
+
+    ///Send a request to cancel a task.
+    pub async fn request_task_cancellation(
+        &self,
+        session_id: &SessionId,
+        params: CancelTaskParams,
+    ) -> SdkResult<CancelTaskResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_task_cancellation(params).await
+    }
+
+    ///Send a custom request with a custom method name and params
+    pub async fn request_custom(
+        &self,
+        session_id: &SessionId,
+        params: CustomRequest,
+    ) -> SdkResult<GenericResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_custom(params).await
+    }
+
+    /*******************
+        Notifications
+    *******************/
+
+    /// Send log message notification from server to client.
+    /// If no logging/setLevel request has been sent from the client, the server MAY decide which messages to send automatically.
+    pub async fn notify_log_message(
+        &self,
+        session_id: &SessionId,
+        params: LoggingMessageNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_log_message(params).await
+    }
+
+    ///Send an optional notification from the server to the client, informing it that
+    /// the list of prompts it offers has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    pub async fn notify_prompt_list_changed(
+        &self,
+        session_id: &SessionId,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_prompt_list_changed(params).await
+    }
+
+    ///Send an optional notification from the server to the client,
+    /// informing it that the list of resources it can read from has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    pub async fn notify_resource_list_changed(
+        &self,
+        session_id: &SessionId,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_resource_list_changed(params).await
+    }
+
+    ///Send a notification from the server to the client, informing it that
+    /// a resource has changed and may need to be read again.
+    ///  This should only be sent if the client previously sent a resources/subscribe request.
+    pub async fn notify_resource_updated(
+        &self,
+        session_id: &SessionId,
+        params: ResourceUpdatedNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_resource_updated(params).await
+    }
+
+    ///Send an optional notification from the server to the client, informing it that
+    /// the list of tools it offers has changed.
+    /// This may be issued by servers without any previous subscription from the client.
+    pub async fn notify_tool_list_changed(
+        &self,
+        session_id: &SessionId,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_tool_list_changed(params).await
+    }
+
+    /// This notification can be sent to indicate that it is cancelling a previously-issued request.
+    /// The request SHOULD still be in-flight, but due to communication latency, it is always possible that this notification MAY arrive after the request has already finished.
+    /// This notification indicates that the result will be unused, so any associated processing SHOULD cease.
+    /// A client MUST NOT attempt to cancel its initialize request.
+    /// For task cancellation, use the tasks/cancel request instead of this notification.
+    pub async fn notify_cancellation(
+        &self,
+        session_id: &SessionId,
+        params: CancelledNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_cancellation(params).await
+    }
+
+    ///Send an out-of-band notification used to inform the receiver of a progress update for a long-running request.
+    pub async fn notify_progress(
+        &self,
+        session_id: &SessionId,
+        params: ProgressNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_progress(params).await
+    }
+
+    /// Send an optional notification from the receiver to the requestor, informing them that a task's status has changed.
+    /// Receivers are not required to send these notifications.
+    pub async fn notify_task_status(
+        &self,
+        session_id: &SessionId,
+        params: TaskStatusNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_task_status(params).await
+    }
+
+    ///An optional notification from the server to the client, informing it of a completion of a out-of-band elicitation request.
+    pub async fn notify_elicitation_completed(
+        &self,
+        session_id: &SessionId,
+        params: ElicitCompleteParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_elicitation_completed(params).await
+    }
+
+    ///Send a custom notification
+    pub async fn notify_custom(
+        &self,
+        session_id: &SessionId,
+        params: CustomNotification,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_custom(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_root_list()` instead.")]
+    pub async fn list_roots(
+        &self,
+        session_id: &SessionId,
+        params: Option<RequestParams>,
+    ) -> SdkResult<ListRootsResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_root_list(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_elicitation()` instead.")]
+    pub async fn elicit_input(
+        &self,
+        session_id: &SessionId,
+        params: ElicitRequestParams,
+    ) -> SdkResult<ElicitResult> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.request_elicitation(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `request_message_creation()` instead.")]
     pub async fn create_message(
         &self,
         session_id: &SessionId,
         params: CreateMessageRequestParams,
     ) -> SdkResult<CreateMessageResult> {
         let runtime = self.runtime_by_session(session_id).await?;
-        runtime.create_message(params).await
+        runtime.request_message_creation(params).await
     }
 
-    pub async fn client_info(
+    #[deprecated(since = "0.8.0", note = "Use `notify_tool_list_changed()` instead.")]
+    pub async fn send_tool_list_changed(
         &self,
         session_id: &SessionId,
-    ) -> SdkResult<Option<InitializeRequestParams>> {
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
         let runtime = self.runtime_by_session(session_id).await?;
-        Ok(runtime.client_info())
+        runtime.notify_tool_list_changed(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_resource_updated()` instead.")]
+    pub async fn send_resource_updated(
+        &self,
+        session_id: &SessionId,
+        params: ResourceUpdatedNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_resource_updated(params).await
+    }
+
+    #[deprecated(
+        since = "0.8.0",
+        note = "Use `notify_resource_list_changed()` instead."
+    )]
+    pub async fn send_resource_list_changed(
+        &self,
+        session_id: &SessionId,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_resource_list_changed(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_prompt_list_changed()` instead.")]
+    pub async fn send_prompt_list_changed(
+        &self,
+        session_id: &SessionId,
+        params: Option<NotificationParams>,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_prompt_list_changed(params).await
+    }
+
+    #[deprecated(since = "0.8.0", note = "Use `notify_log_message()` instead.")]
+    pub async fn send_logging_message(
+        &self,
+        session_id: &SessionId,
+        params: LoggingMessageNotificationParams,
+    ) -> SdkResult<()> {
+        let runtime = self.runtime_by_session(session_id).await?;
+        runtime.notify_log_message(params).await
+    }
+
+    pub fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
+        self.state.task_store.clone()
+    }
+
+    pub fn client_task_store(&self) -> Option<Arc<ClientTaskStore>> {
+        self.state.client_task_store.clone()
     }
 }

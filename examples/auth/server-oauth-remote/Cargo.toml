@@ -14,7 +14,6 @@ rust-mcp-sdk = { workspace = true, default-features = false, features = [
     "sse",
     "auth",
     "hyper-server",
-    "2025_06_18",
 ] }
 rust-mcp-extra={ workspace = true, features=["auth"]}
 

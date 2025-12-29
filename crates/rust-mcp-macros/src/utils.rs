@@ -1,8 +1,18 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    punctuated::Punctuated, token, Attribute, DeriveInput, Lit, LitInt, LitStr, Path,
-    PathArguments, Type,
+    punctuated::Punctuated, token, Attribute, DeriveInput, GenericArgument, Lit, LitInt, LitStr,
+    Path, PathArguments, Type, TypePath,
 };
+
+pub fn base_crate() -> TokenStream {
+    // Conditionally select the path for Tool
+    if cfg!(feature = "sdk") {
+        quote! { rust_mcp_sdk::schema }
+    } else {
+        quote! { rust_mcp_schema }
+    }
+}
 
 // Check if a type is an Option<T>
 pub fn is_option(ty: &Type) -> bool {
@@ -84,6 +94,7 @@ pub fn might_be_struct(ty: &Type) -> bool {
     false
 }
 
+#[allow(unused)]
 // Helper to check if a type is an enum
 pub fn is_enum(ty: &Type, _input: &DeriveInput) -> bool {
     if let Type::Path(type_path) = ty {
@@ -108,6 +119,7 @@ pub fn is_enum(ty: &Type, _input: &DeriveInput) -> bool {
     }
 }
 
+#[allow(unused)]
 // Helper to generate enum parsing code
 pub fn generate_enum_parse(
     field_type: &Type,
@@ -455,6 +467,38 @@ pub fn has_derive(attrs: &[Attribute], trait_name: &str) -> bool {
         }
         false
     })
+}
+
+pub fn is_vec_string(ty: &Type) -> bool {
+    let Type::Path(TypePath { path, .. }) = ty else {
+        return false;
+    };
+
+    // Get last segment: e.g., `Vec`
+    let Some(seg) = path.segments.last() else {
+        return false;
+    };
+
+    // Must be `Vec`
+    if seg.ident != "Vec" {
+        return false;
+    }
+
+    // Must have angle-bracketed args: <String>
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return false;
+    };
+
+    // Must contain exactly one type param
+    if args.args.len() != 1 {
+        return false;
+    }
+
+    // Check that the argument is `String`
+    match args.args.first().unwrap() {
+        GenericArgument::Type(Type::Path(tp)) => tp.path.is_ident("String"),
+        _ => false,
+    }
 }
 
 pub fn renamed_field(attrs: &[Attribute]) -> Option<String> {

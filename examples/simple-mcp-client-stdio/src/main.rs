@@ -4,27 +4,45 @@ mod inquiry_utils;
 use handler::MyClientHandler;
 use inquiry_utils::InquiryUtils;
 use rust_mcp_sdk::error::SdkResult;
-use rust_mcp_sdk::mcp_client::client_runtime;
+use rust_mcp_sdk::mcp_client::{client_runtime, McpClientOptions};
 use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
-    LATEST_PROTOCOL_VERSION,
+    SetLevelRequestParams, LATEST_PROTOCOL_VERSION,
 };
-use rust_mcp_sdk::{McpClient, StdioTransport, TransportOptions};
+use rust_mcp_sdk::{mcp_icon, McpClient, StdioTransport, ToMcpClientHandler, TransportOptions};
 use std::sync::Arc;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 const MCP_SERVER_TO_LAUNCH: &str = "@modelcontextprotocol/server-everything";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     // Step1 : Define client details and capabilities
     let client_details: InitializeRequestParams = InitializeRequestParams {
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
-            name: "simple-rust-mcp-client".to_string(),
-            version: "0.1.0".to_string(),
-            title: Some("Simple Rust MCP Client".to_string()),
+            name: "simple-rust-mcp-client".into(),
+            version: "0.1.0".into(),
+            title: Some("Simple Rust MCP Client".into()),
+            description: Some("Simple Rust MCP Client, by Rust MCP SDK".into()),
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "dark"
+            )],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         protocol_version: LATEST_PROTOCOL_VERSION.into(),
+        meta: None,
     };
 
     // Step2 : Create a transport, with options to launch/connect to a MCP Server
@@ -40,7 +58,13 @@ async fn main() -> SdkResult<()> {
     let handler = MyClientHandler {};
 
     // STEP 4: create a MCP client
-    let client = client_runtime::create_client(client_details, transport, handler);
+    let client = client_runtime::create_client(McpClientOptions {
+        client_details,
+        transport,
+        handler: handler.to_mcp_client_handler(),
+        task_store: None,
+        server_task_store: None,
+    });
 
     // STEP 5: start the MCP client
     client.clone().start().await?;
@@ -75,7 +99,13 @@ async fn main() -> SdkResult<()> {
     utils.call_add_tool(100, 25).await?;
 
     // Set the log level
-    utils.client.set_logging_level(LoggingLevel::Debug).await?;
+    utils
+        .client
+        .request_set_logging_level(SetLevelRequestParams {
+            level: LoggingLevel::Debug,
+            meta: None,
+        })
+        .await?;
 
     // Send 3 pings to the server, with a 2-second interval between each ping.
     utils.ping_n_times(3).await;

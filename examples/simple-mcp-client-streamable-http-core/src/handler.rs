@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::{
     self,
-    schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
-    RpcError, ServerRequest,
+    schema_utils::{NotificationFromServer, ResultFromClient},
+    RpcError, ServerJsonrpcRequest,
 };
 use rust_mcp_sdk::{mcp_client::ClientHandlerCore, McpClient};
 pub struct MyClientHandler;
@@ -14,27 +14,28 @@ pub struct MyClientHandler;
 impl ClientHandlerCore for MyClientHandler {
     async fn handle_request(
         &self,
-        request: RequestFromServer,
+        request: ServerJsonrpcRequest,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
-            RequestFromServer::ServerRequest(server_request) => match server_request {
-                ServerRequest::PingRequest(_) => {
-                    return Ok(schema::Result::default().into());
-                }
-                ServerRequest::CreateMessageRequest(_create_message_request) => {
-                    Err(RpcError::internal_error().with_message(
-                        "CreateMessageRequest handler is not implemented".to_string(),
-                    ))
-                }
-                ServerRequest::ListRootsRequest(_list_roots_request) => {
-                    Err(RpcError::internal_error()
-                        .with_message("ListRootsRequest handler is not implemented".to_string()))
-                }
-                ServerRequest::ElicitRequest(_elicit_request) => Err(RpcError::internal_error()
-                    .with_message("ElicitRequest handler is not implemented".to_string())),
-            },
-            RequestFromServer::CustomRequest(_value) => Err(RpcError::internal_error()
+            ServerJsonrpcRequest::PingRequest(_) => {
+                return Ok(schema::Result::default().into());
+            }
+            ServerJsonrpcRequest::CreateMessageRequest(_) => Err(RpcError::internal_error()
+                .with_message("CreateMessageRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::ListRootsRequest(_) => Err(RpcError::internal_error()
+                .with_message("ListRootsRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::ElicitRequest(_) => Err(RpcError::internal_error()
+                .with_message("ElicitRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::GetTaskRequest(_) => Err(RpcError::internal_error()
+                .with_message("GetTaskRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::GetTaskPayloadRequest(_) => Err(RpcError::internal_error()
+                .with_message("GetTaskPayloadRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::CancelTaskRequest(_) => Err(RpcError::internal_error()
+                .with_message("CancelTaskRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::ListTasksRequest(_) => Err(RpcError::internal_error()
+                .with_message("ListTasksRequest handler is not implemented".to_string())),
+            ServerJsonrpcRequest::CustomRequest(_) => Err(RpcError::internal_error()
                 .with_message("CustomRequest handler is not implemented".to_string())),
         }
     }
@@ -44,20 +45,7 @@ impl ClientHandlerCore for MyClientHandler {
         notification: NotificationFromServer,
         _runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
-        if let NotificationFromServer::ServerNotification(
-            schema::ServerNotification::LoggingMessageNotification(logging_message_notification),
-        ) = notification
-        {
-            println!(
-                "Notification from server: {}",
-                logging_message_notification.params.data
-            );
-        } else {
-            println!(
-                "A {} notification received from the server",
-                notification.method()
-            );
-        };
+        println!("Notification from server: \"{}\"", notification.method());
 
         Ok(())
     }

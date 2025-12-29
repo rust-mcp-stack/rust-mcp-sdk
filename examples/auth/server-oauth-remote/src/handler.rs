@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use rust_mcp_sdk::auth::AuthInfo;
 use rust_mcp_sdk::macros::{mcp_tool, JsonSchema};
-use rust_mcp_sdk::schema::TextContent;
 use rust_mcp_sdk::schema::{
-    schema_utils::CallToolError, CallToolRequest, CallToolResult, ListToolsRequest,
-    ListToolsResult, RpcError,
+    schema_utils::CallToolError, CallToolResult, ListToolsResult, RpcError,
 };
+use rust_mcp_sdk::schema::{CallToolRequestParams, PaginatedRequestParams, TextContent};
 use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
 use std::sync::Arc;
 use std::vec;
@@ -42,7 +41,7 @@ impl ServerHandler for McpServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,
-        request: ListToolsRequest,
+        params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
@@ -55,16 +54,16 @@ impl ServerHandler for McpServerHandler {
     /// Handles incoming CallToolRequest and processes it using the appropriate tool.
     async fn handle_call_tool_request(
         &self,
-        request: CallToolRequest,
+        params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CallToolResult, CallToolError> {
-        if request.params.name.eq(&ShowAuthInfo::tool_name()) {
+        if params.name.eq(&ShowAuthInfo::tool_name()) {
             let tool = ShowAuthInfo::default();
             tool.call_tool(runtime.auth_info_cloned().await)
         } else {
             Err(CallToolError::from_message(format!(
                 "Tool \"{}\" does not exists or inactive!",
-                request.params.name,
+                params.name,
             )))
         }
     }

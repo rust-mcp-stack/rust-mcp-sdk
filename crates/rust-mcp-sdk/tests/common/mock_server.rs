@@ -168,11 +168,12 @@ impl MockBuilder {
 
         let response_fn: AsyncResponseFn = Box::new({
             let message = Arc::clone(&message);
+
             move || {
                 let message = Arc::clone(&message);
 
                 Box::pin(async move {
-                    // Construct SSE stream with 10 static messages using unfold
+                    // Construct SSE stream with count static messages using unfold
                     let message_stream = stream::unfold(0, move |count| {
                         let message = Arc::clone(&message);
 
