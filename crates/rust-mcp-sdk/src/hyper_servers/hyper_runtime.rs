@@ -55,38 +55,15 @@ impl HyperRuntime {
                         .into());
                 };
 
-                let Some(transport) = session_store_clone.get(session).await else {
+                let Some(runtime) = session_store_clone.get(session).await else {
                     return Err(RpcError::invalid_request()
                         .with_message("Invalid or broken session!".to_string())
                         .into());
                 };
 
-                let result = transport
-                    .request_get_task(GetTaskParams {
-                        task_id: task_id.clone(),
-                    })
-                    .await?;
-
-                if result.is_terminal() {
-                    let task_payload = transport
-                        .request_get_task_payload(GetTaskPayloadParams {
-                            task_id: task_id.clone(),
-                        })
-                        .await?;
-
-                    task_store_clone
-                        .store_task_result(
-                            task_id.as_str(),
-                            result.status,
-                            task_payload.into(),
-                            Some(session),
-                        )
-                        .await;
-
-                    return Ok((result.status, result.poll_interval));
-                } else {
-                    return Ok((result.status, result.poll_interval));
-                }
+                runtime
+                    .poll_task_status(task_id, session_id, task_store_clone)
+                    .await
             })
         });
         callback

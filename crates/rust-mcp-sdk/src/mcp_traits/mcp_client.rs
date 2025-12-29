@@ -1,5 +1,5 @@
 use crate::error::SdkResult;
-use crate::task_store::ClientTaskStore;
+use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use crate::{
     schema::{
         schema_utils::{
@@ -15,10 +15,14 @@ use crate::{
     utils::capability_checks::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
-use rust_mcp_schema::ClientCapabilities;
+use rust_mcp_schema::schema_utils::{ClientTaskResult, ServerTaskResult};
 use rust_mcp_schema::{
     schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
     TaskStatusNotificationParams,
+};
+use rust_mcp_schema::{
+    CancelTaskParams, CancelTaskResult, ClientCapabilities, GetTaskParams, GetTaskPayloadParams,
+    GetTaskResult, ListTasksResult,
 };
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
@@ -30,7 +34,16 @@ pub trait McpClient: Sync + Send {
 
     async fn terminate_session(&self);
 
+    /// Returns the client-side task store, if available.
+    ///
+    /// This store tracks tasks initiated by the server that are being processed by the client.
     fn task_store(&self) -> Option<Arc<ClientTaskStore>>;
+
+    /// Returns the server-side task store, if available.
+    ///
+    /// This store tracks tasks initiated by the client that are processed by the server.
+    /// It is responsible for polling task status until each task reaches a terminal state.
+    fn server_task_store(&self) -> Option<Arc<ServerTaskStore>>;
 
     async fn shut_down(&self) -> SdkResult<()>;
     async fn is_shut_down(&self) -> bool;
@@ -368,6 +381,47 @@ pub trait McpClient: Sync + Send {
     ) -> SdkResult<crate::schema::ListToolsResult> {
         let response = self
             .request(RequestFromClient::ListToolsRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to retrieve the state of a task.
+    async fn request_get_task(&self, params: GetTaskParams) -> SdkResult<GetTaskResult> {
+        let response = self
+            .request(RequestFromClient::GetTaskRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to retrieve the result of a completed task.
+    async fn request_get_task_payload(
+        &self,
+        params: GetTaskPayloadParams,
+    ) -> SdkResult<ServerTaskResult> {
+        let response = self
+            .request(RequestFromClient::GetTaskPayloadRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///Send a request to cancel a task.
+    async fn request_task_cancellation(
+        &self,
+        params: CancelTaskParams,
+    ) -> SdkResult<CancelTaskResult> {
+        let response = self
+            .request(RequestFromClient::CancelTaskRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///A request to retrieve a list of tasks.
+    async fn request_task_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<ListTasksResult> {
+        let response = self
+            .request(RequestFromClient::ListTasksRequest(params), None)
             .await?;
         Ok(response.try_into()?)
     }

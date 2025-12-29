@@ -10,14 +10,15 @@ use crate::schema::{
     },
     InitializeRequestParams, InitializeResult, RequestId, RpcError,
 };
-use crate::task_store::{ClientTaskStore, ServerTaskStore};
+use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
 use crate::utils::AbortTaskOnDrop;
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
+use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 #[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
-use rust_mcp_transport::{IoStream, TransportDispatcher};
+use rust_mcp_transport::{IoStream, TaskId, TransportDispatcher};
 use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
@@ -624,6 +625,40 @@ impl ServerRuntime {
         })
     }
 
+    pub(crate) async fn poll_task_status(
+        self: Arc<ServerRuntime>,
+        task_id: TaskId,
+        session_id: Option<SessionId>,
+        task_store: Arc<ClientTaskStore>,
+    ) -> SdkResult<TaskStatusUpdate> {
+        let result = self
+            .request_get_task(GetTaskParams {
+                task_id: task_id.to_string(),
+            })
+            .await?;
+
+        if result.is_terminal() {
+            let task_payload = self
+                .request_get_task_payload(GetTaskPayloadParams {
+                    task_id: task_id.clone(),
+                })
+                .await?;
+
+            task_store
+                .store_task_result(
+                    task_id.as_str(),
+                    result.status,
+                    task_payload.into(),
+                    session_id.as_ref(),
+                )
+                .await;
+
+            return Ok((result.status, result.poll_interval));
+        } else {
+            return Ok((result.status, result.poll_interval));
+        }
+    }
+
     pub(crate) fn new<T>(options: McpServerOptions<T>) -> Arc<Self>
     where
         T: TransportDispatcher<
@@ -660,6 +695,27 @@ impl ServerRuntime {
                         let _ = runtime_clone.notify_task_status(params).await;
                     }
                 });
+            }
+        }
+
+        // Task polling for server initiated tasks
+        if let Some(client_task_store) = runtime.client_task_store.clone() {
+            let task_store_clone = client_task_store.clone();
+            let runtime_clone = runtime.clone();
+
+            let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
+                let task_store_clone = client_task_store.clone();
+                let runtime_clone = runtime_clone.clone();
+
+                Box::pin(async move {
+                    runtime_clone
+                        .poll_task_status(task_id, session_id, task_store_clone)
+                        .await
+                })
+            });
+
+            if let Err(error) = task_store_clone.start_task_polling(callback) {
+                tracing::error!("Failed to start task polling: {error}");
             }
         }
 

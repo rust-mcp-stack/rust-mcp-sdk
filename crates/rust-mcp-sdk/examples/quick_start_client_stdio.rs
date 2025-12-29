@@ -55,6 +55,7 @@ async fn main() -> SdkResult<()> {
         transport,
         handler: handler.to_mcp_client_handler(),
         task_store: Some(Arc::new(InMemoryTaskStore::new(None))), // support mcp tasks: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
+        server_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
     });
     client.clone().start().await?;
 

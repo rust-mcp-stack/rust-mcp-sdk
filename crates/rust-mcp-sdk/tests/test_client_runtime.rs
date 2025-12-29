@@ -25,6 +25,7 @@ async fn tets_client_launch_npx_server() {
         transport,
         handler: TestClientHandler {}.to_mcp_client_handler(),
         task_store: None,
+        server_task_store: None,
     });
 
     client.clone().start().await.unwrap();
@@ -55,6 +56,7 @@ async fn tets_client_launch_uvx_server() {
         transport,
         handler: TestClientHandler {}.to_mcp_client_handler(),
         task_store: None,
+        server_task_store: None,
     });
     client.clone().start().await.unwrap();
     let server_capabilities = client.server_capabilities().unwrap();

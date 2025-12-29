@@ -118,6 +118,7 @@ pub mod test_client_common {
             transport_options,
             handler,
             Some(Arc::new(InMemoryTaskStore::new(None))),
+            Some(Arc::new(InMemoryTaskStore::new(None))),
         );
 
         // client.clone().start().await.unwrap();

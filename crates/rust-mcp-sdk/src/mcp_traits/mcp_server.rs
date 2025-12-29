@@ -18,7 +18,8 @@ use rust_mcp_schema::schema_utils::{
 use rust_mcp_schema::{
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
     ElicitCompleteParams, GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult,
-    ProgressNotificationParams, TaskStatusNotificationParams,
+    ListTasksRequest, ListTasksResult, PaginatedRequestParams, ProgressNotificationParams,
+    TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
 use std::{sync::Arc, time::Duration};
@@ -303,6 +304,17 @@ pub trait McpServer: Sync + Send {
     ) -> SdkResult<CancelTaskResult> {
         let response = self
             .request(RequestFromServer::CancelTaskRequest(params), None)
+            .await?;
+        Ok(response.try_into()?)
+    }
+
+    ///A request to retrieve a list of tasks.
+    async fn request_task_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<ListTasksResult> {
+        let response = self
+            .request(RequestFromServer::ListTasksRequest(params), None)
             .await?;
         Ok(response.try_into()?)
     }

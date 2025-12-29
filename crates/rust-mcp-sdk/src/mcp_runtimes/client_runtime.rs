@@ -3,7 +3,7 @@ pub mod mcp_client_runtime_core;
 use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
 use crate::mcp_traits::{McpClient, McpClientHandler};
-use crate::task_store::ClientTaskStore;
+use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
 use crate::utils::ensure_server_protocole_compatibility;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
@@ -20,9 +20,10 @@ use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 
 use rust_mcp_schema::schema_utils::ResultFromServer;
+use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
-use rust_mcp_transport::{IoStream, SessionId, StreamId, TransportDispatcher};
+use rust_mcp_transport::{IoStream, SessionId, StreamId, TaskId, TransportDispatcher};
 use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{watch, Mutex};
@@ -53,6 +54,7 @@ where
     pub transport: T,
     pub handler: Box<dyn McpClientHandler>,
     pub task_store: Option<Arc<ClientTaskStore>>,
+    pub server_task_store: Option<Arc<ServerTaskStore>>,
 }
 
 pub struct ClientRuntime {
@@ -78,6 +80,7 @@ pub struct ClientRuntime {
     server_details_tx: watch::Sender<Option<InitializeResult>>,
     server_details_rx: watch::Receiver<Option<InitializeResult>>,
     task_store: Option<Arc<ClientTaskStore>>,
+    server_task_store: Option<Arc<ServerTaskStore>>,
 }
 
 impl ClientRuntime {
@@ -86,6 +89,7 @@ impl ClientRuntime {
         transport: TransportType,
         handler: Box<dyn McpClientHandler>,
         task_store: Option<Arc<ClientTaskStore>>,
+        server_task_store: Option<Arc<ServerTaskStore>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -102,7 +106,8 @@ impl ClientRuntime {
             stream_id_gen: FastIdGenerator::new(Some("s_")),
             server_details_tx,
             server_details_rx,
-            task_store: task_store.clone(),
+            task_store,
+            server_task_store,
         }
     }
 
@@ -112,6 +117,7 @@ impl ClientRuntime {
         transport_options: StreamableTransportOptions,
         handler: Box<dyn McpClientHandler>,
         task_store: Option<Arc<ClientTaskStore>>,
+        server_task_store: Option<Arc<ServerTaskStore>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -128,6 +134,7 @@ impl ClientRuntime {
             server_details_tx,
             server_details_rx,
             task_store,
+            server_task_store,
         }
     }
 
@@ -548,6 +555,40 @@ impl ClientRuntime {
         };
         send_res
     }
+
+    pub(crate) async fn poll_task_status(
+        self: Arc<ClientRuntime>,
+        task_id: TaskId,
+        session_id: Option<SessionId>,
+        task_store: Arc<ServerTaskStore>,
+    ) -> SdkResult<TaskStatusUpdate> {
+        let result = self
+            .request_get_task(GetTaskParams {
+                task_id: task_id.to_string(),
+            })
+            .await?;
+
+        if result.is_terminal() {
+            let task_payload = self
+                .request_get_task_payload(GetTaskPayloadParams {
+                    task_id: task_id.clone(),
+                })
+                .await?;
+
+            task_store
+                .store_task_result(
+                    task_id.as_str(),
+                    result.status,
+                    task_payload.into(),
+                    session_id.as_ref(),
+                )
+                .await;
+
+            return Ok((result.status, result.poll_interval));
+        } else {
+            return Ok((result.status, result.poll_interval));
+        }
+    }
 }
 
 #[async_trait]
@@ -601,6 +642,10 @@ impl McpClient for ClientRuntime {
         self.task_store.clone()
     }
 
+    fn server_task_store(&self) -> Option<Arc<ServerTaskStore>> {
+        self.server_task_store.clone()
+    }
+
     async fn session_id(&self) -> Option<SessionId> {
         self.session_id.read().await.clone()
     }
@@ -635,15 +680,38 @@ impl McpClient for ClientRuntime {
     }
 
     async fn start(self: Arc<Self>) -> SdkResult<()> {
-        let runtime_clone = self.clone();
-        if let Some(task_store) = runtime_clone.task_store() {
+        let runtime = self.clone();
+
+        if let Some(task_store) = runtime.task_store() {
             // send TaskStatusNotification  if task_store is present and supports subscribe()
             if let Some(mut stream) = task_store.subscribe() {
                 tokio::spawn(async move {
                     while let Some((params, _)) = stream.next().await {
-                        let _ = runtime_clone.notify_task_status(params).await;
+                        let _ = runtime.notify_task_status(params).await;
                     }
                 });
+            }
+        }
+
+        let runtime = self.clone();
+        // Task polling for client initiated tasks
+        if let Some(server_task_store) = runtime.server_task_store.clone() {
+            let task_store_clone = server_task_store.clone();
+            let runtime_clone = runtime.clone();
+
+            let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
+                let task_store_clone = server_task_store.clone();
+                let runtime_clone = runtime_clone.clone();
+
+                Box::pin(async move {
+                    runtime_clone
+                        .poll_task_status(task_id, session_id, task_store_clone)
+                        .await
+                })
+            });
+
+            if let Err(error) = task_store_clone.start_task_polling(callback) {
+                tracing::error!("Failed to start task polling: {error}");
             }
         }
 
