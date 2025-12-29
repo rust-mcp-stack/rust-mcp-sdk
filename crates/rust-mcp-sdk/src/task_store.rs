@@ -115,7 +115,7 @@ where
     /// Model Context Protocol task flow — i.e., when a task-augmented request has
     /// been sent to the remote side (the receiver) and the local side needs to
     /// actively monitor progress via repeated `tasks/get` calls.
-    fn start_task_polling(&self, get_task_callback: GetTaskCallback) -> SdkResult<()>;
+    fn start_task_polling(&self, get_task_callback: TaskStatusPoller) -> SdkResult<()>;
 
     /// Waits asynchronously for the result of a task.
     ///

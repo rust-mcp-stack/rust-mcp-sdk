@@ -4,7 +4,8 @@ use crate::{
         error::{TransportServerError, TransportServerResult},
         ServerRuntime,
     },
-    task_store::{ClientTaskStore, GetTaskCallback, ServerTaskStore},
+    session_store::SessionStore,
+    task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller},
 };
 use crate::{
     mcp_http::McpAppState,
@@ -37,6 +38,59 @@ pub struct HyperRuntime {
 }
 
 impl HyperRuntime {
+    fn task_poller_callback(
+        client_task_store: Arc<ClientTaskStore>,
+        session_store: Arc<dyn SessionStore>,
+    ) -> TaskStatusPoller {
+        let session_store = session_store.clone();
+        let task_store_clone = client_task_store.clone();
+
+        let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
+            let session_store_clone = session_store.clone();
+            let task_store_clone = task_store_clone.clone();
+            Box::pin(async move {
+                let Some(session) = session_id.as_ref() else {
+                    return Err(RpcError::invalid_request()
+                        .with_message("No session id provided!".to_string())
+                        .into());
+                };
+
+                let Some(transport) = session_store_clone.get(session).await else {
+                    return Err(RpcError::invalid_request()
+                        .with_message("Invalid or broken session!".to_string())
+                        .into());
+                };
+
+                let result = transport
+                    .request_get_task(GetTaskParams {
+                        task_id: task_id.clone(),
+                    })
+                    .await?;
+
+                if result.is_terminal() {
+                    let task_payload = transport
+                        .request_get_task_payload(GetTaskPayloadParams {
+                            task_id: task_id.clone(),
+                        })
+                        .await?;
+
+                    task_store_clone
+                        .store_task_result(
+                            task_id.as_str(),
+                            result.status,
+                            task_payload.into(),
+                            Some(session),
+                        )
+                        .await;
+
+                    return Ok((result.status, result.poll_interval));
+                } else {
+                    return Ok((result.status, result.poll_interval));
+                }
+            })
+        });
+        callback
+    }
     pub async fn create(server: HyperServer) -> SdkResult<Self> {
         let addr = server.options.resolve_server_address().await?;
         let state = server.state();
@@ -78,53 +132,9 @@ impl HyperRuntime {
 
         // Task polling for server initiated tasks
         if let Some(client_task_store) = state.client_task_store.clone() {
-            let state_clone = state.clone();
-            let task_store_clone = client_task_store.clone();
-
-            let callback: GetTaskCallback = Box::new(move |task_id, session_id| {
-                let state_clone = state_clone.clone();
-                let task_store_clone = task_store_clone.clone();
-                Box::pin(async move {
-                    let Some(session) = session_id.as_ref() else {
-                        return Err(RpcError::invalid_request()
-                            .with_message("No session id provided!".to_string())
-                            .into());
-                    };
-
-                    let Some(transport) = state_clone.session_store.get(session).await else {
-                        return Err(RpcError::invalid_request()
-                            .with_message("Invalid or broken session!".to_string())
-                            .into());
-                    };
-
-                    let result = transport
-                        .request_get_task(GetTaskParams {
-                            task_id: task_id.clone(),
-                        })
-                        .await?;
-
-                    if result.is_terminal() {
-                        let task_payload = transport
-                            .request_get_task_payload(GetTaskPayloadParams {
-                                task_id: task_id.clone(),
-                            })
-                            .await?;
-
-                        task_store_clone
-                            .store_task_result(
-                                task_id.as_str(),
-                                result.status,
-                                task_payload.into(),
-                                Some(session),
-                            )
-                            .await;
-
-                        return Ok((result.status, result.poll_interval));
-                    } else {
-                        return Ok((result.status, result.poll_interval));
-                    }
-                })
-            });
+            let session_store = state.session_store.clone();
+            let callback: TaskStatusPoller =
+                Self::task_poller_callback(Arc::clone(&client_task_store), session_store);
             client_task_store.start_task_polling(callback)?;
         }
 

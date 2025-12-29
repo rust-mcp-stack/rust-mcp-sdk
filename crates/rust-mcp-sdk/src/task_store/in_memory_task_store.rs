@@ -25,8 +25,10 @@ use tokio::task::JoinHandle;
 /// (in milliseconds). The poll interval can be adjusted dynamically by the remote
 /// side to implement adaptive polling (e.g., longer intervals when idle).
 pub type TaskStatusUpdate = (TaskStatus, Option<i64>);
-// TaskStatusPoller
-pub type GetTaskCallback = Box<
+
+/// A callback used to poll the status of a task from the task receiver side.
+/// This will be invoked by the entity initiating the task, which could be either the client or the server.
+pub type TaskStatusPoller = Box<
     dyn Fn(TaskId, Option<SessionId>) -> BoxFuture<'static, SdkResult<TaskStatusUpdate>>
         + Send
         + Sync
@@ -382,7 +384,7 @@ where
         task
     }
 
-    fn start_task_polling(&self, get_task_callback: GetTaskCallback) -> SdkResult<()> {
+    fn start_task_polling(&self, get_task_callback: TaskStatusPoller) -> SdkResult<()> {
         match self
             .polling_task_handle
             .lock()
@@ -997,7 +999,7 @@ mod polling_tests {
         let poll_count = Arc::new(Mutex::new(0));
         let count_clone = poll_count.clone();
 
-        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |_task_id, _session_id| {
             let count = count_clone.clone();
             Box::pin(async move {
                 *count.lock().await += 1;
@@ -1042,7 +1044,7 @@ mod polling_tests {
         let poll_order = Arc::new(Mutex::new(Vec::new()));
         let order_clone = poll_order.clone();
 
-        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |task_id, _session_id| {
             let order = order_clone.clone();
             Box::pin(async move {
                 order.lock().await.push(task_id.clone());
@@ -1128,7 +1130,7 @@ mod polling_tests {
         let count_clone = poll_count.clone();
         let complete_clone = should_complete.clone();
 
-        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |task_id, _session_id| {
             let count = count_clone.clone();
             let complete = complete_clone.clone();
             Box::pin(async move {
@@ -1187,7 +1189,7 @@ mod polling_tests {
         let poll_count = Arc::new(Mutex::new(0));
         let count_clone = poll_count.clone();
 
-        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |_task_id, _session_id| {
             let count = count_clone.clone();
             Box::pin(async move {
                 let mut c = count.lock().await;
@@ -1242,7 +1244,7 @@ mod polling_tests {
         let poll_order = Arc::new(Mutex::new(Vec::new()));
         let order_clone = poll_order.clone();
 
-        let callback: GetTaskCallback = Box::new(move |task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |task_id, _session_id| {
             let order = order_clone.clone();
             Box::pin(async move {
                 order.lock().await.push(task_id.clone());
@@ -1317,7 +1319,7 @@ mod polling_tests {
         let poll_count = Arc::new(Mutex::new(0));
         let count_clone = poll_count.clone();
 
-        let callback: GetTaskCallback = Box::new(move |_task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |_task_id, _session_id| {
             let count = count_clone.clone();
             Box::pin(async move {
                 *count.lock().await += 1;
