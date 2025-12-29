@@ -126,6 +126,10 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
             None
         };
 
+        runtime
+            .capabilities()
+            .can_handle_request(&client_jsonrpc_request)?;
+
         match client_jsonrpc_request {
             ClientJsonrpcRequest::InitializeRequest(initialize_request) => self
                 .handler

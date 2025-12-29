@@ -1,5 +1,3 @@
-pub mod capability_checks;
-
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
 use crate::schema::{ClientMessages, ProtocolVersion, SdkError};
 use std::cmp::Ordering;

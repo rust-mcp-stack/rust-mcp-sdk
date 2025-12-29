@@ -179,18 +179,6 @@ pub trait McpClient: Sync + Send {
         &self.client_info().capabilities
     }
 
-    /// Asserts that server capabilities support the requested method.
-    ///
-    /// Verifies that the server has the necessary capabilities to handle the given request method.
-    /// If the server is not initialized or lacks a required capability, an error is returned.
-    /// This can be utilized to avoid sending requests when the opposing party lacks support for them.
-    fn assert_server_capabilities(&self, request_method: &str) -> Result<(), RpcError> {
-        let capabilities = &self.server_capabilities().ok_or::<RpcError>(
-            RpcError::internal_error().with_message("Server is not initialized!".to_string()),
-        )?;
-        assert_server_request_capabilities(capabilities, request_method)
-    }
-
     /// Sends a request to the server and processes the response.
     ///
     /// This function sends a `RequestFromClient` message to the server, waits for the response,
