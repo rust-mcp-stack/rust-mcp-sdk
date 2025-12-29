@@ -777,32 +777,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 
 [[package]]
-name = "hello-world-mcp-server-stdio"
-version = "0.1.33"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "hello-world-mcp-server-stdio-core"
-version = "0.1.24"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "hello-world-server-streamable-http"
 version = "0.1.36"
 dependencies = [

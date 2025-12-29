@@ -1,22 +1,24 @@
+use super::tools::GreetingTools;
 use async_trait::async_trait;
-use rust_mcp_sdk::schema::{
-    schema_utils::CallToolError, CallToolResult, ListToolsResult, RpcError,
+use rust_mcp_sdk::{
+    mcp_server::ServerHandler,
+    schema::{
+        schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ListToolsResult,
+        PaginatedRequestParams, RpcError,
+    },
+    McpServer,
 };
-use rust_mcp_sdk::schema::{CallToolRequestParams, PaginatedRequestParams};
-use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
 use std::sync::Arc;
 
-use crate::tools::GreetingTools;
-
 // Custom Handler to handle MCP Messages
-pub struct MyServerHandler;
+pub struct ExampleServerHandler;
 
 // To check out a list of all the methods in the trait that you can override, take a look at
 // https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_server_handler.rs
 
 #[async_trait]
 #[allow(unused)]
-impl ServerHandler for MyServerHandler {
+impl ServerHandler for ExampleServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,

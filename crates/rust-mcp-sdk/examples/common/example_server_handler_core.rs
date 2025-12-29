@@ -1,25 +1,24 @@
-use std::sync::Arc;
-
+use super::tools::GreetingTools;
 use async_trait::async_trait;
-
-use rust_mcp_sdk::schema::{
-    schema_utils::{CallToolError, NotificationFromClient, RequestFromClient, ResultFromServer},
-    ListToolsResult, RpcError,
-};
 use rust_mcp_sdk::{
     mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
+    schema::{
+        schema_utils::CallToolError, ListToolsResult, NotificationFromClient, RequestFromClient,
+        ResultFromServer, RpcError,
+    },
     McpServer,
 };
+use std::sync::Arc;
 
-use crate::tools::GreetingTools;
-
-pub struct MyServerHandler;
+// Custom Handler to handle MCP Messages
+pub struct ExampleServerHandlerCore;
 
 // To check out a list of all the methods in the trait that you can override, take a look at
-// https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_server_handler_core.rs
-#[allow(unused)]
+// https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_server_handler.rs
+
 #[async_trait]
-impl ServerHandlerCore for MyServerHandler {
+#[allow(unused)]
+impl ServerHandlerCore for ExampleServerHandlerCore {
     // Process incoming requests from the client
     async fn handle_request(
         &self,

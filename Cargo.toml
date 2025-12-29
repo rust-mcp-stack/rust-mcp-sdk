@@ -7,8 +7,6 @@ members = [
     "crates/rust-mcp-extra",
     "examples/simple-mcp-client-stdio",
     "examples/simple-mcp-client-stdio-core",
-    "examples/hello-world-mcp-server-stdio",
-    "examples/hello-world-mcp-server-stdio-core",
     "examples/hello-world-server-streamable-http",
     "examples/hello-world-server-streamable-http-core",
     "examples/simple-mcp-client-sse",

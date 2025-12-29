@@ -1,33 +1,25 @@
-mod handler;
-mod tools;
-use handler::MyServerHandler;
-use rust_mcp_sdk::mcp_icon;
-use rust_mcp_sdk::mcp_server::McpServerOptions;
+pub mod common;
+
+use crate::common::{initialize_tracing, ExampleServerHandler};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
     ServerCapabilitiesResources, ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_server::{server_runtime, ServerRuntime, ToMcpServerHandler},
-    McpServer, StdioTransport, TransportOptions,
+    mcp_icon,
+    mcp_server::{server_runtime, McpServerOptions, ServerRuntime},
+    McpServer, StdioTransport, ToMcpServerHandler, TransportOptions,
 };
 use std::sync::Arc;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    // initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Set up the tracing subscriber for logging
+    initialize_tracing();
+
     // STEP 1: Define server details and capabilities
     let server_details = InitializeResult {
-        // server name and version
         server_info: Implementation {
             name: "Hello World MCP Server".into(),
             version: "0.1.0".into(),
@@ -59,7 +51,7 @@ async fn main() -> SdkResult<()> {
     let transport = StdioTransport::new(TransportOptions::default())?;
 
     // STEP 3: instantiate our custom handler for handling MCP messages
-    let handler = MyServerHandler {};
+    let handler = ExampleServerHandler {};
 
     // STEP 4: create a MCP server
     let server: Arc<ServerRuntime> = server_runtime::create_server(McpServerOptions {
