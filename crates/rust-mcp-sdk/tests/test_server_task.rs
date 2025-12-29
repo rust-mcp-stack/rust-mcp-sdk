@@ -50,13 +50,13 @@ async fn test_server_task_normal() {
         .as_object()
         .unwrap()
         .clone();
-    let aruments = TaskAugmentedTool::request_params()
+    let arguments = TaskAugmentedTool::request_params()
         .with_arguments(v)
         .with_task(TaskMetadata { ttl: None });
 
     let json_rpc_message: ClientJsonrpcRequest = ClientJsonrpcRequest::new(
         RequestId::Integer(1),
-        RequestFromClient::CallToolRequest(aruments).into(),
+        RequestFromClient::CallToolRequest(arguments).into(),
     );
 
     let resp = send_post_request(
