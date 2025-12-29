@@ -934,7 +934,6 @@ mod tests {
 #[cfg(test)]
 mod polling_tests {
     use super::*;
-    use crate::*;
     use rust_mcp_schema::RpcError;
     use serde_json::Value;
     use std::sync::Arc;
@@ -952,9 +951,11 @@ mod polling_tests {
 
         let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
 
-        store.start_task_polling(Box::new(|task_id, _| {
-            Box::pin(async { Ok((TaskStatus::Working, Some(500))) })
-        }));
+        store
+            .start_task_polling(Box::new(|_task_id, _| {
+                Box::pin(async { Ok((TaskStatus::Working, Some(500))) })
+            }))
+            .unwrap();
 
         let created = store
             .create_task(
@@ -1001,7 +1002,7 @@ mod polling_tests {
         });
 
         let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
-        store.start_task_polling(callback);
+        store.start_task_polling(callback).unwrap();
 
         // Create one task with short interval
         store
@@ -1046,7 +1047,7 @@ mod polling_tests {
         });
 
         let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
-        store.start_task_polling(callback);
+        store.start_task_polling(callback).unwrap();
 
         // Create tasks: short, medium, long
         let task_short = store
@@ -1123,7 +1124,7 @@ mod polling_tests {
         let count_clone = poll_count.clone();
         let complete_clone = should_complete.clone();
 
-        let callback: TaskStatusPoller = Box::new(move |task_id, _session_id| {
+        let callback: TaskStatusPoller = Box::new(move |_task_id, _session_id| {
             let count = count_clone.clone();
             let complete = complete_clone.clone();
             Box::pin(async move {
@@ -1138,7 +1139,7 @@ mod polling_tests {
         });
 
         let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::new(None);
-        store.start_task_polling(callback);
+        store.start_task_polling(callback).unwrap();
 
         store
             .create_task(
