@@ -628,7 +628,7 @@ impl ServerRuntime {
     pub(crate) async fn poll_task_status(
         self: Arc<ServerRuntime>,
         task_id: TaskId,
-        session_id: Option<SessionId>,
+        session_id: Option<String>,
         task_store: Arc<ClientTaskStore>,
     ) -> SdkResult<TaskStatusUpdate> {
         let result = self
@@ -652,11 +652,8 @@ impl ServerRuntime {
                     session_id.as_ref(),
                 )
                 .await;
-
-            return Ok((result.status, result.poll_interval));
-        } else {
-            return Ok((result.status, result.poll_interval));
         }
+        Ok((result.status, result.poll_interval))
     }
 
     pub(crate) fn new<T>(options: McpServerOptions<T>) -> Arc<Self>

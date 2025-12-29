@@ -59,8 +59,13 @@ async fn main() -> SdkResult<()> {
     let handler = MyClientHandler {};
 
     // STEP 4: create the client with transport options and the handler
-    let client =
-        client_runtime::with_transport_options(client_details, transport_options, handler, None);
+    let client = client_runtime::with_transport_options(
+        client_details,
+        transport_options,
+        handler,
+        None,
+        None,
+    );
 
     // STEP 5: start the MCP client
     client.clone().start().await?;

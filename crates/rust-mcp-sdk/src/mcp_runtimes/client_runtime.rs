@@ -583,11 +583,8 @@ impl ClientRuntime {
                     session_id.as_ref(),
                 )
                 .await;
-
-            return Ok((result.status, result.poll_interval));
-        } else {
-            return Ok((result.status, result.poll_interval));
         }
+        Ok((result.status, result.poll_interval))
     }
 }
 

@@ -182,13 +182,10 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
         task_id: &str,
         session_id: &Option<String>,
     ) -> Option<Receiver<(TaskStatus, Option<Res>)>> {
-        let Some(entry) = self
+        let entry = self
             .tasks
             .get_mut(session_id)
-            .and_then(|session_map| session_map.get_mut(task_id))
-        else {
-            return None;
-        };
+            .and_then(|session_map| session_map.get_mut(task_id))?;
 
         let (tx_response, rx_response) = oneshot::channel::<(TaskStatus, Option<Res>)>();
         entry.result_tx = Some(tx_response);
@@ -385,11 +382,7 @@ where
     }
 
     fn start_task_polling(&self, get_task_callback: TaskStatusPoller) -> SdkResult<()> {
-        match self
-            .polling_task_handle
-            .lock()
-            .and_then(|v| Ok(v.is_some()))
-        {
+        match self.polling_task_handle.lock().map(|v| v.is_some()) {
             Ok(has_value) if has_value => {
                 return Err(RpcError::internal_error()
                     .with_message("Task polling is already running.")
@@ -415,7 +408,7 @@ where
                     // TODO: avoid cloning
                     match get_task_callback(task_id.clone(), session_id.clone()).await {
                         Ok((task_status, poll_interval)) => {
-                            if *&task_status.is_terminal() {
+                            if task_status.is_terminal() {
                                 // remove the task and resolve awaiting task if in terminal state
                                 let mut guard = inner.write().await;
                                 let entry = guard.remove_task(&task_id, &session_id);

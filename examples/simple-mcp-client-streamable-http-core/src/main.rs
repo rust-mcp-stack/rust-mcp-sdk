@@ -63,6 +63,7 @@ async fn main() -> SdkResult<()> {
         transport_options,
         handler,
         None,
+        None,
     );
 
     // STEP 5: start the MCP client

@@ -15,7 +15,7 @@ use crate::{
     utils::capability_checks::assert_server_request_capabilities,
 };
 use async_trait::async_trait;
-use rust_mcp_schema::schema_utils::{ClientTaskResult, ServerTaskResult};
+use rust_mcp_schema::schema_utils::ServerTaskResult;
 use rust_mcp_schema::{
     schema_utils::CustomNotification, CancelledNotificationParams, ProgressNotificationParams,
     TaskStatusNotificationParams,

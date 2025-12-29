@@ -18,7 +18,7 @@ use rust_mcp_schema::schema_utils::{
 use rust_mcp_schema::{
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
     ElicitCompleteParams, GenericResult, GetTaskParams, GetTaskPayloadParams, GetTaskResult,
-    ListTasksRequest, ListTasksResult, PaginatedRequestParams, ProgressNotificationParams,
+    ListTasksResult, PaginatedRequestParams, ProgressNotificationParams,
     TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
@@ -175,6 +175,14 @@ pub trait McpServer: Sync + Send {
         if let ResultFromClient::CreateTaskResult(create_task_result) = &client_response.result {
             if let Some(request_to_store) = request_clone {
                 if let Some(client_task_store) = self.client_task_store() {
+                    let session_id = {
+                        #[cfg(feature = "hyper-server")]
+                        {
+                            self.session_id()
+                        }
+                        #[cfg(not(feature = "hyper-server"))]
+                        None
+                    };
                     client_task_store
                         .create_task(
                             CreateTaskOptions {
@@ -184,7 +192,7 @@ pub trait McpServer: Sync + Send {
                             },
                             client_response.id.clone(),
                             ServerJsonrpcRequest::new(client_response.id, request_to_store),
-                            self.session_id(),
+                            session_id,
                         )
                         .await;
                 }
