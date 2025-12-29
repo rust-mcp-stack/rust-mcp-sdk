@@ -24,6 +24,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - ✅ Multi-client concurrency
 - ✅ DNS Rebinding Protection
 - ✅ Resumability
+- ✅ MCP [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) support
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
 - ✅ OAuth Authentication for MCP Servers
