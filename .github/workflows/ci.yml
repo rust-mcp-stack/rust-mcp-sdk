@@ -35,6 +35,7 @@ jobs:
           restore-keys: ${{ matrix.os }}-rust-
 
       - name: Clear rustup cache (avoid conflict errors)
+        shell: bash
         run: |
           rm -rf ~/.rustup/toolchains
           rm -rf ~/.rustup/downloads
