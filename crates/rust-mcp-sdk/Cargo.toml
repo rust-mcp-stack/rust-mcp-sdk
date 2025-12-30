@@ -53,7 +53,7 @@ wiremock = "0.5"
 tempfile = "3.23.0"
 colored = "3.0.0"
 tokio = { workspace=true, features = ["full", "test-util"] }
-rust-mcp-extra={path="../rust-mcp-extra"}
+mcp-extra={path="../rust-mcp-extra", package = "rust-mcp-extra"}
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",

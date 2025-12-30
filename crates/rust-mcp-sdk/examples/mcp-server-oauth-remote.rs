@@ -1,5 +1,7 @@
 pub mod common;
+extern crate mcp_extra as rust_mcp_extra; // Prevent release-please from mistakenly treating this dev dependency as a cyclic dependency
 
+use crate::common::ServerHandlerAuth;
 use rust_mcp_extra::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
@@ -19,8 +21,6 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-use crate::common::ServerHandlerAuth;
 
 // this function creates and setup a RemoteAuthProvider , pointing to a local KeyCloak server
 // please refer to the keycloak-setup section of the following blog post for

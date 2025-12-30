@@ -1,11 +1,14 @@
 use async_trait::async_trait;
 use rust_mcp_sdk::auth::AuthInfo;
-use rust_mcp_sdk::macros::{mcp_tool, JsonSchema};
 use rust_mcp_sdk::schema::{
-    schema_utils::CallToolError, CallToolResult, ListToolsResult, RpcError,
+    schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ListToolsResult,
+    PaginatedRequestParams, RpcError, TextContent,
 };
-use rust_mcp_sdk::schema::{CallToolRequestParams, PaginatedRequestParams, TextContent};
-use rust_mcp_sdk::{mcp_server::ServerHandler, McpServer};
+use rust_mcp_sdk::{
+    macros::{mcp_tool, JsonSchema},
+    mcp_server::ServerHandler,
+    McpServer,
+};
 use std::sync::Arc;
 use std::vec;
 
