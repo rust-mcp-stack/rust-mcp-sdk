@@ -46,8 +46,21 @@ command = "cargo"
 args = ["doc", "--no-deps"]
 env = { RUSTDOCFLAGS = "-D warnings" }
 
+
+
+[tasks.build-all-features]
+script = '''
+set -e
+
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "client,stdio"
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "server,stdio"
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "hyper-server,streamable-http"
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "hyper-server,sse"
+'''
+
+
 [tasks.check]
-dependencies = ["fmt", "clippy", "test", "doc-strict", "doc-test"]
+dependencies = ["fmt", "clippy", "build-all-features", "test", "doc-strict", "doc-test"]
 
 [tasks.clippy-fix]
 command = "cargo"

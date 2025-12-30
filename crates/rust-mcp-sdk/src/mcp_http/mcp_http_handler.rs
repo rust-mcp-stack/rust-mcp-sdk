@@ -11,7 +11,7 @@ use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, Reques
 use crate::mcp_http::{GenericBodyExt, RequestExt};
 use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
-#[cfg(feature = "sse")]
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::{
     error::McpSdkError,
     mcp_http::{
