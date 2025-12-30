@@ -777,60 +777,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 
 [[package]]
-name = "hello-world-mcp-server-stdio"
-version = "0.1.33"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "hello-world-mcp-server-stdio-core"
-version = "0.1.24"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "hello-world-server-streamable-http"
-version = "0.1.36"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "hello-world-server-streamable-http-core"
-version = "0.1.24"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2049,6 +1995,7 @@ dependencies = [
  "axum-server",
  "base64 0.22.1",
  "bytes",
+ "colored",
  "futures",
  "http 1.4.0",
  "http-body 1.0.1",
@@ -2056,6 +2003,7 @@ dependencies = [
  "hyper 1.8.1",
  "jsonwebtoken",
  "reqwest",
+ "rust-mcp-extra",
  "rust-mcp-macros",
  "rust-mcp-schema",
  "rust-mcp-transport",
@@ -2284,21 +2232,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "server-oauth-remote"
-version = "0.1.35"
-dependencies = [
- "async-trait",
- "futures",
- "rust-mcp-extra",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2342,100 +2275,6 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest",
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "simple-mcp-client-sse"
-version = "0.1.27"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "simple-mcp-client-sse-core"
-version = "0.1.24"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "simple-mcp-client-stdio"
-version = "0.1.33"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "simple-mcp-client-stdio-core"
-version = "0.1.33"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
-name = "simple-mcp-client-streamable-http"
-version = "0.1.5"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "simple-mcp-client-streamable-http-core"
-version = "0.1.5"
-dependencies = [
- "async-trait",
- "colored",
- "futures",
- "rust-mcp-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

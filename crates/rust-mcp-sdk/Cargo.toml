@@ -51,7 +51,9 @@ time = {version="0.3.0", features = ["formatting", "local-offset"]}
 [dev-dependencies]
 wiremock = "0.5"
 tempfile = "3.23.0"
+colored = "3.0.0"
 tokio = { workspace=true, features = ["full", "test-util"] }
+rust-mcp-extra={path="../rust-mcp-extra"}
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",
@@ -82,6 +84,7 @@ hyper-server = ["axum", "axum-server", "hyper", "server", "tokio-stream","http",
 ssl = ["axum-server/tls-rustls"]
 tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 macros = ["rust-mcp-macros/sdk"]
+
 
 
 [lints]
