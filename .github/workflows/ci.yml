@@ -28,12 +28,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.rustup/toolchains
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: ${{ matrix.os }}-rust-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ matrix.os }}-rust-
+
+      - name: Clear rustup cache (avoid conflict errors)
+        run: |
+          rm -rf ~/.rustup/toolchains
+          rm -rf ~/.rustup/downloads
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
