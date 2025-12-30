@@ -8,7 +8,7 @@ This folder contains a variety of example programs demonstrating how to use the 
         - quick-start-server-stdio
         -  hello-world-mcp-server-stdio
         -  hello-world-mcp-server-stdio-core
-    - **[Streamable HTTP Examles](#%EF%B8%8F-mcp-servers-examples-streamable-http)**
+    - **[Streamable HTTP Examples](#%EF%B8%8F-mcp-servers-examples-streamable-http)**
         - quick-start-streamable-http
         - hello-world-server-streamable-http
         - hello-world-server-streamable-http-core        
@@ -19,10 +19,10 @@ This folder contains a variety of example programs demonstrating how to use the 
         - quick-start-client-stdio
         - simple-mcp-client-stdio
         - simple-mcp-client-stdio-core
-    - **[Streamable HTTP Examles](#%EF%B8%8F-mcp-client-examples-streamable-http)**      
+    - **[Streamable HTTP Examples](#%EF%B8%8F-mcp-client-examples-streamable-http)**      
         - simple-mcp-client-streamable-http
         - simple-mcp-client-streamable-http-core
-    - **[sse Examles](#%EF%B8%8F-mcp-client-examples-sse)**
+    - **[sse Examples](#%EF%B8%8F-mcp-client-examples-sse)**
         - simple-mcp-client-sse
         - simple-mcp-client-sse-core 
 
