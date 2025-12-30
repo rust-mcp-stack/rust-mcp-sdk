@@ -40,7 +40,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
-rust-mcp-sdk = "0.7"
+rust-mcp-sdk = "0.8"
 serde = "1.0"
 serde_json = "1.0"
 tokio = "1.4"
@@ -129,7 +129,7 @@ tool_box!(GreetingTools, [SayHelloTool, SayGoodbyeTool]);
 
 ## Step 5: Create a handler for handling MCP Messages
 
-We need to create a handler for handling MCP messages including requests and notifications coming from the MCP Client.
+We need to create a handler (handler.rs) for handling MCP messages including requests and notifications coming from the MCP Client.
 
 > **Note:** [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) provides two type of handler traits that we can chose from:`mcp_server_handler` which is recommended for most use cases and `mcp_server_handler_core` which gives us more control but we will be responsible for every incoming request, notification and errors.
 
@@ -144,17 +144,17 @@ Here is the code for `handler.rs` :
 
 ```rs
 // src/handler.rs
-
-use std::sync::Arc;
-
-use async_trait::async_trait;
-use rust_mcp_sdk::schema::{
-    CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, RpcError,
-    schema_utils::CallToolError,
-};
-use rust_mcp_sdk::{McpServer, mcp_server::ServerHandler};
-
 use crate::tools::GreetingTools;
+use async_trait::async_trait;
+use rust_mcp_sdk::{
+    McpServer,
+    mcp_server::ServerHandler,
+    schema::{
+        CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams, RpcError,
+        schema_utils::CallToolError,
+    },
+};
+use std::sync::Arc;
 
 // Custom Handler to handle MCP Messages
 pub struct MyServerHandler;
@@ -164,7 +164,7 @@ impl ServerHandler for MyServerHandler {
     // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,
-        _request: ListToolsRequest,
+        _params: Option<PaginatedRequestParams>,
         _runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
@@ -175,10 +175,14 @@ impl ServerHandler for MyServerHandler {
     }
 
     //Handles incoming CallToolRequest and processes it using the appropriate tool.
-    async fn handle_call_tool_request(&self, request: CallToolRequest) -> std::result::Result<CallToolResult, CallToolError> {
+    async fn handle_call_tool_request(
+        &self,
+        params: CallToolRequestParams,
+        _runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<CallToolResult, CallToolError> {
         // Attempt to convert request parameters into GreetingTools enum
         let tool_params: GreetingTools =
-            GreetingTools::try_from(request.params).map_err(CallToolError::new)?;
+            GreetingTools::try_from(params).map_err(CallToolError::new)?;
 
         // Match the tool variant and execute its corresponding logic
         match tool_params {
@@ -187,7 +191,6 @@ impl ServerHandler for MyServerHandler {
         }
     }
 }
-
 ```
 
 ## Step 6: Combine all components and create the Server!
@@ -212,9 +215,10 @@ use rust_mcp_sdk::schema::{
     ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
-    error::SdkResult,
-    mcp_server::{server_runtime, ServerRuntime, ToMcpServerHandler},
     McpServer, StdioTransport, TransportOptions,
+    error::SdkResult,
+    mcp_icon,
+    mcp_server::{McpServerOptions, ToMcpServerHandler, server_runtime},
 };
 
 #[tokio::main]
@@ -223,9 +227,17 @@ async fn main() -> SdkResult<()> {
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Hello World MCP Server".to_string(),
+            name: "Hello World MCP Server".into(),
             version: "0.1.0".to_string(),
-            title: Some("Hello World MCP Server".to_string()),
+            title: Some("Hello World MCP Server".into()),
+            description: Some("A Simple Hello World MCP Server in Rust!".into()),
+            icons: vec![mcp_icon!(
+                src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
+                mime_type = "image/png",
+                sizes = ["128x128"],
+                theme = "light"
+            )],
+            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
@@ -244,7 +256,13 @@ async fn main() -> SdkResult<()> {
     let handler = MyServerHandler {};
 
     //create the MCP server
-    let server = server_runtime::create_server(server_details, transport, handler.to_mcp_server_handler());
+    let server = server_runtime::create_server(McpServerOptions {
+        server_details,
+        transport,
+        handler: handler.to_mcp_server_handler(),
+        task_store: None,
+        client_task_store: None,
+    });
 
     // Start the server
     server.start().await
