@@ -1,6 +1,7 @@
 #[cfg(feature = "auth")]
 pub mod auth_routes;
 pub mod fallback_routes;
+#[cfg(feature = "sse")]
 pub mod messages_routes;
 #[cfg(feature = "sse")]
 pub mod sse_routes;
