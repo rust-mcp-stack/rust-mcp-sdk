@@ -81,7 +81,10 @@ use rust_mcp_sdk::{
 //****************//
 #[mcp_tool(
     name = "say_hello",
-    description = "Accepts a person's name and says a personalized \"Hello\" to that person"
+    description = "Accepts a person's name and says a personalized \"Hello\" to that person",
+    icons = [
+        (src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/hello_icon.png", mime_type = "image/png", sizes = ["128x128"]),
+    ]
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
 pub struct SayHelloTool {
@@ -103,7 +106,10 @@ impl SayHelloTool {
 //******************//
 #[mcp_tool(
     name = "say_goodbye",
-    description = "Accepts a person's name and says a personalized \"Goodbye\" to that person."
+    description = "Accepts a person's name and says a personalized \"Goodbye\" to that person.",
+    icons = [
+        (src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/goodbye_icon.png", mime_type = "image/png", sizes = ["128x128"]),
+    ]
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
 pub struct SayGoodbyeTool {
