@@ -59,9 +59,9 @@ Minimal quick-start example demonstrating the fastest way to set up a basic MCP 
 - [hello-world-server-streamable-http-core.rs](hello-world-server-streamable-http-core.rs)
 
 **Start the server:**
-_for instance, start the `quick-start-streamable-http`_
+_for instance, start the `hello-world-server-streamable-http`_
 ```sh
-cargo run --example quick-start-streamable-http
+cargo run --example hello-world-server-streamable-http
 ```
 
 Once the server starts, you’ll see the following output in the terminal:

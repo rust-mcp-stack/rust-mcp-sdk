@@ -14,7 +14,6 @@ use rust_mcp_sdk::{macros::mcp_tool, tool_box};
     destructive_hint = false,
     open_world_hint = false,
     read_only_hint = false,
-    meta = r#"{"version": "1.0"}"#,
     icons = [
         (src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/hello_icon.png", mime_type = "image/png", sizes = ["128x128"]),
     ],
