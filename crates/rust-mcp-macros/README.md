@@ -12,7 +12,7 @@ The available macros are:
 These macros rely on [rust_mcp_schema](https://crates.io/crates/rust-mcp-schema) and serde_json for schema handling.
 
 
-## mcp_tool Macro
+## ➡️ mcp_tool Macro
 A procedural macro to generate a [rust_mcp_schema::Tool](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Tool.html) instance from a struct. The struct must derive **JsonSchema**.
 
 
@@ -94,7 +94,7 @@ async fn handle_list_tools_request(
 ```
 
 
-## mcp_elicit Macro
+## ➡️ mcp_elicit Macro
 
 The `mcp_elicit` macro generates implementations for eliciting user input based on the struct's schema. The struct must derive **JsonSchema**. It supports two modes: **form** (default) for schema-based forms and **url** for redirecting the user to an external URL to collect input.
 
@@ -180,6 +180,75 @@ The `mcp_elicit` macro generates implementations for eliciting user input based 
     println!("age: {}", user_info.age);
     println!("email: {}", user_info.email.unwrap_or_default();
     println!("tags: {}", user_info.tags.join(","));     
+```
+
+
+## ➡️ mcp_resource Macro
+
+A procedural macro attribute that generates utility methods for declaring static resources compatible with the MCP protocol. It produces a fully populated [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instance from compile-time metadata.
+Useful for declaring files, images, documents, or any other static asset that your MCP server wants to expose (e.g., in ListResources responses).
+
+Generated methods
+
+- `resource_name()` → &'static str: Returns the resource name.
+- `resource_uri()` → &'static str: Returns the resource URI (empty string if not provided).
+- `resource()` → [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) Constructs and returns the complete Resource struct.
+
+### Attributes
+
+- `name` : Unique identifier for the resource. Must be non-empty.
+- `description` : Human-readable description of what the resource is.
+- `title` : Display title
+- `meta` : Arbitrary metadata. Must be a valid JSON object string.
+- `mime_type` : MIME type of the resource (e.g., "image/png").
+- `size` : Size in bytes.
+- `uri` : Publicly accessible URI for the resource.
+- `audience` : Intended audiences roles (e.g., ["user", "assistant"]). Resource will use them in the resource annotation and [rust_mcp_schema::Role](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/enum.Role.html).
+- `icons` :  icons (same format as mcp_tool icons ^^).
+
+
+### Usage Example
+
+
+```rs
+use rust_mcp_macros::mcp_resource;
+
+#[mcp_resource(
+    name = "company-logo",
+    description = "Official high-resolution company logo",
+    title = "Company Logo",
+    mime_type = "image/png",
+    size = 1024,
+    uri = "https://example.com/assets/logo.png",
+    audience = ["user", "assistant"],
+    meta = r#"{"license": "proprietary", "author": "Design Team"}"#,
+    icons = [
+        ( src = "logo-192.png", sizes = ["192x192"], mime_type = "image/png" ),
+        ( src = "logo-512.png", sizes = ["512x512"], mime_type = "image/png" )
+    ]
+)]
+pub struct CompanyLogo;
+
+// In your server handler:
+async fn handle_list_resources(
+    &self,
+    _request: Option<PaginatedRequestParams>,
+) -> Result<ListResourcesResult, RpcError> {
+    Ok(ListResourcesResult {
+        meta: None,
+        next_cursor: None,
+        resources: vec![CompanyLogo::resource()],
+    })
+}
+
+// Usage elsewhere:
+assert_eq!(CompanyLogo::resource_name(), "company-logo");
+assert_eq!(CompanyLogo::resource_uri(), "https://example.com/assets/logo.png");
+
+let res = CompanyLogo::resource();
+assert_eq!(res.mime_type.unwrap(), "image/png");
+assert_eq!(res.size.unwrap(), 1024);
+assert!(res.icons.len() == 2);
 ```
 ---
 

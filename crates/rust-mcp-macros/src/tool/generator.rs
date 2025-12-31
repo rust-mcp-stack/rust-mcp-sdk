@@ -1,6 +1,6 @@
+use crate::common::IconThemeDsl;
 use crate::tool::parser::ExecutionSupportDsl;
 use crate::utils::base_crate;
-use crate::IconThemeDsl;
 use crate::McpToolMacroAttributes;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -78,21 +78,13 @@ fn generate_icons(
                 })
                 .unwrap_or(quote! { None });
 
-            // Build sizes: Vec<String>
             let sizes: Vec<_> = icon
                 .sizes
                 .as_ref()
                 .map(|arr| {
-                    arr.elems
-                        .iter()
+                    arr.iter()
                         .map(|elem| {
-                            if let syn::Expr::Lit(expr_lit) = elem {
-                                if let syn::Lit::Str(lit_str) = &expr_lit.lit {
-                                    let val = lit_str.value();
-                                    return quote! { #val.to_string() };
-                                }
-                            }
-                            panic!("sizes must contain only string literals");
+                            quote! { #elem.to_string() }
                         })
                         .collect::<Vec<_>>()
                 })

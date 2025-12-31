@@ -1,5 +1,10 @@
 use super::tools::GreetingTools;
 use async_trait::async_trait;
+use rust_mcp_schema::{
+    ListResourceTemplatesRequest, ListResourceTemplatesResult, ListResourcesRequest,
+    ListResourcesResult, ReadResourceRequest, ReadResourceRequestParams, ReadResourceResult,
+    Resource, ResourceTemplate,
+};
 use rust_mcp_sdk::{
     mcp_server::ServerHandler,
     schema::{
@@ -47,5 +52,72 @@ impl ServerHandler for ExampleServerHandler {
             GreetingTools::SayHelloTool(say_hello_tool) => say_hello_tool.call_tool(),
             GreetingTools::SayGoodbyeTool(say_goodbye_tool) => say_goodbye_tool.call_tool(),
         }
+    }
+
+    /// Handles requests to list available resources.
+    ///
+    /// Default implementation returns method not found error.
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_list_resources_request(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListResourcesResult, RpcError> {
+        let resource: Resource = Resource {
+            name: "ResourceName".to_string(),
+            description: None,
+            meta: None,
+            title: None,
+            icons: vec![],
+            annotations: None,
+            mime_type: None,
+            size: None,
+            uri: "".to_string(),
+        };
+
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            &ListResourcesRequest::method_value(),
+        )))
+    }
+
+    /// Handles requests to list resource templates.
+    ///
+    /// Default implementation returns method not found error.
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_list_resource_templates_request(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
+        let template: ResourceTemplate = ResourceTemplate {
+            name: "TemplateName".to_string(),
+            description: None,
+            meta: None,
+            title: None,
+            icons: vec![],
+            mime_type: None,
+            uri_template: "Template".to_string(),
+            annotations: None,
+        };
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            &ListResourceTemplatesRequest::method_value(),
+        )))
+    }
+
+    /// Handles requests to read a specific resource.
+    ///
+    /// Default implementation returns method not found error.
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_read_resource_request(
+        &self,
+        params: ReadResourceRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ReadResourceResult, RpcError> {
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            &ReadResourceRequest::method_value(),
+        )))
     }
 }
