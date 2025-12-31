@@ -185,13 +185,13 @@ The `mcp_elicit` macro generates implementations for eliciting user input based 
 
 ## ➡️ mcp_resource Macro
 
-A procedural macro attribute that generates utility methods for declaring static resources compatible with the MCP protocol. It produces a fully populated [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instance from compile-time metadata.
+A procedural macro attribute that generates utility methods for declaring static resources. It produces a fully populated [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instance from compile-time metadata.
 Useful for declaring files, images, documents, or any other static asset that your MCP server wants to expose (e.g., in ListResources responses).
 
 Generated methods
 
 - `resource_name()` → &'static str: Returns the resource name.
-- `resource_uri()` → &'static str: Returns the resource URI (empty string if not provided).
+- `resource_uri()` → &'static str: Returns the resource URI.
 - `resource()` → [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) Constructs and returns the complete Resource struct.
 
 ### Attributes
@@ -250,6 +250,30 @@ assert_eq!(res.mime_type.unwrap(), "image/png");
 assert_eq!(res.size.unwrap(), 1024);
 assert!(res.icons.len() == 2);
 ```
+
+
+## ➡️ mcp_resource_template Macro
+
+A procedural macro attribute that generates utility methods for declaring template description for parameterized resources available on the server. It produces a fully populated [rust_mcp_schema::ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) instance from compile-time metadata.
+Resource templates allow servers to expose parameterized resources
+
+Generated methods
+
+- `resource_template_name()` → &'static str: Returns the resource template name.
+- `resource_template_uri()` → &'static str: Returns the resource template URI .
+- `resource_template()` → [rust_mcp_schema::ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) Constructs and returns the complete ResourceTemplate struct.
+
+### Attributes
+
+- `name` : Unique identifier for the resource. Must be non-empty.
+- `description` : Human-readable description of what the resource is.
+- `title` : Display title
+- `meta` : Arbitrary metadata. Must be a valid JSON object string.
+- `mime_type` : MIME type of the resource (e.g., "image/png").
+- `uri_template` : Publicly accessible URI for the resource.
+- `audience` : Intended audiences roles (e.g., ["user", "assistant"]). Resource will use them in the resource annotation and [rust_mcp_schema::Role](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/enum.Role.html).
+- `icons` :  icons (same format as mcp_tool icons ^^).
+
 ---
 
 <img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Check out [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk), a high-performance, asynchronous toolkit for building MCP servers and clients. Focus on your app's logic while [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) takes care of the rest!

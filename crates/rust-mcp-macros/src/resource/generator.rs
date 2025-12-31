@@ -1,5 +1,5 @@
 use crate::common::generate_icons;
-use crate::resource::parser::McpResourceMacroAttributes;
+use crate::resource::parser::{McpResourceMacroAttributes, McpResourceTemplateMacroAttributes};
 use crate::utils::base_crate;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -15,6 +15,18 @@ pub struct ResourceTokens {
     pub mime_type: TokenStream,
     pub size: TokenStream,
     pub uri: TokenStream,
+}
+
+pub struct ResourceTemplateTokens {
+    pub base_crate: TokenStream,
+    pub name: TokenStream,
+    pub description: TokenStream,
+    pub meta: TokenStream,
+    pub title: TokenStream,
+    pub icons: TokenStream,
+    pub annotations: TokenStream,
+    pub mime_type: TokenStream,
+    pub uri_template: TokenStream,
 }
 
 pub fn generate_resource_tokens(macro_attributes: McpResourceMacroAttributes) -> ResourceTokens {
@@ -70,6 +82,63 @@ pub fn generate_resource_tokens(macro_attributes: McpResourceMacroAttributes) ->
         mime_type,
         size,
         uri,
+    }
+}
+
+pub fn generate_resource_template_tokens(
+    macro_attributes: McpResourceTemplateMacroAttributes,
+) -> ResourceTemplateTokens {
+    let base_crate = base_crate();
+
+    let name = macro_attributes
+        .name
+        .as_ref()
+        .map(|v| quote! {#v.into() })
+        .expect("'name' is a required attribute!");
+
+    let uri_template = macro_attributes
+        .uri_template
+        .as_ref()
+        .map(|v| quote! {#v.into() })
+        .expect("'uri_template' is a required attribute!");
+
+    let size = macro_attributes
+        .size
+        .as_ref()
+        .map_or(quote! { None }, |t| quote! { Some(#t.into()) });
+
+    let mime_type = macro_attributes
+        .mime_type
+        .as_ref()
+        .map_or(quote! { None }, |t| quote! { Some(#t.into()) });
+
+    let description = macro_attributes
+        .description
+        .as_ref()
+        .map_or(quote! {  None }, |t| quote! { Some(#t.into()) });
+
+    let title = macro_attributes
+        .title
+        .as_ref()
+        .map_or(quote! { None }, |t| quote! { Some(#t.into()) });
+
+    let meta = macro_attributes.meta.as_ref().map_or(quote! { None }, |m| {
+        quote! { Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")) }
+    });
+
+    let annotations = generate_resource_annotations(&base_crate, macro_attributes.audience);
+    let icons = generate_icons(&base_crate, &macro_attributes.icons);
+
+    ResourceTemplateTokens {
+        base_crate,
+        meta,
+        title,
+        annotations,
+        icons,
+        name,
+        description,
+        mime_type,
+        uri_template,
     }
 }
 

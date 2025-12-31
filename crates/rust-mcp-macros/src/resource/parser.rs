@@ -1,6 +1,5 @@
-use crate::common::{ExprList, IconDsl};
-use quote::ToTokens;
-use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};
+use crate::common::{GenericMcpMacroAttributes, IconDsl};
+use syn::{parse::Parse, Error};
 
 pub(crate) const VALID_ROLES: [&str; 2] = ["assistant", "user"];
 
@@ -8,7 +7,7 @@ pub(crate) const VALID_ROLES: [&str; 2] = ["assistant", "user"];
 pub(crate) struct McpResourceMacroAttributes {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub meta: Option<String>, // Store raw JSON string instead of parsed Map
+    pub meta: Option<String>,
     pub title: Option<String>,
     pub icons: Option<Vec<IconDsl>>,
     pub mime_type: Option<String>,
@@ -19,221 +18,30 @@ pub(crate) struct McpResourceMacroAttributes {
 
 impl Parse for McpResourceMacroAttributes {
     fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut instance = Self {
-            name: None,
-            description: None,
-            meta: None,
-            title: None,
-            icons: None,
-            mime_type: None,
-            size: None,
-            uri: None,
-            audience: None,
+        let GenericMcpMacroAttributes {
+            name,
+            description,
+            meta,
+            title,
+            icons,
+            mime_type,
+            size,
+            uri,
+            audience,
+            uri_template: _,
+        } = GenericMcpMacroAttributes::parse(attributes)?;
+
+        let instance = Self {
+            name,
+            description,
+            meta,
+            title,
+            icons,
+            mime_type,
+            size,
+            uri,
+            audience,
         };
-
-        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
-        for meta in meta_list {
-            match meta {
-                Meta::NameValue(meta_name_value) => {
-                    let ident = meta_name_value.path.get_ident().unwrap();
-                    let ident_str = ident.to_string();
-
-                    match ident_str.as_str() {
-                        "name" | "description" | "title" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                Expr::Macro(expr_macro) => {
-                                    let mac = &expr_macro.mac;
-                                    if mac.path.is_ident("concat") {
-                                        let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                        let mut result = String::new();
-                                        for expr in args.exprs {
-                                            if let Expr::Lit(ExprLit {
-                                                lit: Lit::Str(lit_str),
-                                                ..
-                                            }) = expr
-                                            {
-                                                result.push_str(&lit_str.value());
-                                            } else {
-                                                return Err(Error::new_spanned(
-                                                expr,
-                                                "Only string literals are allowed inside concat!()",
-                                            ));
-                                            }
-                                        }
-                                        result
-                                    } else {
-                                        return Err(Error::new_spanned(
-                                            expr_macro,
-                                            "Expected a string literal or concat!(...)",
-                                        ));
-                                    }
-                                }
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a string literal or concat!(...)",
-                                    ));
-                                }
-                            };
-                            match ident_str.as_str() {
-                                "name" => instance.name = Some(value),
-                                "description" => instance.description = Some(value),
-                                "title" => instance.title = Some(value),
-                                _ => {}
-                            }
-                        }
-                        "meta" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a JSON object as a string literal",
-                                    ));
-                                }
-                            };
-                            // Validate that the string is a valid JSON object
-                            let parsed: serde_json::Value =
-                                serde_json::from_str(&value).map_err(|e| {
-                                    Error::new_spanned(
-                                        &meta_name_value.value,
-                                        format!("Expected a valid JSON object: {e}"),
-                                    )
-                                })?;
-                            if !parsed.is_object() {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a JSON object",
-                                ));
-                            }
-                            instance.meta = Some(value);
-                        }
-                        "mime_type" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a string literal",
-                                    ));
-                                }
-                            };
-                            instance.mime_type = Some(value);
-                        }
-                        "uri" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a string literal",
-                                    ));
-                                }
-                            };
-                            instance.uri = Some(value);
-                        }
-                        "size" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Int(lit_int),
-                                    ..
-                                }) => match lit_int.base10_parse::<i64>() {
-                                    Ok(i64_value) => i64_value,
-                                    Err(err) => return Err(err),
-                                },
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a integer literal",
-                                    ));
-                                }
-                            };
-                            instance.size = Some(value);
-                        }
-
-                        "audience" => {
-                            let values = match &meta_name_value.value {
-                                Expr::Array(expr_array) => {
-                                    let mut result = Vec::new();
-
-                                    for elem in &expr_array.elems {
-                                        match elem {
-                                            Expr::Lit(ExprLit {
-                                                lit: Lit::Str(lit_str),
-                                                ..
-                                            }) => {
-                                                if !VALID_ROLES.contains(&lit_str.value().as_str())
-                                                {
-                                                    return Err(Error::new_spanned(
-                                                        elem,
-                                                        format!(
-                                                            "valid audience values are : {}",
-                                                            VALID_ROLES.join(" , ")
-                                                        ),
-                                                    ));
-                                                }
-                                                result.push(lit_str.value());
-                                            }
-                                            _ => {
-                                                return Err(Error::new_spanned(
-                                                    elem,
-                                                    "Expected a string literal in array",
-                                                ));
-                                            }
-                                        }
-                                    }
-
-                                    result
-                                }
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                                            &meta_name_value.value,
-                                                            "Expected an array of string literals, e.g. [\"system\", \"user\"]",
-                                                        ));
-                                }
-                            };
-                            instance.audience = Some(values);
-                        }
-                        "icons" => {
-                            // Check if the value is an array (Expr::Array)
-                            if let Expr::Array(array_expr) = &meta_name_value.value {
-                                let icon_list: Punctuated<IconDsl, Token![,]> = array_expr
-                                    .elems
-                                    .iter()
-                                    .map(|elem| syn::parse2::<IconDsl>(elem.to_token_stream()))
-                                    .collect::<Result<_, _>>()?;
-                                instance.icons = Some(icon_list.into_iter().collect());
-                            } else {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected an array for the 'icons' attribute",
-                                ));
-                            }
-                        }
-                        other => {
-                            eprintln!("other: {:?}", other)
-                        }
-                    }
-                }
-                Meta::List(meta_list) => {
-                    panic!("{:?}", meta_list);
-                }
-                _ => {}
-            }
-        }
 
         // Validate presence and non-emptiness
         if instance
@@ -257,6 +65,88 @@ impl Parse for McpResourceMacroAttributes {
             return Err(Error::new(
                 attributes.span(),
                 "The 'uri' attribute is required and must not be empty.",
+            ));
+        }
+
+        if instance
+            .audience
+            .as_ref()
+            .map(|s| s.len())
+            .unwrap_or_default()
+            > VALID_ROLES.len()
+        {
+            return Err(Error::new(
+                attributes.span(),
+                format!("valid audience values are : {}. Is there any duplication in the audience values?", VALID_ROLES.join(" , ")),
+            ));
+        }
+
+        Ok(instance)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct McpResourceTemplateMacroAttributes {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub meta: Option<String>,
+    pub title: Option<String>,
+    pub icons: Option<Vec<IconDsl>>,
+    pub mime_type: Option<String>,
+    pub size: Option<i64>,
+    pub uri_template: Option<String>,
+    pub audience: Option<Vec<String>>,
+}
+
+impl Parse for McpResourceTemplateMacroAttributes {
+    fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
+        let GenericMcpMacroAttributes {
+            name,
+            description,
+            meta,
+            title,
+            icons,
+            mime_type,
+            size,
+            uri: _,
+            audience,
+            uri_template,
+        } = GenericMcpMacroAttributes::parse(attributes)?;
+
+        let instance = Self {
+            name,
+            description,
+            meta,
+            title,
+            icons,
+            mime_type,
+            size,
+            uri_template,
+            audience,
+        };
+
+        // Validate presence and non-emptiness
+        if instance
+            .name
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::new(
+                attributes.span(),
+                "The 'name' attribute is required and must not be empty.",
+            ));
+        }
+
+        if instance
+            .uri_template
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::new(
+                attributes.span(),
+                "The 'uri_template' attribute is required and must not be empty.",
             ));
         }
 
