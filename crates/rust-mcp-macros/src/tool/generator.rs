@@ -1,5 +1,4 @@
-use crate::common::IconThemeDsl;
-use crate::tool::parser::ExecutionSupportDsl;
+use crate::common::{ExecutionSupportDsl, IconThemeDsl};
 use crate::utils::base_crate;
 use crate::McpToolMacroAttributes;
 use proc_macro2::TokenStream;

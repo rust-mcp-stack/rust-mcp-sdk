@@ -102,11 +102,6 @@ pub fn generate_resource_template_tokens(
         .map(|v| quote! {#v.into() })
         .expect("'uri_template' is a required attribute!");
 
-    let size = macro_attributes
-        .size
-        .as_ref()
-        .map_or(quote! { None }, |t| quote! { Some(#t.into()) });
-
     let mime_type = macro_attributes
         .mime_type
         .as_ref()

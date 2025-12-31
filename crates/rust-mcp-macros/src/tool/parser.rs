@@ -1,7 +1,7 @@
 use quote::ToTokens;
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};
 
-use crate::common::{ExprList, IconDsl};
+use crate::common::{ExecutionSupportDsl, ExprList, GenericMcpMacroAttributes, IconDsl};
 
 /// Represents the attributes for the `mcp_tool` procedural macro.
 ///
@@ -32,12 +32,6 @@ pub(crate) struct McpToolMacroAttributes {
     pub icons: Option<Vec<IconDsl>>,
 }
 
-pub(crate) enum ExecutionSupportDsl {
-    Forbidden,
-    Optional,
-    Required,
-}
-
 impl Parse for McpToolMacroAttributes {
     /// Parses the macro attributes from a `ParseStream`.
     ///
@@ -52,195 +46,36 @@ impl Parse for McpToolMacroAttributes {
     /// - The `meta` attribute is provided but is not a valid JSON object.
     /// - The `title` attribute is provided but is not a string literal.
     fn parse(attributes: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut instance = Self {
-            name: None,
-            description: None,
-            meta: None,
-            title: None,
-            destructive_hint: None,
-            idempotent_hint: None,
-            open_world_hint: None,
-            read_only_hint: None,
-            execution: None,
-            icons: None,
+        let GenericMcpMacroAttributes {
+            name,
+            description,
+            meta,
+            title,
+            icons,
+            mime_type: _,
+            audience: _,
+            uri_template: _,
+            uri: _,
+            size: _,
+            destructive_hint,
+            idempotent_hint,
+            open_world_hint,
+            read_only_hint,
+            execution,
+        } = GenericMcpMacroAttributes::parse(attributes)?;
+
+        let instance = Self {
+            name,
+            description,
+            meta,
+            title,
+            destructive_hint,
+            idempotent_hint,
+            open_world_hint,
+            read_only_hint,
+            execution,
+            icons,
         };
-
-        let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
-        for meta in meta_list {
-            match meta {
-                Meta::NameValue(meta_name_value) => {
-                    let ident = meta_name_value.path.get_ident().unwrap();
-                    let ident_str = ident.to_string();
-
-                    match ident_str.as_str() {
-                        "name" | "description" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                Expr::Macro(expr_macro) => {
-                                    let mac = &expr_macro.mac;
-                                    if mac.path.is_ident("concat") {
-                                        let args: ExprList = syn::parse2(mac.tokens.clone())?;
-                                        let mut result = String::new();
-                                        for expr in args.exprs {
-                                            if let Expr::Lit(ExprLit {
-                                                lit: Lit::Str(lit_str),
-                                                ..
-                                            }) = expr
-                                            {
-                                                result.push_str(&lit_str.value());
-                                            } else {
-                                                return Err(Error::new_spanned(
-                                                expr,
-                                                "Only string literals are allowed inside concat!()",
-                                            ));
-                                            }
-                                        }
-                                        result
-                                    } else {
-                                        return Err(Error::new_spanned(
-                                            expr_macro,
-                                            "Expected a string literal or concat!(...)",
-                                        ));
-                                    }
-                                }
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a string literal or concat!(...)",
-                                    ));
-                                }
-                            };
-                            match ident_str.as_str() {
-                                "name" => instance.name = Some(value),
-                                "description" => instance.description = Some(value),
-                                _ => {}
-                            }
-                        }
-                        "meta" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a JSON object as a string literal",
-                                    ));
-                                }
-                            };
-                            // Validate that the string is a valid JSON object
-                            let parsed: serde_json::Value =
-                                serde_json::from_str(&value).map_err(|e| {
-                                    Error::new_spanned(
-                                        &meta_name_value.value,
-                                        format!("Expected a valid JSON object: {e}"),
-                                    )
-                                })?;
-                            if !parsed.is_object() {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected a JSON object",
-                                ));
-                            }
-                            instance.meta = Some(value);
-                        }
-                        "title" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) => lit_str.value(),
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a string literal",
-                                    ));
-                                }
-                            };
-                            instance.title = Some(value);
-                        }
-                        "destructive_hint" | "idempotent_hint" | "open_world_hint"
-                        | "read_only_hint" => {
-                            let value = match &meta_name_value.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Bool(lit_bool),
-                                    ..
-                                }) => lit_bool.value,
-                                _ => {
-                                    return Err(Error::new_spanned(
-                                        &meta_name_value.value,
-                                        "Expected a boolean literal",
-                                    ));
-                                }
-                            };
-
-                            match ident_str.as_str() {
-                                "destructive_hint" => instance.destructive_hint = Some(value),
-                                "idempotent_hint" => instance.idempotent_hint = Some(value),
-                                "open_world_hint" => instance.open_world_hint = Some(value),
-                                "read_only_hint" => instance.read_only_hint = Some(value),
-                                _ => {}
-                            }
-                        }
-                        "icons" => {
-                            // Check if the value is an array (Expr::Array)
-                            if let Expr::Array(array_expr) = &meta_name_value.value {
-                                let icon_list: Punctuated<IconDsl, Token![,]> = array_expr
-                                    .elems
-                                    .iter()
-                                    .map(|elem| syn::parse2::<IconDsl>(elem.to_token_stream()))
-                                    .collect::<Result<_, _>>()?;
-                                instance.icons = Some(icon_list.into_iter().collect());
-                            } else {
-                                return Err(Error::new_spanned(
-                                    &meta_name_value.value,
-                                    "Expected an array for the 'icons' attribute",
-                                ));
-                            }
-                        }
-                        other => {
-                            eprintln!("other: {:?}", other)
-                        }
-                    }
-                }
-                Meta::List(meta_list) => {
-                    let ident = meta_list.path.get_ident().unwrap();
-                    let ident_str = ident.to_string();
-
-                    if ident_str == "execution" {
-                        let nested = meta_list
-                            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
-                        let mut task_support = None;
-
-                        for meta in nested {
-                            if let Meta::NameValue(nv) = meta {
-                                if nv.path.is_ident("task_support") {
-                                    if let Expr::Lit(ExprLit {
-                                        lit: Lit::Str(s), ..
-                                    }) = &nv.value
-                                    {
-                                        let value = s.value();
-                                        task_support = Some(match value.as_str() {
-                                                    "forbidden" => ExecutionSupportDsl::Forbidden,
-                                                    "optional" => ExecutionSupportDsl::Optional,
-                                                    "required" => ExecutionSupportDsl::Required,
-                                                    _ => return Err(Error::new_spanned(&nv.value, "task_support must be one of: forbidden, optional, required")),
-                                                });
-                                    }
-                                }
-                            }
-                        }
-
-                        instance.execution = task_support;
-                    }
-                }
-                _ => {}
-            }
-        }
 
         // Validate presence and non-emptiness
         if instance

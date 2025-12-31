@@ -29,6 +29,11 @@ impl Parse for McpResourceMacroAttributes {
             uri,
             audience,
             uri_template: _,
+            destructive_hint: _,
+            idempotent_hint: _,
+            open_world_hint: _,
+            read_only_hint: _,
+            execution: _,
         } = GenericMcpMacroAttributes::parse(attributes)?;
 
         let instance = Self {
@@ -93,7 +98,6 @@ pub(crate) struct McpResourceTemplateMacroAttributes {
     pub title: Option<String>,
     pub icons: Option<Vec<IconDsl>>,
     pub mime_type: Option<String>,
-    pub size: Option<i64>,
     pub uri_template: Option<String>,
     pub audience: Option<Vec<String>>,
 }
@@ -107,10 +111,15 @@ impl Parse for McpResourceTemplateMacroAttributes {
             title,
             icons,
             mime_type,
-            size,
-            uri: _,
             audience,
             uri_template,
+            uri: _,
+            size: _,
+            destructive_hint: _,
+            idempotent_hint: _,
+            open_world_hint: _,
+            read_only_hint: _,
+            execution: _,
         } = GenericMcpMacroAttributes::parse(attributes)?;
 
         let instance = Self {
@@ -120,7 +129,6 @@ impl Parse for McpResourceTemplateMacroAttributes {
             title,
             icons,
             mime_type,
-            size,
             uri_template,
             audience,
         };

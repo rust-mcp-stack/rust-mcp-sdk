@@ -1,4 +1,4 @@
-use crate::common::{ExprList, IconDsl};
+use crate::common::{ExecutionSupportDsl, ExprList, IconDsl};
 use quote::ToTokens;
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};
 
@@ -16,6 +16,13 @@ pub(crate) struct GenericMcpMacroAttributes {
     pub uri: Option<String>,
     pub uri_template: Option<String>,
     pub audience: Option<Vec<String>>,
+
+    // tool specific
+    pub destructive_hint: Option<bool>,
+    pub idempotent_hint: Option<bool>,
+    pub open_world_hint: Option<bool>,
+    pub read_only_hint: Option<bool>,
+    pub execution: Option<ExecutionSupportDsl>,
 }
 
 impl Parse for GenericMcpMacroAttributes {
@@ -31,9 +38,15 @@ impl Parse for GenericMcpMacroAttributes {
             uri: None,
             uri_template: None,
             audience: None,
+            destructive_hint: None,
+            idempotent_hint: None,
+            open_world_hint: None,
+            read_only_hint: None,
+            execution: None,
         };
 
         let meta_list: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(attributes)?;
+
         for meta in meta_list {
             match meta {
                 Meta::NameValue(meta_name_value) => {
@@ -219,13 +232,67 @@ impl Parse for GenericMcpMacroAttributes {
                                 ));
                             }
                         }
+
+                        // for tools annotations
+                        "destructive_hint" | "idempotent_hint" | "open_world_hint"
+                        | "read_only_hint" => {
+                            let value = match &meta_name_value.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Bool(lit_bool),
+                                    ..
+                                }) => lit_bool.value,
+                                _ => {
+                                    return Err(Error::new_spanned(
+                                        &meta_name_value.value,
+                                        "Expected a boolean literal",
+                                    ));
+                                }
+                            };
+
+                            match ident_str.as_str() {
+                                "destructive_hint" => instance.destructive_hint = Some(value),
+                                "idempotent_hint" => instance.idempotent_hint = Some(value),
+                                "open_world_hint" => instance.open_world_hint = Some(value),
+                                "read_only_hint" => instance.read_only_hint = Some(value),
+                                _ => {}
+                            }
+                        }
+
                         other => {
                             eprintln!("other: {:?}", other)
                         }
                     }
                 }
                 Meta::List(meta_list) => {
-                    panic!("{:?}", meta_list);
+                    let ident = meta_list.path.get_ident().unwrap();
+                    let ident_str = ident.to_string();
+
+                    if ident_str == "execution" {
+                        let nested = meta_list
+                            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
+                        let mut task_support = None;
+
+                        for meta in nested {
+                            if let Meta::NameValue(nv) = meta {
+                                if nv.path.is_ident("task_support") {
+                                    if let Expr::Lit(ExprLit {
+                                        lit: Lit::Str(s), ..
+                                    }) = &nv.value
+                                    {
+                                        let value = s.value();
+                                        task_support = Some(match value.as_str() {
+                                                    "forbidden" => ExecutionSupportDsl::Forbidden,
+                                                    "optional" => ExecutionSupportDsl::Optional,
+                                                    "required" => ExecutionSupportDsl::Required,
+                                                    _ => return Err(Error::new_spanned(&nv.value, "task_support must be one of: forbidden, optional, required")),
+                                                });
+                                    }
+                                }
+                            }
+                        }
+
+                        instance.execution = task_support;
+                    }
                 }
                 _ => {}
             }
