@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.1.4...rust-mcp-extra-v0.2.0) (2026-01-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* update to MCP Protocol 2025-11-25, new mcp_icon macro and various improvements ([#120](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/120))
+
+### 🚀 Features
+
+* Update to MCP Protocol 2025-11-25, new mcp_icon macro and various improvements ([#120](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/120)) ([e70f8b7](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e70f8b7e9d4ef028e66d4cd1bf5cd4c96d81adf9))
+
 ## [0.1.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.1.3...rust-mcp-extra-v0.1.4) (2025-11-23)
 
 

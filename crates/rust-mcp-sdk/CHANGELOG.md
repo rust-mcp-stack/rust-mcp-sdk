@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.4...rust-mcp-sdk-v0.8.0) (2026-01-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* update to MCP Protocol 2025-11-25, new mcp_icon macro and various improvements ([#120](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/120))
+
+### 🚀 Features
+
+* Introduce mcp_resource and mcp_resource_template macros with documentation and examples (issue [#79](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/79)) ([#123](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/123)) ([6dc3500](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6dc35003692954ae5b627c44598655b02670f05d))
+* Update to MCP Protocol 2025-11-25, new mcp_icon macro and various improvements ([#120](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/120)) ([e70f8b7](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e70f8b7e9d4ef028e66d4cd1bf5cd4c96d81adf9))
+
+
+### 🐛 Bug Fixes
+
+* Refactor examples and update documentation  ([#122](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/122)) ([001bd31](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/001bd31e45ab487313b0cc6710c02077ceb3f3c3))
+
 ## [0.7.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.3...rust-mcp-sdk-v0.7.4) (2025-11-23)
 
 
