@@ -250,6 +250,7 @@ assert_eq!(res.mime_type.unwrap(), "image/png");
 assert_eq!(res.size.unwrap(), 1024);
 assert!(res.icons.len() == 2);
 ```
+👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and blob resources.
 
 
 ## ➡️ mcp_resource_template Macro
@@ -273,6 +274,9 @@ Generated methods
 - `uri_template` : Publicly accessible URI for the resource.
 - `audience` : Intended audiences roles (e.g., ["user", "assistant"]). Resource will use them in the resource annotation and [rust_mcp_schema::Role](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/enum.Role.html).
 - `icons` :  icons (same format as mcp_tool icons ^^).
+
+
+👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example showing Pokémon sprites exposed as a dynamic resource.
 
 ---
 
