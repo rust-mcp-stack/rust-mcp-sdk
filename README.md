@@ -12,10 +12,15 @@
 ](examples/hello-world-mcp-server-stdio)
 
 
-A high-performance, asynchronous Rust toolkit for building MCP servers and clients.
-Focus on your application logic - rust-mcp-sdk handles the protocol, transports, and the rest!
-This SDK fully implements the latest MCP protocol version ([2025-11-25](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema)), with backward compatibility built-in. `rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem. It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.
+A high-performance, asynchronous Rust toolkit for building MCP servers and clients.  
+Focus on your application logic - rust-mcp-sdk handles the protocol, transports, and the rest!  
+This SDK fully implements the latest MCP protocol version ([2025-11-25](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema)), with backward compatibility built-in.  
+`rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem.  It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.
 
+
+### ⚠ Upgrading from v0.7.x
+
+[v0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/releases/tag/rust-mcp-sdk-v0.8.0) includes breaking changes compared to v0.7. If you are upgrading, please review the breaking changes section of the [release](https://github.com/rust-mcp-stack/rust-mcp-sdk/releases/tag/rust-mcp-sdk-v0.8.0) notes to update your code and dependencies accordingly.
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
