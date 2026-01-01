@@ -131,10 +131,7 @@ impl Parse for GenericMcpMacroAttributes {
                                 Expr::Lit(ExprLit {
                                     lit: Lit::Int(lit_int),
                                     ..
-                                }) => match lit_int.base10_parse::<i64>() {
-                                    Ok(i64_value) => i64_value,
-                                    Err(err) => return Err(err),
-                                },
+                                }) => lit_int.base10_parse::<i64>()?,
                                 _ => {
                                     return Err(Error::new_spanned(
                                         &meta_name_value.value,

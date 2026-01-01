@@ -1,6 +1,7 @@
 pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandler};
+use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
@@ -11,6 +12,7 @@ use rust_mcp_sdk::{
     mcp_server::{hyper_server, HyperServerOptions, ServerHandler, ToMcpServerHandler},
     task_store::InMemoryTaskStore,
 };
+use serde_json::Map;
 use std::sync::Arc;
 
 pub struct AppState<H: ServerHandler> {
@@ -42,6 +44,8 @@ async fn main() -> SdkResult<()> {
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            resources: Some(ServerCapabilitiesResources{ list_changed: None, subscribe: None }),
+            completions:Some(Map::new()),
             ..Default::default() // Using default values for other fields
         },
         meta: None,

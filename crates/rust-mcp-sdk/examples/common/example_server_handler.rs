@@ -1,9 +1,9 @@
 use super::tools::GreetingTools;
+use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
 use async_trait::async_trait;
 use rust_mcp_schema::{
-    ListResourceTemplatesRequest, ListResourceTemplatesResult, ListResourcesRequest,
-    ListResourcesResult, ReadResourceRequest, ReadResourceRequestParams, ReadResourceResult,
-    Resource, ResourceTemplate,
+    CompleteRequestParams, CompleteResult, ListResourceTemplatesResult, ListResourcesResult,
+    ReadResourceRequestParams, ReadResourceResult,
 };
 use rust_mcp_sdk::{
     mcp_server::ServerHandler,
@@ -56,68 +56,72 @@ impl ServerHandler for ExampleServerHandler {
 
     /// Handles requests to list available resources.
     ///
-    /// Default implementation returns method not found error.
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_list_resources_request(
         &self,
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourcesResult, RpcError> {
-        let resource: Resource = Resource {
-            name: "ResourceName".to_string(),
-            description: None,
+        Ok(ListResourcesResult {
             meta: None,
-            title: None,
-            icons: vec![],
-            annotations: None,
-            mime_type: None,
-            size: None,
-            uri: "".to_string(),
-        };
-
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            &ListResourcesRequest::method_value(),
-        )))
+            next_cursor: None,
+            resources: vec![PlainTextResource::resource(), BlobTextResource::resource()],
+        })
     }
 
     /// Handles requests to list resource templates.
     ///
-    /// Default implementation returns method not found error.
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_list_resource_templates_request(
         &self,
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
-        let template: ResourceTemplate = ResourceTemplate {
-            name: "TemplateName".to_string(),
-            description: None,
+        Ok(ListResourceTemplatesResult {
             meta: None,
-            title: None,
-            icons: vec![],
-            mime_type: None,
-            uri_template: "Template".to_string(),
-            annotations: None,
-        };
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            &ListResourceTemplatesRequest::method_value(),
-        )))
+            next_cursor: None,
+            resource_templates: vec![PokemonImageResource::resource_template()],
+        })
     }
 
     /// Handles requests to read a specific resource.
     ///
-    /// Default implementation returns method not found error.
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_read_resource_request(
         &self,
         params: ReadResourceRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ReadResourceResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            &ReadResourceRequest::method_value(),
-        )))
+        if PlainTextResource::resource_uri().starts_with(&params.uri) {
+            return PlainTextResource::get_resource().await;
+        }
+        if BlobTextResource::resource_uri().starts_with(&params.uri) {
+            return BlobTextResource::get_resource().await;
+        }
+
+        if PokemonImageResource::matches_url(&params.uri) {
+            return PokemonImageResource::get_resource(&params.uri).await;
+        }
+
+        Err(RpcError::invalid_request()
+            .with_message(format!("No resource was found for '{}'.", params.uri)))
+    }
+
+    async fn handle_complete_request(
+        &self,
+        params: CompleteRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<CompleteResult, RpcError> {
+        if params.argument.name.eq("pokemon-id") {
+            Ok(CompleteResult {
+                completion: PokemonImageResource::completion(&params.argument.value),
+                meta: None,
+            })
+        } else {
+            Err(RpcError::method_not_found().with_message(format!(
+                "No handler is implemented for '{}'.",
+                params.argument.name,
+            )))
+        }
     }
 }

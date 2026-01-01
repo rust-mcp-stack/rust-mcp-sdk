@@ -1,7 +1,6 @@
-use quote::ToTokens;
-use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};
+use syn::{parse::Parse, Error};
 
-use crate::common::{ExecutionSupportDsl, ExprList, GenericMcpMacroAttributes, IconDsl};
+use crate::common::{ExecutionSupportDsl, GenericMcpMacroAttributes, IconDsl};
 
 /// Represents the attributes for the `mcp_tool` procedural macro.
 ///

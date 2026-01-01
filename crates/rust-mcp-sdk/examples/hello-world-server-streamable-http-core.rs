@@ -1,6 +1,7 @@
 pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandlerCore};
+use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
@@ -44,6 +45,7 @@ async fn main() -> SdkResult<()> {
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            resources: Some(ServerCapabilitiesResources{ list_changed: None, subscribe: None }),
             ..Default::default() // Using default values for other fields
         },
         meta: None,

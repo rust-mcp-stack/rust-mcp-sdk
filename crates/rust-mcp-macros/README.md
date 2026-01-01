@@ -227,7 +227,7 @@ use rust_mcp_macros::mcp_resource;
         ( src = "logo-512.png", sizes = ["512x512"], mime_type = "image/png" )
     ]
 )]
-pub struct CompanyLogo;
+pub struct CompanyLogo{};
 
 // In your server handler:
 async fn handle_list_resources(
