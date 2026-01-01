@@ -65,7 +65,7 @@
   "pull-request-header": ":robot: Auto-generated release PR",
   "packages": {
     "crates/rust-mcp-macros": {
-      "release-as": "0.8.0",
+      "release-as": "",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -80,7 +80,7 @@
       ]
     },
     "crates/rust-mcp-transport": {
-      "release-as": "0.8.0",
+      "release-as": "",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -95,7 +95,7 @@
       ]
     },
     "crates/rust-mcp-sdk": {
-      "release-as": "0.8.0",
+      "release-as": "",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
