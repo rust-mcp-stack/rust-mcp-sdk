@@ -31,6 +31,7 @@ This folder contains a variety of example programs demonstrating how to use the 
 
 ### ➡️ MCP Server Examples (stdio)
 Basic MCP server implementation using *stdio* transport, featuring two custom tools: `Say Hello` and `Say Goodbye`.
+`hello-world-mcp-server-stdio` and `hello-world-mcp-server-stdio-core` also provides two static resource and a resource template that returns a Pokemon sprite as a blob resource.
 
 - [quick-start-server-stdio.rs](quick-start-server-stdio.rs)
 - [hello-world-mcp-server-stdio.rs](hello-world-mcp-server-stdio.rs)

@@ -1,5 +1,8 @@
+use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
+
 use super::tools::GreetingTools;
 use async_trait::async_trait;
+use rust_mcp_schema::{CompleteResult, ListResourceTemplatesResult, ListResourcesResult};
 use rust_mcp_sdk::{
     mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
     schema::{
@@ -30,7 +33,6 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
             // Handle the initialization request
             RequestFromClient::InitializeRequest(params) => {
                 let mut server_info = runtime.server_info().to_owned();
-
                 if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
                     &params.protocol_version,
                     &server_info.protocol_version,
@@ -39,7 +41,6 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 {
                     server_info.protocol_version = params.protocol_version;
                 }
-
                 return Ok(server_info.into());
             }
 
@@ -54,11 +55,9 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
             // Handles incoming CallToolRequest and processes it using the appropriate tool.
             RequestFromClient::CallToolRequest(params) => {
                 let tool_name = params.name.to_string();
-
                 // Attempt to convert request parameters into GreetingTools enum
                 let tool_params = GreetingTools::try_from(params)
                     .map_err(|_| CallToolError::unknown_tool(tool_name.clone()))?;
-
                 // Match the tool variant and execute its corresponding logic
                 let result = match tool_params {
                     GreetingTools::SayHelloTool(say_hello_tool) => say_hello_tool
@@ -69,6 +68,57 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                         .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?,
                 };
                 Ok(result.into())
+            }
+
+            // return list of available resources
+            RequestFromClient::ListResourcesRequest(params) => Ok(ListResourcesResult {
+                meta: None,
+                next_cursor: None,
+                resources: vec![PlainTextResource::resource(), BlobTextResource::resource()],
+            }
+            .into()),
+
+            // return list of available resource templates
+            RequestFromClient::ListResourceTemplatesRequest(params) => {
+                Ok(ListResourceTemplatesResult {
+                    meta: None,
+                    next_cursor: None,
+                    resource_templates: vec![PokemonImageResource::resource_template()],
+                }
+                .into())
+            }
+
+            RequestFromClient::ReadResourceRequest(params) => {
+                if PlainTextResource::resource_uri().starts_with(&params.uri) {
+                    return PlainTextResource::get_resource().await.map(|r| r.into());
+                }
+                if BlobTextResource::resource_uri().starts_with(&params.uri) {
+                    return BlobTextResource::get_resource().await.map(|r| r.into());
+                }
+
+                if PokemonImageResource::matches_url(&params.uri) {
+                    return PokemonImageResource::get_resource(&params.uri)
+                        .await
+                        .map(|r| r.into());
+                }
+
+                Err(RpcError::invalid_request()
+                    .with_message(format!("No resource was found for '{}'.", params.uri)))
+            }
+
+            RequestFromClient::CompleteRequest(params) => {
+                if params.argument.name.eq("pokemon-id") {
+                    Ok(CompleteResult {
+                        completion: PokemonImageResource::completion(&params.argument.value),
+                        meta: None,
+                    }
+                    .into())
+                } else {
+                    Err(RpcError::method_not_found().with_message(format!(
+                        "No handler is implemented for '{}'.",
+                        params.argument.name,
+                    )))
+                }
             }
 
             // Return Method not found for any other requests
