@@ -39,6 +39,7 @@ async fn main() -> SdkResult<()> {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
             resources: Some(ServerCapabilitiesResources { list_changed: None, subscribe: None }),
+            completions:Some(serde_json::Map::new()),
             tasks: None,
             ..Default::default() // Using default values for other fields
         },

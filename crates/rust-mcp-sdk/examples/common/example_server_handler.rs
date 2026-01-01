@@ -1,5 +1,10 @@
 use super::tools::GreetingTools;
+use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
 use async_trait::async_trait;
+use rust_mcp_schema::{
+    CompleteRequestParams, CompleteResult, ListResourceTemplatesResult, ListResourcesResult,
+    ReadResourceRequestParams, ReadResourceResult,
+};
 use rust_mcp_sdk::{
     mcp_server::ServerHandler,
     schema::{
@@ -46,6 +51,77 @@ impl ServerHandler for ExampleServerHandler {
         match tool_params {
             GreetingTools::SayHelloTool(say_hello_tool) => say_hello_tool.call_tool(),
             GreetingTools::SayGoodbyeTool(say_goodbye_tool) => say_goodbye_tool.call_tool(),
+        }
+    }
+
+    /// Handles requests to list available resources.
+    ///
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_list_resources_request(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListResourcesResult, RpcError> {
+        Ok(ListResourcesResult {
+            meta: None,
+            next_cursor: None,
+            resources: vec![PlainTextResource::resource(), BlobTextResource::resource()],
+        })
+    }
+
+    /// Handles requests to list resource templates.
+    ///
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_list_resource_templates_request(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
+        Ok(ListResourceTemplatesResult {
+            meta: None,
+            next_cursor: None,
+            resource_templates: vec![PokemonImageResource::resource_template()],
+        })
+    }
+
+    /// Handles requests to read a specific resource.
+    ///
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_read_resource_request(
+        &self,
+        params: ReadResourceRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ReadResourceResult, RpcError> {
+        if PlainTextResource::resource_uri().starts_with(&params.uri) {
+            return PlainTextResource::get_resource().await;
+        }
+        if BlobTextResource::resource_uri().starts_with(&params.uri) {
+            return BlobTextResource::get_resource().await;
+        }
+
+        if PokemonImageResource::matches_url(&params.uri) {
+            return PokemonImageResource::get_resource(&params.uri).await;
+        }
+
+        Err(RpcError::invalid_request()
+            .with_message(format!("No resource was found for '{}'.", params.uri)))
+    }
+
+    async fn handle_complete_request(
+        &self,
+        params: CompleteRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<CompleteResult, RpcError> {
+        if params.argument.name.eq("pokemon-id") {
+            Ok(CompleteResult {
+                completion: PokemonImageResource::completion(&params.argument.value),
+                meta: None,
+            })
+        } else {
+            Err(RpcError::method_not_found().with_message(format!(
+                "No handler is implemented for '{}'.",
+                params.argument.name,
+            )))
         }
     }
 }

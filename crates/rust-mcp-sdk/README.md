@@ -45,6 +45,9 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - [Macros](#macros)
   - [mcp_tool](#mcp_tool)
   - [tool_box](#-tool_box)
+  - [mcp_elicit](#-mcp_elicit)
+  - [mcp_resource](#-mcp_resource)
+  - [mcp_resource_template](#-mcp_resource_template)
   - [mcp_icon](#-mcp_icon)
 - [Authentication](#authentication)
   - [RemoteAuthProvider](#remoteauthprovider)
@@ -350,12 +353,12 @@ Automatically generates an enum based on the provided list of tools, making it e
 tool_box!(GreetingTools, [SayHelloTool, SayGoodbyeTool]);
 
 let tools: Vec<Tool> = GreetingTools::tools();
-``
+```
 
 💻 For a real-world example, check out [tools/](https://github.com/rust-mcp-stack/rust-mcp-filesystem/tree/main/src/tools) and 
 [handle_call_tool_request(...)](https://github.com/rust-mcp-stack/rust-mcp-filesystem/blob/main/src/handler.rs#L195) in [rust-mcp-filesystem](https://github.com/rust-mcp-stack/rust-mcp-filesystem) project 
 
-### ◾ [mcp_elicit](https://crates.io/crates/rust-mcp-macros)
+### ◾ [mcp_elicit()](https://crates.io/crates/rust-mcp-macros)
 Generates type-safe elicitation (Form or URL mode) for user input.
 
 example usage:
@@ -384,6 +387,16 @@ println!("age: {}", user_info.age);
 println!("email: {}",user.email.clone().unwrap_or("not provider".into()));
 println!("tags: {}", user_info.tags.join(",")); 
 ```
+📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
+
+### ◾ [mcp_resource()](https://crates.io/crates/rust-mcp-macros)
+A procedural macro attribute that generates utility methods to create fully populated [Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instances from compile-time metadata , usually used for exposing static assets like files, images, or documents.
+
+📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
+
+### ◾ [mcp_resource_template()](https://crates.io/crates/rust-mcp-macros)
+A procedural macro attribute that generates utility methods to create fully populated [ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) instances from compile-time metadata for exposing parameterized server resources.
+
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
 ### ◾ `mcp_icon!()`

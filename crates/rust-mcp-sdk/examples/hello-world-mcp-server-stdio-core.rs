@@ -23,8 +23,8 @@ async fn main() -> SdkResult<()> {
         server_info: Implementation {
             name: "Hello World MCP Server".into(),
             version: "0.1.0".into(),
-            title: Some("Hello World MCP Server".into()),
-            description: Some("Hello World MCP Server, by Rust MCP SDK".into()),
+            title: Some("Hello World MCP Server (core)".into()),
+            description: Some("Hello World MCP Server (core), by Rust MCP SDK".into()),
             icons: vec![
                 mcp_icon!(
                     src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
@@ -39,6 +39,7 @@ async fn main() -> SdkResult<()> {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
             resources: Some(ServerCapabilitiesResources { list_changed: None, subscribe: None }),
+            completions:Some(serde_json::Map::new()),
             tasks: None,
             ..Default::default() // Using default values for other fields
         },

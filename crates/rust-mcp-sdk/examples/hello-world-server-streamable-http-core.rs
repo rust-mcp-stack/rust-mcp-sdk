@@ -1,6 +1,7 @@
 pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandlerCore};
+use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
@@ -29,9 +30,9 @@ async fn main() -> SdkResult<()> {
     let server_details = InitializeResult {
         // server name and version
         server_info: Implementation {
-            name: "Hello World MCP Server Streamable Http/SSE".into(),
+            name: "Hello World MCP Server (core) Streamable Http/SSE".into(),
             version: "0.1.0".into(),
-            title: Some("Hello World MCP Streamable Http/SSE".into()),
+            title: Some("Hello World MCP Server (core) Streamable Http/SSE".into()),
             description: Some("test server, by Rust MCP SDK".into()),
             icons: vec![mcp_icon!(
                 src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
@@ -44,6 +45,8 @@ async fn main() -> SdkResult<()> {
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            resources: Some(ServerCapabilitiesResources{ list_changed: None, subscribe: None }),
+            completions:Some(serde_json::Map::new()),
             ..Default::default() // Using default values for other fields
         },
         meta: None,

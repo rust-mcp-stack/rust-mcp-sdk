@@ -1,13 +1,20 @@
 extern crate proc_macro;
 
+mod common;
 mod elicit;
+mod resource;
 mod tool;
 mod utils;
 
 use crate::elicit::generator::{generate_form_schema, generate_from_impl};
 use crate::elicit::parser::{ElicitArgs, ElicitMode};
+use crate::resource::generator::{
+    generate_resource_template_tokens, generate_resource_tokens, ResourceTemplateTokens,
+    ResourceTokens,
+};
+use crate::resource::parser::{McpResourceMacroAttributes, McpResourceTemplateMacroAttributes};
 use crate::tool::generator::{generate_tool_tokens, ToolTokens};
-use crate::tool::parser::{IconThemeDsl, McpToolMacroAttributes};
+use crate::tool::parser::McpToolMacroAttributes;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields};
@@ -534,4 +541,238 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
         }
     };
     TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+/// A procedural macro attribute to generate `rust_mcp_schema::Resource` related utility methods for a struct.
+///
+/// The `mcp_resource` macro adds static methods to the annotated struct that provide access to
+/// resource metadata and construct a fully populated `rust_mcp_schema::Resource` instance.
+///
+/// Generated methods:
+/// - `resource_name()` → returns the resource name as `&'static str`
+/// - `resource_uri()` → returns the resource URI as `&'static str`
+/// - `resource()` → constructs and returns a complete `rust_mcp_schema::Resource` value
+///
+/// # Attributes
+///
+/// All attributes are optional except `name` and `uri`, which are **required** and must be non-empty.
+///
+/// | Attribute     | Type                                 | Required | Description |
+/// |---------------|--------------------------------------|----------|-------------|
+/// | `name`        | string literal or `concat!(...)`     | Yes      | Unique name of the resource. |
+/// | `description` | string literal or `concat!(...)`     | Yes      | Human-readable description of the resource. |
+/// | `title`       | string literal or `concat!(...)`     | No       | Display title for the resource. |
+/// | `meta`        | JSON object as string literal        | No       | Arbitrary metadata as a valid JSON object. Must parse as a JSON object (not array, null, etc.). |
+/// | `mime_type`   | string literal                       | No       | MIME type of the resource (e.g., `"image/png"`, `"application/pdf"`). |
+/// | `size`        | integer literal (`i64`)              | No       | Size of the resource in bytes. |
+/// | `uri`         | string literal                       | No       | URI where the resource can be accessed. |
+/// | `audience`    | array of string literals             | No       | List of intended audiences (e.g., `["user", "system"]`). |
+/// | `icons`       | array of icon objects                | No       | List of icons in the same format as web app manifests (supports `src`, `sizes`, `type`). |
+///
+/// String fields (`name`, `description`, `title`) support `concat!(...)` with string literals.
+///
+/// # Panics
+///
+/// The macro will cause a compile-time error (not a runtime panic) if:
+/// - Applied to anything other than a struct.
+/// - Required attributes (`name` or `uri`) are missing or empty.
+/// - `meta` is provided but is not a valid JSON object.
+/// - Invalid types are used for any attribute (e.g., non-integer for `size`).
+///
+/// # Example
+///
+/// ```rust
+/// use rust_mcp_macros::mcp_resource;
+/// #[mcp_resource(
+///     name = "company-logo",
+///     description = "The official company logo in high resolution",
+///     title = "Company Logo",
+///     mime_type = "image/png",
+///     size = 102400,
+///     uri = "https://example.com/assets/logo.png",
+///     audience = ["user", "assistant"],
+///     meta = "{\"license\": \"proprietary\", \"author\": \"Ali Hashemi\"}",
+///     icons = [
+///     ( src = "logo-192.png", sizes = ["192x192"], mime_type = "image/png" ),
+///     ( src = "logo-512.png", sizes = ["512x512"], mime_type = "image/png" )
+///     ]
+/// )]
+/// struct CompanyLogo{};
+///
+/// // Usage
+/// assert_eq!(CompanyLogo::resource_name(), "company-logo");
+/// assert_eq!(CompanyLogo::resource_uri(), "https://example.com/assets/logo.png");
+///
+/// let resource = CompanyLogo::resource();
+/// assert_eq!(resource.name, "company-logo");
+/// assert_eq!(resource.mime_type.unwrap(), "image/png");
+/// assert_eq!(resource.size.unwrap(), 102400);
+/// assert!(resource.icons.len() == 2);
+/// ```
+pub fn mcp_resource(attributes: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let input_ident = &input.ident;
+    let macro_attributes = parse_macro_input!(attributes as McpResourceMacroAttributes);
+
+    let ResourceTokens {
+        base_crate,
+        name,
+        description,
+        meta,
+        title,
+        icons,
+        annotations,
+        mime_type,
+        size,
+        uri,
+    } = generate_resource_tokens(macro_attributes);
+
+    quote! {
+         impl #input_ident {
+
+            /// returns the Resource uri
+            pub fn resource_uri()->&'static str{
+                #uri
+            }
+
+            /// returns the Resource name
+            pub fn resource_name()->&'static str{
+                #name
+            }
+
+            /// Constructs and returns a `rust_mcp_schema::Resource` instance.
+            pub fn resource()->#base_crate::Resource{
+                #base_crate::Resource{
+                    annotations: #annotations,
+                    description: #description,
+                    icons: #icons,
+                    meta: #meta,
+                    mime_type: #mime_type,
+                    name: #name,
+                    size: #size,
+                    title: #title,
+                    uri: #uri
+                }
+            }
+         }
+         #input
+    }
+    .into()
+}
+
+#[proc_macro_attribute]
+/// A procedural macro attribute to generate `rust_mcp_schema::Resource` related utility methods for a struct.
+///
+/// The `mcp_resource` macro adds static methods to the annotated struct that provide access to
+/// resource metadata and construct a fully populated `rust_mcp_schema::Resource` instance.
+///
+/// Generated methods:
+/// - `resource_name()` → returns the resource name as `&'static str`
+/// - `resource_uri_template()` → returns the resource template URI as `&'static str`
+/// - `resource()` → constructs and returns a complete `rust_mcp_schema::Resource` value
+///
+/// # Attributes
+///
+/// All attributes are optional except `name` and `uri`, which are **required** and must be non-empty.
+///
+/// | Attribute     | Type                                 | Required | Description |
+/// |---------------|--------------------------------------|----------|-------------|
+/// | `name`        | string literal or `concat!(...)`     | Yes      | Unique name of the resource. |
+/// | `description` | string literal or `concat!(...)`     | Yes      | Human-readable description of the resource. |
+/// | `title`       | string literal or `concat!(...)`     | No       | Display title for the resource. |
+/// | `meta`        | JSON object as string literal        | No       | Arbitrary metadata as a valid JSON object. Must parse as a JSON object (not array, null, etc.). |
+/// | `mime_type`   | string literal                       | No       | MIME type of the resource (e.g., `"image/png"`, `"application/pdf"`). |
+/// | `uri_template`         | string literal                       | No       | URI template where the resource can be accessed. |
+/// | `audience`    | array of string literals             | No       | List of intended audiences (e.g., `["user", "system"]`). |
+/// | `icons`       | array of icon objects                | No       | List of icons in the same format as web app manifests (supports `src`, `sizes`, `type`). |
+///
+/// String fields (`name`, `description`, `title`) support `concat!(...)` with string literals.
+///
+/// # Panics
+///
+/// The macro will cause a compile-time error (not a runtime panic) if:
+/// - Applied to anything other than a struct.
+/// - Required attributes (`name` or `uri_template`) are missing or empty.
+/// - `meta` is provided but is not a valid JSON object.
+/// - Invalid types are used for any attribute (e.g., non-integer for `size`).
+///
+/// # Example
+///
+/// ```rust
+/// use rust_mcp_macros::mcp_resource_template;
+/// #[mcp_resource_template(
+///     name = "company-logos",
+///     description = "The official company logos in different resolutions",
+///     title = "Company Logos",
+///     mime_type = "image/png",
+///     uri_template = "https://example.com/assets/{file_path}",
+///     audience = ["user", "assistant"],
+///     meta = "{\"license\": \"proprietary\", \"author\": \"Ali Hashemi\"}",
+///     icons = [
+///     ( src = "logo-192.png", sizes = ["192x192"], mime_type = "image/png" ),
+///     ( src = "logo-512.png", sizes = ["512x512"], mime_type = "image/png" )
+///     ]
+/// )]
+/// struct CompanyLogo {};
+///
+/// // Usage
+/// assert_eq!(CompanyLogo::resource_template_name(), "company-logos");
+/// assert_eq!(
+///     CompanyLogo::resource_template_uri(),
+///     "https://example.com/assets/{file_path}"
+/// );
+///
+/// let resource_template = CompanyLogo::resource_template();
+/// assert_eq!(resource_template.name, "company-logos");
+/// assert_eq!(resource_template.mime_type.unwrap(), "image/png");
+/// assert!(resource_template.icons.len() == 2);
+/// ```
+pub fn mcp_resource_template(attributes: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let input_ident = &input.ident;
+    let macro_attributes = parse_macro_input!(attributes as McpResourceTemplateMacroAttributes);
+
+    let ResourceTemplateTokens {
+        base_crate,
+        name,
+        description,
+        meta,
+        title,
+        icons,
+        annotations,
+        mime_type,
+        uri_template,
+    } = generate_resource_template_tokens(macro_attributes);
+
+    quote! {
+         impl #input_ident {
+
+            /// returns the Resource Template uri
+            pub fn resource_template_uri()->&'static str{
+                #uri_template
+            }
+
+            /// returns the Resource Template name
+            pub fn resource_template_name()->&'static str{
+                #name
+            }
+
+            /// Constructs and returns a `rust_mcp_schema::Resource` instance.
+            pub fn resource_template()->#base_crate::ResourceTemplate{
+                #base_crate::ResourceTemplate{
+                    annotations: #annotations,
+                    description: #description,
+                    icons: #icons,
+                    meta: #meta,
+                    mime_type: #mime_type,
+                    name: #name,
+                    title: #title,
+                    uri_template: #uri_template
+                }
+            }
+         }
+         #input
+    }
+    .into()
 }
