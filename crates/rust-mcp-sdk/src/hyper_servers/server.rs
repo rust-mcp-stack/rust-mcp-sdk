@@ -403,6 +403,7 @@ impl HyperServer {
             self.options.streamable_http_endpoint()
         );
 
+        #[cfg(feature = "sse")]
         if self.options.sse_support {
             let sse_url = format!(
                 "\n• SSE {} is available at {}://{}{}",

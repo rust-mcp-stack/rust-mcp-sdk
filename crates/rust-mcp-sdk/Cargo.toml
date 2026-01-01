@@ -80,7 +80,7 @@ auth=["url","jsonwebtoken/aws_lc_rs","reqwest"]
 
 server = []                                                               # Server feature
 client = []                                                               # Client feature
-hyper-server = ["axum", "axum-server", "hyper", "server", "tokio-stream","http","http-body","http-body-util"]
+hyper-server = ["axum", "axum-server", "hyper", "server", "streamable-http", "tokio-stream","http","http-body","http-body-util"]
 ssl = ["axum-server/tls-rustls"]
 tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 macros = ["rust-mcp-macros/sdk"]

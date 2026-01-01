@@ -160,7 +160,8 @@ async fn main() -> SdkResult<()> {
 
 ## Minimal MCP Server (Streamable HTTP)
 Creating an MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup.
-The setup is nearly identical to the stdio example shown above. You only need to create a Hyper server via `hyper_server::create_server()` and pass in the same handler and `HyperServerOptions`.
+The setup is nearly identical to the stdio example shown above. You only need to create a Hyper server via `hyper_server::create_server()` and pass in the same handler and `HyperServerOptions`.  
+
 💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `HyperServerOptions`.
 
 ```rust
