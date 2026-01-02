@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.0...rust-mcp-sdk-v0.8.1) (2026-01-01)
+
+
+### 🐛 Bug Fixes
+
+* Make streamable-http feature enabled with hyper-server feature ([ed6b60c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ed6b60c581d373358b50872cdbaad670da0e2bab))
+
 ## [0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.7.4...rust-mcp-sdk-v0.8.0) (2026-01-01)
 
 
