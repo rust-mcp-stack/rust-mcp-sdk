@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.1...rust-mcp-sdk-v0.8.2) (2026-01-18)
+
+
+### 🐛 Bug Fixes
+
+* Enable url serde feature to prevent error when auth is enabled ([b31c6fb](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b31c6fba7f085f751f48ebeb479ad87aa80c3e06))
+
 ## [0.8.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.0...rust-mcp-sdk-v0.8.1) (2026-01-01)
 
 

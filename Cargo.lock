@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-extra"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -1988,7 +1988,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "async-trait",
  "axum",
