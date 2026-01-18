@@ -313,3 +313,182 @@ pub fn create_discovery_endpoints(
 
     Ok((endpoint_map, protected_resource_metadata_url))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn sample_full_metadata_json() -> Value {
+        json!({
+            "issuer": "https://auth.example.com/realms/demo",
+            "authorization_endpoint": "https://auth.example.com/realms/demo/protocol/openid-connect/auth",
+            "token_endpoint": "https://auth.example.com/realms/demo/protocol/openid-connect/token",
+            "jwks_uri": "https://auth.example.com/realms/demo/protocol/openid-connect/certs",
+            "registration_endpoint": "https://auth.example.com/realms/demo/clients-registrations",
+            "scopes_supported": ["openid", "profile", "email", "mcp:tools", "offline_access"],
+            "response_types_supported": ["code", "id_token", "code id_token", "token"],
+            "response_modes_supported": ["query", "fragment", "form_post"],
+            "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+            "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "private_key_jwt"],
+            "token_endpoint_auth_signing_alg_values_supported": ["RS256", "ES256"],
+            "service_documentation": "https://docs.example.com/oauth2",
+            "revocation_endpoint": "https://auth.example.com/realms/demo/protocol/openid-connect/revoke",
+            "revocation_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+            "introspection_endpoint": "https://auth.example.com/realms/demo/protocol/openid-connect/token/introspect",
+            "code_challenge_methods_supported": ["S256", "plain"],
+            "userinfo_endpoint": "https://auth.example.com/realms/demo/protocol/openid-connect/userinfo"
+        })
+    }
+
+    #[test]
+    fn test_serialize_minimal_metadata() {
+        let meta = AuthorizationServerMetadata::new(
+            "https://auth.test/realms/min",
+            "https://auth.test/realms/min/auth",
+            "https://auth.test/realms/min/token",
+        )
+        .unwrap();
+
+        let json = serde_json::to_value(&meta).expect("serialize failed");
+
+        assert_eq!(json["issuer"], "https://auth.test/realms/min");
+        assert_eq!(
+            json["authorization_endpoint"],
+            "https://auth.test/realms/min/auth"
+        );
+        assert_eq!(json["token_endpoint"], "https://auth.test/realms/min/token");
+
+        // optional fields should be absent when empty/default
+        assert!(!json.as_object().unwrap().contains_key("jwks_uri"));
+        assert!(!json.as_object().unwrap().contains_key("scopes_supported"));
+        assert_eq!(json["response_types_supported"], Value::Null);
+    }
+
+    #[test]
+    fn test_round_trip_minimal() {
+        let original = AuthorizationServerMetadata::new(
+            "https://issuer.example.com/",
+            "https://issuer.example.com/authorize",
+            "https://issuer.example.com/token",
+        )
+        .unwrap();
+
+        let json_str = serde_json::to_string(&original).unwrap();
+        let deserialized: AuthorizationServerMetadata = serde_json::from_str(&json_str).unwrap();
+
+        assert_eq!(original.issuer, deserialized.issuer);
+        assert_eq!(
+            original.authorization_endpoint,
+            deserialized.authorization_endpoint
+        );
+        assert_eq!(original.token_endpoint, deserialized.token_endpoint);
+        assert_eq!(original.jwks_uri, None);
+        assert_eq!(original.response_types_supported, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_deserialize_full_document() {
+        let json = sample_full_metadata_json();
+        let json_str = serde_json::to_string(&json).unwrap();
+
+        let meta: AuthorizationServerMetadata =
+            serde_json::from_str(&json_str).expect("deserialization failed");
+
+        assert_eq!(meta.issuer.as_str(), "https://auth.example.com/realms/demo");
+        assert_eq!(
+            meta.jwks_uri.as_ref().unwrap().as_str(),
+            "https://auth.example.com/realms/demo/protocol/openid-connect/certs"
+        );
+        assert_eq!(meta.scopes_supported.as_ref().unwrap().len(), 5);
+        assert!(meta
+            .scopes_supported
+            .as_ref()
+            .unwrap()
+            .contains(&"mcp:tools".to_string()));
+        assert_eq!(
+            meta.code_challenge_methods_supported.as_ref().unwrap(),
+            &vec!["S256".to_string(), "plain".to_string()]
+        );
+        assert_eq!(
+            meta.userinfo_endpoint.as_ref().unwrap(),
+            "https://auth.example.com/realms/demo/protocol/openid-connect/userinfo"
+        );
+    }
+
+    #[test]
+    fn test_round_trip_full_document() {
+        let json_val = sample_full_metadata_json();
+        let original: AuthorizationServerMetadata =
+            serde_json::from_value(json_val.clone()).unwrap();
+
+        let serialized = serde_json::to_value(&original).unwrap();
+        assert_eq!(serialized, json_val);
+
+        // also test via string round-trip
+        let json_str = serde_json::to_string(&original).unwrap();
+        let round_tripped: AuthorizationServerMetadata = serde_json::from_str(&json_str).unwrap();
+
+        assert_eq!(original.issuer, round_tripped.issuer);
+        assert_eq!(original.jwks_uri, round_tripped.jwks_uri);
+        assert_eq!(original.scopes_supported, round_tripped.scopes_supported);
+        assert_eq!(
+            original.response_types_supported,
+            round_tripped.response_types_supported
+        );
+    }
+
+    #[test]
+    fn test_deserialize_missing_required_field() {
+        let mut json = sample_full_metadata_json();
+        json.as_object_mut().unwrap().remove("token_endpoint");
+
+        let err = serde_json::from_value::<AuthorizationServerMetadata>(json).unwrap_err();
+        assert!(err.to_string().contains("token_endpoint"));
+    }
+
+    #[test]
+    fn test_deserialize_unknown_fields_are_ignored() {
+        let mut json = sample_full_metadata_json();
+        json["issuer"] = json!("https://auth.example.com/realms/demo");
+        json["some_new_field"] = json!(42);
+        json["claims_supported"] = json!(["sub", "name", "email"]); // common extra field
+
+        let meta: AuthorizationServerMetadata =
+            serde_json::from_value(json).expect("should ignore unknown fields");
+
+        assert_eq!(meta.issuer.as_str(), "https://auth.example.com/realms/demo");
+    }
+
+    #[test]
+    fn test_serialize_and_deserialize_with_empty_optional_arrays() {
+        let mut meta = AuthorizationServerMetadata::new(
+            "https://a.b/c",
+            "https://a.b/auth",
+            "https://a.b/token",
+        )
+        .unwrap();
+
+        meta.scopes_supported = Some(vec![]);
+        meta.grant_types_supported = Some(vec![]);
+        meta.response_modes_supported = None;
+
+        let json = serde_json::to_value(&meta).unwrap();
+
+        // empty vec should be serialized when Some()
+        assert_eq!(json["scopes_supported"], Value::Array(vec![]));
+        assert_eq!(json["grant_types_supported"], Value::Array(vec![]));
+
+        // None should be skipped
+        assert!(!json
+            .as_object()
+            .unwrap()
+            .contains_key("response_modes_supported"));
+
+        let round: AuthorizationServerMetadata = serde_json::from_value(json).unwrap();
+        assert_eq!(round.scopes_supported, Some(vec![]));
+        assert_eq!(round.grant_types_supported, Some(vec![]));
+        assert_eq!(round.response_modes_supported, None);
+        let _ = serde_json::to_string(&round).unwrap();
+    }
+}
