@@ -475,3 +475,36 @@ fn readme_example_tool() {
 
     assert_eq!(request_params.name, "write_file");
 }
+
+#[test]
+fn test_alias() {
+    #[allow(unused)]
+    #[derive(JsonSchema)]
+    struct TestProps {
+        name: String,
+        count: i32,
+        active: bool,
+        score: Option<f64>,
+    }
+
+    #[mcp_tool(name = "test_props", description = "test_props")]
+    type AliasType = TestProps;
+
+    let tool: Tool = TestProps::tool();
+    let schema = tool.input_schema;
+    let props = schema.properties.unwrap();
+
+    assert!(props.contains_key("name"));
+    assert!(props.contains_key("count"));
+    assert!(props.contains_key("active"));
+    assert!(props.contains_key("score"));
+
+    let name_prop = props.get("name").unwrap();
+    assert_eq!(name_prop.get("type").unwrap().as_str().unwrap(), "string");
+
+    let active_prop = props.get("active").unwrap();
+    assert_eq!(
+        active_prop.get("type").unwrap().as_str().unwrap(),
+        "boolean"
+    );
+}
