@@ -322,6 +322,31 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                     }
                 }
+                //  Handle imported serde_json::Number (single-segment case, common when `use serde_json::Number;`)
+                else if ident == "Number" {
+                    let min_num_quote = minimum.as_ref().map(|min| {
+                                        quote! {
+                                            map.insert("minimum".to_string(), serde_json::Value::Number(serde_json::Number::from(#min)));
+                                        }
+                                    });
+                    let max_num_quote = maximum.as_ref().map(|max| {
+                                        quote! {
+                                            map.insert("maximum".to_string(), serde_json::Value::Number(serde_json::Number::from(#max)));
+                                        }
+                                    });
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            map.insert("type".to_string(), serde_json::Value::String("number".to_string()));
+                            #description_quote
+                            #title_quote
+                            #min_num_quote
+                            #max_num_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
                 // Handle nested structs
                 else if might_be_struct(ty) {
                     let path = &type_path.path;
@@ -424,6 +449,38 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                             map.insert("type".to_string(), serde_json::Value::String("boolean".to_string()));
                             #description_quote
                             #title_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
+            } else if type_path.path.segments.len() == 2 && type_path.path.leading_colon.is_none() {
+                let segments: Vec<_> = type_path.path.segments.iter().collect();
+                let seg0 = &segments[0];
+                let seg1 = &segments[1];
+                if seg0.ident == "serde_json"
+                    && seg0.arguments.is_empty()
+                    && seg1.ident == "Number"
+                    && seg1.arguments.is_empty()
+                {
+                    let min_num_quote = minimum.as_ref().map(|min| {
+                                    quote! {
+                                        map.insert("minimum".to_string(), serde_json::Value::Number(serde_json::Number::from(#min)));
+                                    }
+                                });
+                    let max_num_quote = maximum.as_ref().map(|max| {
+                                    quote! {
+                                        map.insert("maximum".to_string(), serde_json::Value::Number(serde_json::Number::from(#max)));
+                                    }
+                                });
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            map.insert("type".to_string(), serde_json::Value::String("number".to_string()));
+                            #description_quote
+                            #title_quote
+                            #min_num_quote
+                            #max_num_quote
                             #default_quote
                             map
                         }
