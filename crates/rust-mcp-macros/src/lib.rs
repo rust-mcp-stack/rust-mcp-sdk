@@ -67,8 +67,51 @@ use utils::{base_crate, is_option, is_vec_string, renamed_field, type_to_json_sc
 /// ```
 #[proc_macro_attribute]
 pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let input_ident = &input.ident;
+    let input_item: syn::Item = parse_macro_input!(input as syn::Item);
+
+    let (ident, original_item) = match input_item {
+        syn::Item::Struct(struct_item) => {
+            let ident = struct_item.ident.clone();
+            (ident, syn::Item::Struct(struct_item))
+        }
+        syn::Item::Type(type_item) => {
+            // Only support simple non-generic type aliases like `type Foo = Bar;`
+            // (no paths with ::, no generics)
+            let aliased_ty = type_item.ty.clone();
+            if let syn::Type::Path(type_path) = *aliased_ty {
+                if type_path.path.leading_colon.is_none() && type_path.path.segments.len() == 1 {
+                    let segment = type_path.path.segments.first().unwrap();
+                    if matches!(segment.arguments, syn::PathArguments::None) {
+                        let ident = type_item.ident.clone();
+                        (ident, syn::Item::Type(type_item))
+                    } else {
+                        return quote! {
+                                compile_error!("mcp_tool does not support type aliases with generic arguments");
+                            }
+                            .into();
+                    }
+                } else {
+                    return quote! {
+                            compile_error!("mcp_tool only supports simple type aliases to a single identifier (e.g. `type Foo = Bar;`)");
+                        }
+                        .into();
+                }
+            } else {
+                return quote! {
+                    compile_error!("mcp_tool only supports type aliases to path types");
+                }
+                .into();
+            }
+        }
+        _ => {
+            return quote! {
+                compile_error!("#[mcp_tool] can only be applied to structs or type aliases");
+            }
+            .into();
+        }
+    };
+
+    let input_ident = &ident;
     let macro_attributes = parse_macro_input!(attributes as McpToolMacroAttributes);
 
     let ToolTokens {
@@ -169,7 +212,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
         // Retain the original item (struct definition)
-        #input
+        #original_item
     };
 
     TokenStream::from(output)
