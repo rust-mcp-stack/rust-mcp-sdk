@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.2...rust-mcp-extra-v0.2.3) (2026-02-01)
+
 ## [0.2.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.1...rust-mcp-extra-v0.2.2) (2026-01-18)
 
 ## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.0...rust-mcp-extra-v0.2.1) (2026-01-01)

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.8.0...rust-mcp-macros-v0.8.1) (2026-02-01)
+
+
+### 🚀 Features
+
+* Add support for imported serde_json::Number in JsonSchema derive ([#130](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/130)) ([9b2b29e](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9b2b29ed087d4e6c8a70eab0aeaab202e12b4661))
+* Add support for type aliases in the mcp_tool macro ([#129](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/129)) ([6eab1ac](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6eab1ac9e1d85adf68a0d92674fa598f46e27f73))
+
 ## [0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.5.3...rust-mcp-macros-v0.8.0) (2026-01-01)
 
 
