@@ -1,8 +1,8 @@
 {
-  "crates/rust-mcp-sdk": "0.8.2",
-  "crates/rust-mcp-macros": "0.8.0",
+  "crates/rust-mcp-sdk": "0.8.3",
+  "crates/rust-mcp-macros": "0.8.1",
   "crates/rust-mcp-transport": "0.8.0",
-  "crates/rust-mcp-extra": "0.2.2",
+  "crates/rust-mcp-extra": "0.2.3",
   "examples/hello-world-mcp-server-stdio": "0.1.33",
   "examples/hello-world-mcp-server-stdio-core": "0.1.24",
   "examples/simple-mcp-client-stdio": "0.1.33",
