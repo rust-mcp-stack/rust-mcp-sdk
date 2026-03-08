@@ -258,12 +258,12 @@ pub trait ServerHandler: Send + Sync + 'static {
         )))
     }
 
-    ///Handles a request to retrieve the state of a task.
+    /// Handles a request to retrieve the state of a task.
     async fn handle_get_task_request(
         &self,
         params: GetTaskParams,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CompleteResult, RpcError> {
+    ) -> std::result::Result<GetTaskResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &GetTaskRequest::method_value(),
@@ -275,7 +275,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         params: GetTaskPayloadParams,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CompleteResult, RpcError> {
+    ) -> std::result::Result<GetTaskPayloadResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &GetTaskPayloadRequest::method_value(),
@@ -287,7 +287,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         params: CancelTaskParams,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CompleteResult, RpcError> {
+    ) -> std::result::Result<CancelTaskResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &CancelTaskRequest::method_value(),
@@ -299,7 +299,7 @@ pub trait ServerHandler: Send + Sync + 'static {
         &self,
         params: Option<PaginatedRequestParams>,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CompleteResult, RpcError> {
+    ) -> std::result::Result<ListTasksResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             &ListTasksRequest::method_value(),
