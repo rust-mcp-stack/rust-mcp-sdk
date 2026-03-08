@@ -8,10 +8,8 @@ use crate::auth::AuthInfo;
 #[cfg(feature = "auth")]
 use crate::auth::AuthProvider;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
-use crate::mcp_http::{GenericBodyExt, RequestExt};
+use crate::mcp_http::{GenericBodyExt, HealthHandler, RequestExt};
 use crate::mcp_server::error::TransportServerError;
-#[cfg(feature = "auth")]
-use crate::mcp_server::HealthHandler;
 use crate::schema::schema_utils::SdkError;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::{
@@ -243,11 +241,10 @@ impl McpHttpHandler {
         if let Some(health_handler) = self.health_handler.as_ref() {
             return Ok(health_handler.call(request));
         } else {
-            let status = json!({
-                "status": "ok",
-                "sdk": concat!(
-                        env!("CARGO_PKG_NAME"),"/",env!("CARGO_PKG_VERSION")
-                    )
+            let status = serde_json::json!({
+                "status":"ok",
+                "server": env!("CARGO_PKG_NAME"),
+                "version":env!("CARGO_PKG_VERSION")
             });
 
             Ok(GenericBody::from_value(&status).into_json_response(http::StatusCode::OK, None))

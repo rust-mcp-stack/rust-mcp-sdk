@@ -4,7 +4,7 @@ members = [
     "crates/rust-mcp-macros",
     "crates/rust-mcp-sdk",
     "crates/rust-mcp-transport",
-    "crates/rust-mcp-extra",
+    "crates/rust-mcp-extra", "test-app",
 ]
 
 [workspace.package]

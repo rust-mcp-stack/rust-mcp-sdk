@@ -11,7 +11,8 @@ This folder contains a variety of example programs demonstrating how to use the 
     - **[Streamable HTTP Examples](#%EF%B8%8F-mcp-servers-examples-streamable-http)**
         - quick-start-streamable-http
         - hello-world-server-streamable-http
-        - hello-world-server-streamable-http-core        
+        - hello-world-server-streamable-http-core      
+        - streamable_http_healthcheck  
     - **[Oauth Example](#%EF%B8%8F-mcp-server---oauth-example)**
         - mcp-server-oauth-remote
 - **MCP Client**
@@ -58,6 +59,7 @@ Minimal quick-start example demonstrating the fastest way to set up a basic MCP 
 - [quick-start-streamable-http.rs](quick-start-streamable-http.rs)
 - [hello-world-server-streamable-http.rs](hello-world-server-streamable-http.rs)
 - [hello-world-server-streamable-http-core.rs](hello-world-server-streamable-http-core.rs)
+- [streamable_http_healthcheck.rs](streamable_http_healthcheck.rs)
 
 **Start the server:**
 _for instance, start the `hello-world-server-streamable-http`_

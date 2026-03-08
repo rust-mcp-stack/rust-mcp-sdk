@@ -2493,6 +2493,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-app"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
