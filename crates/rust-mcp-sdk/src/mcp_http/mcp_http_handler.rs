@@ -27,7 +27,6 @@ use crate::{
 };
 use http::{self, HeaderMap, Method, StatusCode, Uri};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
-use serde_json::json;
 use std::sync::Arc;
 
 /// A helper macro to wrap an async handler method into a `RequestHandler`
@@ -239,7 +238,7 @@ impl McpHttpHandler {
         request: http::Request<&str>,
     ) -> TransportServerResult<http::Response<GenericBody>> {
         if let Some(health_handler) = self.health_handler.as_ref() {
-            return Ok(health_handler.call(request));
+            Ok(health_handler.call(request))
         } else {
             let status = serde_json::json!({
                 "status":"ok",
