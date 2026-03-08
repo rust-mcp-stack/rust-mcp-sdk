@@ -10,6 +10,8 @@ use crate::auth::AuthProvider;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, RequestExt};
 use crate::mcp_server::error::TransportServerError;
+#[cfg(feature = "auth")]
+use crate::mcp_server::HealthHandler;
 use crate::schema::schema_utils::SdkError;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::{
@@ -27,6 +29,7 @@ use crate::{
 };
 use http::{self, HeaderMap, Method, StatusCode, Uri};
 use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
+use serde_json::json;
 use std::sync::Arc;
 
 /// A helper macro to wrap an async handler method into a `RequestHandler`
@@ -76,17 +79,32 @@ pub struct McpHttpHandler {
     #[cfg(feature = "auth")]
     auth: Option<Arc<dyn AuthProvider>>,
     middlewares: Vec<Arc<dyn Middleware>>,
+    health_handler: Option<Arc<dyn HealthHandler>>,
 }
 
 impl McpHttpHandler {
     #[cfg(feature = "auth")]
-    pub fn new(auth: Option<Arc<dyn AuthProvider>>, middlewares: Vec<Arc<dyn Middleware>>) -> Self {
-        McpHttpHandler { auth, middlewares }
+    pub fn new(
+        auth: Option<Arc<dyn AuthProvider>>,
+        middlewares: Vec<Arc<dyn Middleware>>,
+        health_handler: Option<Arc<dyn HealthHandler>>,
+    ) -> Self {
+        McpHttpHandler {
+            auth,
+            middlewares,
+            health_handler,
+        }
     }
 
     #[cfg(not(feature = "auth"))]
-    pub fn new(middlewares: Vec<Arc<dyn Middleware>>) -> Self {
-        McpHttpHandler { middlewares }
+    pub fn new(
+        middlewares: Vec<Arc<dyn Middleware>>,
+        health_handler: Option<Arc<dyn HealthHandler>>,
+    ) -> Self {
+        McpHttpHandler {
+            middlewares,
+            health_handler,
+        }
     }
 
     pub fn add_middleware<M: Middleware + 'static>(&mut self, middleware: M) {
@@ -216,6 +234,24 @@ impl McpHttpHandler {
     ) -> TransportServerResult<http::Response<GenericBody>> {
         let handle = with_middlewares!(self, Self::internal_handle_sse_message);
         handle(request, state).await
+    }
+
+    pub async fn handle_health(
+        &self,
+        request: http::Request<&str>,
+    ) -> TransportServerResult<http::Response<GenericBody>> {
+        if let Some(health_handler) = self.health_handler.as_ref() {
+            return Ok(health_handler.call(request));
+        } else {
+            let status = json!({
+                "status": "ok",
+                "sdk": concat!(
+                        env!("CARGO_PKG_NAME"),"/",env!("CARGO_PKG_VERSION")
+                    )
+            });
+
+            Ok(GenericBody::from_value(&status).into_json_response(http::StatusCode::OK, None))
+        }
     }
 
     /// Handles incoming MCP messages over the StreamableHTTP transport.

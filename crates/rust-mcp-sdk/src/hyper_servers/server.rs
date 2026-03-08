@@ -16,7 +16,7 @@ use crate::{
         middleware::DnsRebindProtector,
         McpAppState, McpHttpHandler,
     },
-    mcp_server::hyper_runtime::HyperRuntime,
+    mcp_server::{hyper_runtime::HyperRuntime, HealthHandler},
     mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
     task_store::{ClientTaskStore, ServerTaskStore},
@@ -132,6 +132,16 @@ pub struct HyperServerOptions {
     /// Optional authentication provider for protecting MCP server.
     #[cfg(feature = "auth")]
     pub auth: Option<Arc<dyn AuthProvider>>,
+
+    /// Path for the optional health-check endpoint.
+    /// Set to `None` to **disable** the health check endpoint completely
+    pub health_endpoint: Option<String>,
+
+    /// Custom handler for the health endpoint.
+    /// Only used when `health_endpoint` is `Some(_)`.
+    /// - `None` → fast static `200 OK` response with minimal json payload `{"status":"ok", "sdk":"rust-mcp-sdk/x.x.x"}`
+    /// - `Some(...)` → user-provided handler
+    pub health_handler: Option<Arc<dyn HealthHandler>>,
 }
 
 impl HyperServerOptions {
@@ -272,6 +282,8 @@ impl Default for HyperServerOptions {
             auth: None,
             task_store: None,
             client_task_store: None,
+            health_endpoint: None,
+            health_handler: None,
         }
     }
 }
@@ -336,7 +348,11 @@ impl HyperServer {
                 if let Some(auth_provider) = auth_provider.as_ref() {
                     middlewares.push(Arc::new(AuthMiddleware::new(auth_provider.clone())))
                 }
-                McpHttpHandler::new(auth_provider, middlewares)
+                McpHttpHandler::new(
+                    auth_provider,
+                    middlewares,
+                    server_options.health_handler.clone(),
+                )
             }
             #[cfg(not(feature = "auth"))]
             McpHttpHandler::new(middlewares)
