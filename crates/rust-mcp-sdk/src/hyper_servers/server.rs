@@ -355,7 +355,7 @@ impl HyperServer {
                 )
             }
             #[cfg(not(feature = "auth"))]
-            McpHttpHandler::new(middlewares)
+            McpHttpHandler::new(middlewares, server_options.health_handler.clone())
         };
 
         let app = app_routes(Arc::clone(&state), &server_options, http_handler);
