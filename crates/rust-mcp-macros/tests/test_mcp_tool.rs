@@ -508,3 +508,21 @@ fn test_alias() {
         "boolean"
     );
 }
+
+#[test]
+fn test_multi_line_description() {
+    #[allow(unused)]
+    #[derive(JsonSchema)]
+    #[mcp_tool(name = "data_point", description = "description...")]
+    pub struct DataPoint {
+        /// X-axis value for the data point.
+        /// Typically represents a category, label, or timestamp.
+        pub x: String,
+    }
+
+    let tool: Tool = DataPoint::tool();
+    let schema = tool.input_schema;
+
+    let expected = r#"{"properties":{"x":{"description":"X-axis value for the data point.\nTypically represents a category, label, or timestamp.","type":"string"}},"required":["x"],"type":"object"}"#;
+    assert_eq!(serde_json::to_string(&schema).unwrap(), expected);
+}
