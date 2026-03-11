@@ -20,6 +20,7 @@ use crate::{
     mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
     task_store::{ClientTaskStore, ServerTaskStore},
+    McpObserver,
 };
 use crate::{mcp_http::Middleware, schema::InitializeResult};
 use axum::Router;
@@ -142,6 +143,8 @@ pub struct HyperServerOptions {
     /// - `None` → fast static `200 OK` response with minimal json payload `{"status":"ok", "sdk":"rust-mcp-sdk/x.x.x"}`
     /// - `Some(...)` → user-provided handler
     pub health_handler: Option<Arc<dyn HealthHandler>>,
+
+    pub observer: Option<Arc<dyn McpObserver>>,
 }
 
 impl HyperServerOptions {
@@ -284,6 +287,7 @@ impl Default for HyperServerOptions {
             client_task_store: None,
             health_endpoint: None,
             health_handler: None,
+            observer: None,
         }
     }
 }
@@ -328,6 +332,7 @@ impl HyperServer {
             event_store: server_options.event_store.as_ref().map(Arc::clone),
             task_store: server_options.task_store.take(),
             client_task_store: server_options.client_task_store.take(),
+            observer: server_options.observer.take(),
         });
 
         // populate middlewares

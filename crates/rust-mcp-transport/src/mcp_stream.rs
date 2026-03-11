@@ -119,7 +119,7 @@ impl MCPStream {
                     line = lines_stream.next_line() =>{
                         match line {
                             Ok(Some(line)) => {
-                                            tracing::debug!("raw payload: {}",line);
+                                            tracing::trace!("raw payload: {}",line);
 
                                             // deserialize and send it to the stream
                                             let message: X = match serde_json::from_str(&line){
