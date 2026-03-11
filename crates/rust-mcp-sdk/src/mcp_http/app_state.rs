@@ -26,5 +26,5 @@ pub struct McpAppState {
     pub event_store: Option<Arc<dyn EventStore>>,
     pub task_store: Option<Arc<ServerTaskStore>>,
     pub client_task_store: Option<Arc<ClientTaskStore>>,
-    pub observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver>>,
 }

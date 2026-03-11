@@ -144,7 +144,7 @@ pub struct HyperServerOptions {
     /// - `Some(...)` → user-provided handler
     pub health_handler: Option<Arc<dyn HealthHandler>>,
 
-    pub observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver>>,
 }
 
 impl HyperServerOptions {
@@ -287,7 +287,7 @@ impl Default for HyperServerOptions {
             client_task_store: None,
             health_endpoint: None,
             health_handler: None,
-            observer: None,
+            message_observer: None,
         }
     }
 }
@@ -332,7 +332,7 @@ impl HyperServer {
             event_store: server_options.event_store.as_ref().map(Arc::clone),
             task_store: server_options.task_store.take(),
             client_task_store: server_options.client_task_store.take(),
-            observer: server_options.observer.take(),
+            message_observer: server_options.message_observer.take(),
         });
 
         // populate middlewares

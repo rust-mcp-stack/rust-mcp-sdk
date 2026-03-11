@@ -2,6 +2,7 @@ use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
 
 /// Zero-cost observer hook for incoming/outgoing messages.
 /// Implementations should be fast and preferably non-blocking.
+#[allow(unused)]
 pub trait McpObserver: Send + Sync {
     /// Called synchronously right after a message is received/deserialized.
     /// The reference is valid only for the duration of this call.

@@ -56,7 +56,7 @@ pub struct ServerRuntime {
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
     task_store: Option<Arc<ServerTaskStore>>,
     client_task_store: Option<Arc<ClientTaskStore>>,
-    observer: Option<Arc<dyn McpObserver>>,
+    message_observer: Option<Arc<dyn McpObserver>>,
 }
 
 pub struct McpServerOptions<T>
@@ -74,7 +74,7 @@ where
     pub handler: Arc<dyn McpServerHandler>,
     pub task_store: Option<Arc<ServerTaskStore>>,
     pub client_task_store: Option<Arc<ClientTaskStore>>,
-    pub observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver>>,
 }
 
 #[async_trait]
@@ -151,7 +151,7 @@ impl McpServer for ServerRuntime {
         let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
 
         // telemetry
-        if let Some(observer) = self.observer.as_ref() {
+        if let Some(observer) = self.message_observer.as_ref() {
             observer.on_send(&mcp_message);
         }
 
@@ -176,7 +176,7 @@ impl McpServer for ServerRuntime {
         )?;
 
         // telemetry
-        if let Some(observer) = self.observer.as_ref() {
+        if let Some(observer) = self.message_observer.as_ref() {
             messages.iter().for_each(|msg| observer.on_send(&msg));
         }
 
@@ -344,7 +344,7 @@ impl ServerRuntime {
         >,
     ) -> SdkResult<Option<ServerMessage>> {
         // telemetry
-        if let Some(observer) = self.observer.as_ref() {
+        if let Some(observer) = self.message_observer.as_ref() {
             observer.on_receive(&message);
         }
 
@@ -623,7 +623,7 @@ impl ServerRuntime {
         auth_info: Option<AuthInfo>,
         task_store: Option<Arc<ServerTaskStore>>,
         client_task_store: Option<Arc<ClientTaskStore>>,
-        observer: Option<Arc<dyn McpObserver>>,
+        message_observer: Option<Arc<dyn McpObserver>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 
@@ -640,7 +640,7 @@ impl ServerRuntime {
             auth_info: RwLock::new(auth_info),
             task_store,
             client_task_store,
-            observer,
+            message_observer,
         })
     }
 
@@ -700,7 +700,7 @@ impl ServerRuntime {
             auth_info: RwLock::new(None),
             task_store: options.task_store,
             client_task_store: options.client_task_store,
-            observer: options.observer,
+            message_observer: options.message_observer,
         });
 
         let runtime_clone = runtime.clone();
