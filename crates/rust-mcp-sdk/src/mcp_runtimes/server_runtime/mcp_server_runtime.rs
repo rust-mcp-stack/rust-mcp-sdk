@@ -67,7 +67,7 @@ pub(crate) fn create_server_instance(
     auth_info: Option<AuthInfo>,
     task_store: Option<Arc<ServerTaskStore>>,
     client_task_store: Option<Arc<ClientTaskStore>>,
-    message_observer: Option<Arc<dyn McpObserver>>,
+    message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 ) -> Arc<ServerRuntime> {
     ServerRuntime::new_instance(
         server_details,

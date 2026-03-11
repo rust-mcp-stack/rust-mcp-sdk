@@ -29,7 +29,7 @@ impl SimpleMessageObserver {
         Arc::new(Self)
     }
 }
-impl McpObserver for SimpleMessageObserver {
+impl McpObserver<ClientMessage, ServerMessage> for SimpleMessageObserver {
     fn on_receive(&self, message: &ClientMessage) {
         // Output message details to stderr
         eprintln!(

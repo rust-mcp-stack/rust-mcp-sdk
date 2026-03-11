@@ -3,6 +3,7 @@ use crate::session_store::SessionStore;
 use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use crate::McpObserver;
 use crate::{id_generator::FastIdGenerator, mcp_traits::IdGenerator, schema::InitializeResult};
+use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_transport::event_store::EventStore;
 use rust_mcp_transport::{SessionId, TransportOptions};
 use std::{sync::Arc, time::Duration};
@@ -26,5 +27,5 @@ pub struct McpAppState {
     pub event_store: Option<Arc<dyn EventStore>>,
     pub task_store: Option<Arc<ServerTaskStore>>,
     pub client_task_store: Option<Arc<ClientTaskStore>>,
-    pub message_observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }

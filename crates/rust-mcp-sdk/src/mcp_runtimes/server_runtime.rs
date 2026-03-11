@@ -56,7 +56,7 @@ pub struct ServerRuntime {
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
     task_store: Option<Arc<ServerTaskStore>>,
     client_task_store: Option<Arc<ClientTaskStore>>,
-    message_observer: Option<Arc<dyn McpObserver>>,
+    message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 pub struct McpServerOptions<T>
@@ -74,7 +74,7 @@ where
     pub handler: Arc<dyn McpServerHandler>,
     pub task_store: Option<Arc<ServerTaskStore>>,
     pub client_task_store: Option<Arc<ClientTaskStore>>,
-    pub message_observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 #[async_trait]
@@ -623,7 +623,7 @@ impl ServerRuntime {
         auth_info: Option<AuthInfo>,
         task_store: Option<Arc<ServerTaskStore>>,
         client_task_store: Option<Arc<ClientTaskStore>>,
-        message_observer: Option<Arc<dyn McpObserver>>,
+        message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 

@@ -27,6 +27,7 @@ use axum::Router;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
@@ -144,7 +145,7 @@ pub struct HyperServerOptions {
     /// - `Some(...)` → user-provided handler
     pub health_handler: Option<Arc<dyn HealthHandler>>,
 
-    pub message_observer: Option<Arc<dyn McpObserver>>,
+    pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 impl HyperServerOptions {
