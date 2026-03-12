@@ -85,6 +85,7 @@ async fn main() -> SdkResult<()> {
         HyperServerOptions {
             host: "127.0.0.1".to_string(),
             event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+            health_endpoint: Some("/health".into()), // enable health check endpoint
             ..Default::default()
         },
     );

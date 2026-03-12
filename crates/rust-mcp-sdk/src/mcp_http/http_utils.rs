@@ -75,7 +75,7 @@ fn strip_bearer_prefix(header: &str) -> &str {
 /// Parse a `WWW-Authenticate` header with Bearer-style key/value parameters
 /// into a JSON object (`serde_json::Map`).
 #[cfg(feature = "auth")]
-pub fn parse_www_authenticate(header: &str) -> Option<Map<String, Value>> {
+fn parse_www_authenticate(header: &str) -> Option<Map<String, Value>> {
     let params_str = strip_bearer_prefix(header);
 
     let mut result: Option<Map<String, Value>> = None;

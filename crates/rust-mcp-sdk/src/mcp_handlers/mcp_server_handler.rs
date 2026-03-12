@@ -7,10 +7,9 @@ use crate::{
     },
     task_store::ServerTaskCreator,
 };
+use crate::{mcp_traits::McpServer, utils::enforce_compatible_protocol_version};
 use async_trait::async_trait;
 use std::sync::Arc;
-
-use crate::{mcp_traits::McpServer, utils::enforce_compatible_protocol_version};
 
 /// The `ServerHandler` trait defines how a server handles Model Context Protocol (MCP) operations.
 /// It provides default implementations for request , notification and error handlers, and must be extended or

@@ -1,6 +1,7 @@
 #[cfg(feature = "auth")]
 pub mod auth_routes;
 pub mod fallback_routes;
+pub mod health_check_route;
 #[cfg(feature = "sse")]
 pub mod messages_routes;
 #[cfg(feature = "sse")]
@@ -43,6 +44,11 @@ pub fn app_routes(
         router = router.merge(streamable_http_routes::routes(
             server_options.streamable_http_endpoint(),
         ));
+
+        // mount health check if enabled
+        if let Some(health_check_endpoint) = server_options.health_endpoint.as_ref() {
+            router = router.merge(health_check_route::routes(health_check_endpoint));
+        }
 
         #[cfg(feature = "sse")]
         {
