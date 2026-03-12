@@ -33,6 +33,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
 - ✅ Message Observer (Telemetry & Monitoring)
+- ✅ HTTP Health Checks (for load balancers & container orchestration)
 - ✅ OAuth Authentication for MCP Servers
   - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
     - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
@@ -69,6 +70,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
   - [Choosing Between **ServerHandler** and **ServerHandlerCore**](#choosing-between-serverhandler-and-serverhandlercore)
   - [Choosing Between **ClientHandler** and **ClientHandlerCore**](#choosing-between-clienthandler-and-clienthandlercore)
 - [Message Observer (Telemetry & Monitoring)](#message-observer-telemetry--monitoring)
+- [Health Check Endpoint](#health-check-endpoint)
 - [Projects using Rust MCP SDK](#projects-using-rust-mcp-sdk)
 - [Contributing](#contributing)
 - [Development](#development)
@@ -601,6 +603,28 @@ let server = server_runtime::create_server_with_options(ServerOptions {
 
 These observers are utilized in the [hello-world-mcp-server-stdio](crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) and [simple-mcp-client-streamable-http](crates/rust-mcp-sdk/examples/simple-mcp-client-streamable-http.rs) examples. You can monitor the generated logs in real-time at [https://app.beeceptor.com/console/rustmcp](https://app.beeceptor.com/console/rustmcp).
 
+## Health Check Endpoint
+
+While not part of the official MCP spec, `rust-mcp-sdk` provides an optional HTTP health check endpoint. This is a practical quality-of-life feature, specifically useful when your MCP server is:
+- Exposed behind load balancers or reverse proxies (e.g., NGINX, HAProxy, Cloudflare).
+- Running in container orchestration environments (e.g., Kubernetes, Docker Swarm, AWS ECS).
+
+The health check endpoint is disabled by default. You can enable it and optionally provide your own custom handler (to return specific metrics or metadata) via `HyperServerOptions`:
+
+```rs
+let server = hyper_server::create_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    HyperServerOptions {
+        host: "127.0.0.1".into(),
+        health_endpoint: Some("/health".into()),             // enables the endpoint
+        health_handler: Some(Arc::new(CustomHealth {})),     // optional: overrides default 200 OK
+        ..Default::default()
+    },
+);
+```
+
+👉 See the [streamable_http_healthcheck.rs](crates/rust-mcp-sdk/examples/streamable_http_healthcheck.rs) example for a complete implementation demonstrating a custom JSON health handler.
 
 ## Projects using Rust MCP SDK
 
