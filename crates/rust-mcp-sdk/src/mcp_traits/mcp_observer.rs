@@ -1,5 +1,3 @@
-use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
-
 /// Observer hook for incoming/outgoing messages.
 /// Implementations should be fast and preferably non-blocking.
 #[allow(unused)]

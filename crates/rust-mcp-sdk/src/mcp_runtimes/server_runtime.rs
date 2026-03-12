@@ -177,7 +177,7 @@ impl McpServer for ServerRuntime {
 
         // telemetry
         if let Some(observer) = self.message_observer.as_ref() {
-            messages.iter().for_each(|msg| observer.on_send(&msg));
+            messages.iter().for_each(|msg| observer.on_send(msg));
         }
 
         transport

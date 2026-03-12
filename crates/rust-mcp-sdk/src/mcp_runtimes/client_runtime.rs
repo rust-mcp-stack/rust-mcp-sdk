@@ -678,7 +678,7 @@ impl McpClient for ClientRuntime {
             if self.transport_options.is_some() {
                 // telemetry
                 if let Some(observer) = self.message_observer.as_ref() {
-                    messages.iter().for_each(|msg| observer.on_send(&msg));
+                    messages.iter().for_each(|msg| observer.on_send(msg));
                 }
 
                 let result = self
@@ -700,7 +700,7 @@ impl McpClient for ClientRuntime {
 
         // telemetry
         if let Some(observer) = self.message_observer.as_ref() {
-            messages.iter().for_each(|msg| observer.on_send(&msg));
+            messages.iter().for_each(|msg| observer.on_send(msg));
         }
 
         transport
