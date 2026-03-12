@@ -32,6 +32,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - ✅ MCP [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) support
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
+- ✅ Message Observer (Telemetry & Monitoring)
 - ✅ OAuth Authentication for MCP Servers
   - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
     - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
