@@ -75,16 +75,22 @@ async fn test_client_observer_receives_and_sends_messages() {
 
     // Make an explicit request to trigger both a send and receive
     let _ = client.request_tool_list(None).await;
-    
+
     // Check observer counts
     let sent_count = observer.sent.load(Ordering::SeqCst);
     let received_count = observer.received.load(Ordering::SeqCst);
-    
+
     // The client sends Initialize, list tools, etc.
-    assert!(sent_count >= 2, "Expected at least 2 messages sent, got {}", sent_count);
-    assert!(received_count >= 2, "Expected at least 2 messages received, got {}", received_count);
+    assert!(
+        sent_count >= 2,
+        "Expected at least 2 messages sent, got {}",
+        sent_count
+    );
+    assert!(
+        received_count >= 2,
+        "Expected at least 2 messages received, got {}",
+        received_count
+    );
 
     let _ = client.shut_down().await;
 }
-
-
