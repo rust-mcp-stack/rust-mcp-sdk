@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use rust_mcp_sdk::{
     error::SdkResult,
@@ -8,6 +6,7 @@ use rust_mcp_sdk::{
     task_store::InMemoryTaskStore,
     *,
 };
+use std::sync::Arc;
 
 // Custom Handler to handle incoming MCP Messages
 pub struct MyClientHandler;
@@ -56,6 +55,7 @@ async fn main() -> SdkResult<()> {
         handler: handler.to_mcp_client_handler(),
         task_store: Some(Arc::new(InMemoryTaskStore::new(None))), // support mcp tasks: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
         server_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+        message_observer: None,
     });
     client.clone().start().await?;
 

@@ -59,6 +59,7 @@ async fn main() -> SdkResult<()> {
         handler: handler.to_mcp_client_handler(),
         task_store: None,
         server_task_store: None,
+        message_observer: None,
     });
 
     // STEP 5: start the MCP client

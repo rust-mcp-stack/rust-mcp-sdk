@@ -11,6 +11,8 @@ use crate::schema::{
 use crate::task_store::ClientTaskStore;
 #[cfg(feature = "streamable-http")]
 use crate::task_store::ServerTaskStore;
+#[cfg(feature = "streamable-http")]
+use crate::McpObserver;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_client_handler_core::ClientHandlerCore,
@@ -66,6 +68,7 @@ where
         options.handler,
         options.task_store,
         options.server_task_store,
+        options.message_observer,
     ))
 }
 
@@ -75,14 +78,16 @@ pub fn with_transport_options(
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandlerCore,
     task_store: Option<Arc<ClientTaskStore>>,
-    servertask_store: Option<Arc<ServerTaskStore>>,
+    server_task_store: Option<Arc<ServerTaskStore>>,
+    message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
         task_store,
-        servertask_store,
+        server_task_store,
+        message_observer,
     ))
 }
 

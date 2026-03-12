@@ -145,6 +145,8 @@ pub struct HyperServerOptions {
     /// - `Some(...)` → user-provided handler
     pub health_handler: Option<Arc<dyn HealthHandler>>,
 
+    /// Optional observer for incoming/outgoing messages.
+    /// Implementations should be fast and preferably non-blocking.
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 

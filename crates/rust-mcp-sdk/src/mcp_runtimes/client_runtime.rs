@@ -5,6 +5,7 @@ use crate::id_generator::FastIdGenerator;
 use crate::mcp_traits::{McpClient, McpClientHandler};
 use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
 use crate::utils::ensure_server_protocole_compatibility;
+use crate::McpObserver;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
     schema::{
@@ -18,7 +19,6 @@ use crate::{
 use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
-
 use rust_mcp_schema::schema_utils::ResultFromServer;
 use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 #[cfg(feature = "streamable-http")]
@@ -55,6 +55,7 @@ where
     pub handler: Box<dyn McpClientHandler>,
     pub task_store: Option<Arc<ClientTaskStore>>,
     pub server_task_store: Option<Arc<ServerTaskStore>>,
+    pub message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 }
 
 pub struct ClientRuntime {
@@ -81,6 +82,7 @@ pub struct ClientRuntime {
     server_details_rx: watch::Receiver<Option<InitializeResult>>,
     task_store: Option<Arc<ClientTaskStore>>,
     server_task_store: Option<Arc<ServerTaskStore>>,
+    message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 }
 
 impl ClientRuntime {
@@ -90,6 +92,7 @@ impl ClientRuntime {
         handler: Box<dyn McpClientHandler>,
         task_store: Option<Arc<ClientTaskStore>>,
         server_task_store: Option<Arc<ServerTaskStore>>,
+        message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -108,6 +111,7 @@ impl ClientRuntime {
             server_details_rx,
             task_store,
             server_task_store,
+            message_observer,
         }
     }
 
@@ -118,6 +122,7 @@ impl ClientRuntime {
         handler: Box<dyn McpClientHandler>,
         task_store: Option<Arc<ClientTaskStore>>,
         server_task_store: Option<Arc<ServerTaskStore>>,
+        message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
     ) -> Self {
         let (server_details_tx, server_details_rx) =
             watch::channel::<Option<InitializeResult>>(None);
@@ -135,6 +140,7 @@ impl ClientRuntime {
             server_details_rx,
             task_store,
             server_task_store,
+            message_observer,
         }
     }
 
@@ -177,6 +183,11 @@ impl ClientRuntime {
         message: ServerMessage,
         transport: &TransportType,
     ) -> SdkResult<Option<ClientMessage>> {
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_receive(&message);
+        }
+
         let response = match message {
             ServerMessage::Request(jsonrpc_request) => {
                 let request_id = jsonrpc_request.request_id().clone();
@@ -604,6 +615,11 @@ impl McpClient for ClientRuntime {
                     .request_id_for_message(&message, request_id);
                 let mcp_message = ClientMessage::from_message(message, outgoing_request_id)?;
 
+                // telemetry
+                if let Some(observer) = self.message_observer.as_ref() {
+                    observer.on_send(&mcp_message);
+                }
+
                 let response = self
                     .start_stream(ClientMessages::Single(mcp_message), request_timeout)
                     .await?;
@@ -626,6 +642,12 @@ impl McpClient for ClientRuntime {
             .request_id_for_message(&message, request_id);
 
         let mcp_message = ClientMessage::from_message(message, outgoing_request_id)?;
+
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_send(&mcp_message);
+        }
+
         let response = transport
             .send_message(ClientMessages::Single(mcp_message), request_timeout)
             .await?;
@@ -654,6 +676,11 @@ impl McpClient for ClientRuntime {
         #[cfg(feature = "streamable-http")]
         {
             if self.transport_options.is_some() {
+                // telemetry
+                if let Some(observer) = self.message_observer.as_ref() {
+                    messages.iter().for_each(|msg| observer.on_send(&msg));
+                }
+
                 let result = self
                     .start_stream(ClientMessages::Batch(messages), timeout)
                     .await?;
@@ -670,6 +697,12 @@ impl McpClient for ClientRuntime {
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
+
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            messages.iter().for_each(|msg| observer.on_send(&msg));
+        }
+
         transport
             .send_batch(messages, timeout)
             .await
