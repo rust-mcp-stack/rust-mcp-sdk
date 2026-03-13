@@ -28,6 +28,7 @@ use rust_mcp_sdk::{
 };
 use serde_json::{json, Map, Value};
 use std::{
+    collections::BTreeMap,
     collections::HashMap,
     error::Error,
     sync::Arc,
@@ -1746,7 +1747,7 @@ async fn should_handle_elicitation() {
     let response = get_standalone_stream(&server.streamable_url, &session_id, None).await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     content.insert("name".to_string(), "Alice".into());
     content.insert("email".to_string(), "alice@Borderland.com".into());
     content.insert("age".to_string(), 25.into());

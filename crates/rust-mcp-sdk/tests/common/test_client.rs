@@ -12,7 +12,7 @@ use rust_mcp_sdk::{
     McpClient,
 };
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::common::task_runner::{McpTaskRunner, TaskJobInfo};
@@ -254,7 +254,7 @@ impl ClientHandler for TestClientHandler {
                 meta: None,
             })
             .await;
-        let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+        let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
         content.insert(
             "content".to_string(),
             ElicitResultContentPrimitive::String("hello".to_string()).into(),
