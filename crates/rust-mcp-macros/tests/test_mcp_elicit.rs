@@ -3,7 +3,7 @@ use rust_mcp_schema::{
     ElicitRequestFormParams, ElicitRequestParams, ElicitRequestUrlParams, ElicitResultContent,
     RpcError,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[test]
 fn test_form_basic_conversion() {
@@ -16,7 +16,7 @@ fn test_form_basic_conversion() {
         pub expertise: Vec<String>,
     }
     assert_eq!(BasicUser::message(), "Please enter your name and age");
-    let mut content: std::collections::HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut content: std::collections::BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     content.insert(
         "name".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -67,7 +67,7 @@ fn test_url_basic_conversion() {
         "https://github.com/rust-mcp-stack/rust-mcp-sdk"
     );
 
-    let mut content: std::collections::HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut content: std::collections::BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     content.insert(
         "name".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -109,7 +109,7 @@ fn test_missing_required_field_returns_error() {
         pub tags: Vec<String>,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "name".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -130,7 +130,7 @@ fn test_extra_unknown_field_is_ignored() {
         pub name: String,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "name".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -158,7 +158,7 @@ fn test_type_mismatch_returns_error() {
         pub active: bool,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "age".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -183,7 +183,7 @@ fn test_empty_string_array_when_missing_optional_vec() {
         pub hobbies: Option<Vec<String>>,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "name".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -210,7 +210,7 @@ fn test_empty_content_map_becomes_default_values() {
     let result = WithOptionals::from_elicit_result_content(None);
     assert!(result.is_err());
 
-    let result_empty = WithOptionals::from_elicit_result_content(Some(HashMap::new()));
+    let result_empty = WithOptionals::from_elicit_result_content(Some(BTreeMap::new()));
     assert!(result_empty.is_err());
 }
 
@@ -223,7 +223,7 @@ fn test_boolean_handling() {
         pub has_permission: Option<bool>,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "is_active".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Boolean(
@@ -251,7 +251,7 @@ fn test_numeric_types_variations() {
         pub ratio: Option<i32>,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "count".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Integer(42)),
@@ -298,7 +298,7 @@ fn test_form_and_url_share_same_from_elicit_result_content_logic() {
         pub x: String,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "x".to_string(),
         ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
@@ -321,7 +321,7 @@ fn test_string_array_empty_input_becomes_empty_vec() {
         pub items: Vec<String>,
     }
 
-    let mut content = HashMap::new();
+    let mut content = BTreeMap::new();
     content.insert(
         "items".to_string(),
         ElicitResultContent::StringArray(vec![]),
@@ -335,7 +335,7 @@ fn test_string_array_empty_input_becomes_empty_vec() {
 fn readme_example_elicitation() {
     use rust_mcp_macros::{mcp_elicit, JsonSchema};
     use rust_mcp_schema::{ElicitRequestParams, ElicitResultContent};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     #[mcp_elicit(message = "Please enter your info", mode = form)]
     #[derive(JsonSchema)]
@@ -356,7 +356,7 @@ fn readme_example_elicitation() {
     }
 
     // Simulate user input
-    let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     content.insert("name".to_string(), "Alice".into());
     content.insert("email".to_string(), "alice@Borderland.com".into());
     content.insert("age".to_string(), 25.into());
@@ -389,7 +389,7 @@ fn readme_example_elicitation_url() {
     assert_eq!(elicit_url.message, "Complete the form");
 
     // Simulate user input
-    let mut content: HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     content.insert("name".to_string(), "Alice".into());
     content.insert("email".to_string(), "alice@Borderland.com".into());
     content.insert("age".to_string(), 25.into());

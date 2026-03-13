@@ -186,7 +186,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 };
 
                 let properties: Option<
-                    std::collections::HashMap<String, serde_json::Map<String, serde_json::Value>>,
+                    std::collections::BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
                 > = json_schema
                     .get("properties")
                     .and_then(|v| v.as_object()) // Safely extract "properties" as an object.
@@ -270,7 +270,7 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     pub fn from_elicit_result_content(
-                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                        mut content: Option<std::collections::BTreeMap<String, #base_crate::ElicitResultContent>>,
                     ) -> Result<Self, #base_crate::RpcError> {
                         use #base_crate::{ElicitResultContent as V, RpcError};
                         let mut map = content.take().unwrap_or_default();
@@ -313,7 +313,7 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     pub fn from_elicit_result_content(
-                        mut content: Option<std::collections::HashMap<String, #base_crate::ElicitResultContent>>,
+                        mut content: Option<std::collections::BTreeMap<String, #base_crate::ElicitResultContent>>,
                     ) -> Result<Self, RpcError> {
                         use #base_crate::{ElicitResultContent as V, RpcError};
                         let mut map = content.take().unwrap_or_default();

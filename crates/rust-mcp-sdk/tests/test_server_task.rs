@@ -18,7 +18,7 @@ use rust_mcp_sdk::schema::{
     ClientJsonrpcResponse, ResultFromServer, ServerJsonrpcNotification, ServerJsonrpcResponse,
 };
 use serde_json::json;
-use std::{collections::HashMap, panic, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, panic, sync::Arc, time::Duration};
 use test_streamable_http_server::*;
 
 #[tokio::test]
@@ -215,7 +215,7 @@ async fn test_server_task_wait_for_result() {
     .expect("Request failed");
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut data: HashMap<String, ElicitResultContent> = HashMap::new();
+    let mut data: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
     data.insert("email".into(), "email@example.com".into());
     let elicit_result: ElicitResult = ElicitResult {
         action: rust_mcp_schema::ElicitResultAction::Accept,
