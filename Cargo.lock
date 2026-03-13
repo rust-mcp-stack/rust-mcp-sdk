@@ -2012,7 +2012,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-extra"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -2038,7 +2038,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-macros"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2060,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-transport"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "bytes",

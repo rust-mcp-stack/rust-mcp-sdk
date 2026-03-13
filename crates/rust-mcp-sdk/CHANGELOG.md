@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.3...rust-mcp-sdk-v0.9.0) (2026-03-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* update to rust-mcp-schema 0.10 with BTreeMap for deterministic serialization ([#137](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/137))
+* introduce McpObserver for telemetry and message monitoring ([#136](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/136))
+
+### 🚀 Features
+
+* Introduce health check handler support ([#135](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/135)) ([88f908e](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/88f908ea4dc9d62c7a4b435660cf28bf1f7a69f8))
+* Introduce McpObserver for telemetry and message monitoring ([#136](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/136)) ([58df88f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/58df88f9855224a4395fc092937a9f513f2ead39))
+* Update to rust-mcp-schema 0.10 with BTreeMap for deterministic serialization ([#137](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/137)) ([2e6df18](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/2e6df18de13d590a5dae527e90e115c81c658900))
+
+
+### 🐛 Bug Fixes
+
+* ServerHandler task handling method return types ([#132](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/132)) ([45f1305](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/45f1305784fbec0dff58a42141f0a76f02c02509))
+
 ## [0.8.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.2...rust-mcp-sdk-v0.8.3) (2026-02-01)
 
 ## [0.8.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.1...rust-mcp-sdk-v0.8.2) (2026-01-18)

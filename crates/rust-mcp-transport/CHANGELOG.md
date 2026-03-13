@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.8.0...rust-mcp-transport-v0.9.0) (2026-03-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* introduce McpObserver for telemetry and message monitoring ([#136](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/136))
+
+### 🚀 Features
+
+* Introduce McpObserver for telemetry and message monitoring ([#136](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/136)) ([58df88f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/58df88f9855224a4395fc092937a9f513f2ead39))
+
 ## [0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.6.3...rust-mcp-transport-v0.8.0) (2026-01-01)
 
 
