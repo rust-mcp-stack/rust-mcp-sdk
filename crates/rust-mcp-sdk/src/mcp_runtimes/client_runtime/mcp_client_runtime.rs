@@ -3,6 +3,7 @@ use super::McpClientOptions;
 #[cfg(feature = "streamable-http")]
 use crate::task_store::ServerTaskStore;
 use crate::task_store::TaskCreator;
+use crate::McpObserver;
 use crate::{error::SdkResult, mcp_client::ClientHandler, mcp_traits::McpClientHandler, McpClient};
 use crate::{
     schema::{
@@ -58,6 +59,7 @@ where
         options.handler,
         options.task_store,
         options.server_task_store,
+        options.message_observer,
     ))
 }
 
@@ -67,14 +69,16 @@ pub fn with_transport_options(
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandler,
     task_store: Option<Arc<ClientTaskStore>>,
-    servertask_store: Option<Arc<ServerTaskStore>>,
+    server_task_store: Option<Arc<ServerTaskStore>>,
+    message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientInternalHandler::new(Box::new(handler))),
         task_store,
-        servertask_store,
+        server_task_store,
+        message_observer,
     ))
 }
 

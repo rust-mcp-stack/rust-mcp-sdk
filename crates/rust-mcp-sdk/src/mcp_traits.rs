@@ -6,6 +6,9 @@ mod mcp_handler;
 mod mcp_server;
 mod request_id_gen;
 
+mod mcp_observer;
+pub use mcp_observer::*;
+
 pub use id_generator::*;
 #[cfg(feature = "client")]
 pub use mcp_client::*;

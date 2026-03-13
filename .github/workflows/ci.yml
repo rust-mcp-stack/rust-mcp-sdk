@@ -81,7 +81,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20" # Stable Node.js version
+          node-version: "24" # Stable Node.js version
         # Verify npx is available
       - name: Verify npx
         run: npx --version

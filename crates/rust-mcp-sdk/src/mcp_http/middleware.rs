@@ -107,7 +107,8 @@ mod tests {
             enable_json_response: false,
             event_store: None,
             task_store:None,
-            client_task_store:None
+            client_task_store:None,
+            message_observer: None
         })
     }
 

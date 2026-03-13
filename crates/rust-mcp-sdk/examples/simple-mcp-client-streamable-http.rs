@@ -1,7 +1,7 @@
 pub mod common;
 
 use crate::common::inquiry_utils::InquiryUtils;
-use crate::common::{initialize_tracing, ExampleClientHandler};
+use crate::common::{initialize_tracing, ExampleClientHandler, SimpleClientObserver};
 use rust_mcp_sdk::schema::{
     ClientCapabilities, Implementation, InitializeRequestParams, LoggingLevel,
     SetLevelRequestParams, LATEST_PROTOCOL_VERSION,
@@ -57,6 +57,7 @@ async fn main() -> SdkResult<()> {
         handler,
         None,
         None,
+        Some(SimpleClientObserver::new()),
     );
 
     // STEP 5: start the MCP client

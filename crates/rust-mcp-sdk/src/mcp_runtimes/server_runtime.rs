@@ -2,7 +2,9 @@ pub mod mcp_server_runtime;
 pub mod mcp_server_runtime_core;
 use crate::auth::AuthInfo;
 use crate::error::SdkResult;
-use crate::mcp_traits::{McpServer, McpServerHandler, RequestIdGen, RequestIdGenNumeric};
+use crate::mcp_traits::{
+    McpObserver, McpServer, McpServerHandler, RequestIdGen, RequestIdGenNumeric,
+};
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
@@ -54,6 +56,7 @@ pub struct ServerRuntime {
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
     task_store: Option<Arc<ServerTaskStore>>,
     client_task_store: Option<Arc<ClientTaskStore>>,
+    message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 pub struct McpServerOptions<T>
@@ -71,6 +74,7 @@ where
     pub handler: Arc<dyn McpServerHandler>,
     pub task_store: Option<Arc<ServerTaskStore>>,
     pub client_task_store: Option<Arc<ClientTaskStore>>,
+    pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 #[async_trait]
@@ -146,6 +150,11 @@ impl McpServer for ServerRuntime {
 
         let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
 
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_send(&mcp_message);
+        }
+
         let response = transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
             .await?
@@ -165,6 +174,11 @@ impl McpServer for ServerRuntime {
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
+
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            messages.iter().for_each(|msg| observer.on_send(msg));
+        }
 
         transport
             .send_batch(messages, request_timeout)
@@ -329,6 +343,11 @@ impl ServerRuntime {
             >,
         >,
     ) -> SdkResult<Option<ServerMessage>> {
+        // telemetry
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_receive(&message);
+        }
+
         let response = match message {
             // Handle a client request
             ClientMessage::Request(client_jsonrpc_request) => {
@@ -604,6 +623,7 @@ impl ServerRuntime {
         auth_info: Option<AuthInfo>,
         task_store: Option<Arc<ServerTaskStore>>,
         client_task_store: Option<Arc<ClientTaskStore>>,
+        message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 
@@ -620,6 +640,7 @@ impl ServerRuntime {
             auth_info: RwLock::new(auth_info),
             task_store,
             client_task_store,
+            message_observer,
         })
     }
 
@@ -679,6 +700,7 @@ impl ServerRuntime {
             auth_info: RwLock::new(None),
             task_store: options.task_store,
             client_task_store: options.client_task_store,
+            message_observer: options.message_observer,
         });
 
         let runtime_clone = runtime.clone();

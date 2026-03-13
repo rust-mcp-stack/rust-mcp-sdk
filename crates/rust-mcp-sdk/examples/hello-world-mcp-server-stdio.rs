@@ -1,6 +1,6 @@
 pub mod common;
 
-use crate::common::{initialize_tracing, ExampleServerHandler};
+use crate::common::{initialize_tracing, ExampleServerHandler, SimpleServerObserver};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
     ServerCapabilitiesResources, ServerCapabilitiesTools,
@@ -55,12 +55,15 @@ async fn main() -> SdkResult<()> {
     let handler = ExampleServerHandler {};
 
     // STEP 4: create a MCP server
+    // message_observer will log some info about incoming/outgoing messages to a remote server via HTTP POST
+    // that could be monitored at https://app.beeceptor.com/console/rustmcp
     let server: Arc<ServerRuntime> = server_runtime::create_server(McpServerOptions {
         server_details,
         transport,
         handler: handler.to_mcp_server_handler(),
         task_store: None,
         client_task_store: None,
+        message_observer: Some(SimpleServerObserver::new()),
     });
 
     // STEP 5: Start the server

@@ -20,12 +20,14 @@ use crate::{
     mcp_traits::{IdGenerator, McpServerHandler},
     session_store::InMemorySessionStore,
     task_store::{ClientTaskStore, ServerTaskStore},
+    McpObserver,
 };
 use crate::{mcp_http::Middleware, schema::InitializeResult};
 use axum::Router;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
@@ -142,6 +144,10 @@ pub struct HyperServerOptions {
     /// - `None` → fast static `200 OK` response with minimal json payload `{"status":"ok", "sdk":"rust-mcp-sdk/x.x.x"}`
     /// - `Some(...)` → user-provided handler
     pub health_handler: Option<Arc<dyn HealthHandler>>,
+
+    /// Optional observer for incoming/outgoing messages.
+    /// Implementations should be fast and preferably non-blocking.
+    pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 impl HyperServerOptions {
@@ -284,6 +290,7 @@ impl Default for HyperServerOptions {
             client_task_store: None,
             health_endpoint: None,
             health_handler: None,
+            message_observer: None,
         }
     }
 }
@@ -328,6 +335,7 @@ impl HyperServer {
             event_store: server_options.event_store.as_ref().map(Arc::clone),
             task_store: server_options.task_store.take(),
             client_task_store: server_options.client_task_store.take(),
+            message_observer: server_options.message_observer.take(),
         });
 
         // populate middlewares

@@ -9,6 +9,7 @@ use crate::{
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{McpServer, McpServerHandler},
     task_store::TaskCreator,
+    McpObserver,
 };
 use crate::{
     mcp_runtimes::server_runtime::McpServerOptions,
@@ -66,6 +67,7 @@ pub(crate) fn create_server_instance(
     auth_info: Option<AuthInfo>,
     task_store: Option<Arc<ServerTaskStore>>,
     client_task_store: Option<Arc<ClientTaskStore>>,
+    message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 ) -> Arc<ServerRuntime> {
     ServerRuntime::new_instance(
         server_details,
@@ -74,6 +76,7 @@ pub(crate) fn create_server_instance(
         auth_info,
         task_store,
         client_task_store,
+        message_observer,
     )
 }
 

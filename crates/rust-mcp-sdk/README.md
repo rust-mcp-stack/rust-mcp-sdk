@@ -32,6 +32,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - ✅ MCP [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) support
 - ✅ Batch Messages
 - ✅ Streaming & non-streaming JSON response
+- ✅ Message Observer (Telemetry & Monitoring)
 - ✅ HTTP Health Checks (for load balancers & container orchestration)
 - ✅ OAuth Authentication for MCP Servers
   - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
@@ -68,6 +69,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - [Handler Traits](#handlers-traits)
   - [Choosing Between **ServerHandler** and **ServerHandlerCore**](#choosing-between-serverhandler-and-serverhandlercore)
   - [Choosing Between **ClientHandler** and **ClientHandlerCore**](#choosing-between-clienthandler-and-clienthandlercore)
+- [Message Observer (Telemetry & Monitoring)](#message-observer-telemetry--monitoring)
 - [Health Check Endpoint](#health-check-endpoint)
 - [Projects using Rust MCP SDK](#projects-using-rust-mcp-sdk)
 - [Contributing](#contributing)
@@ -577,6 +579,29 @@ Both functions create an MCP client instance.
 
 
 Check out the corresponding examples at: [examples/simple-mcp-client-stdio.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/simple-mcp-client-stdio.rs) and [examples/simple-mcp-client-stdio-core.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/simple-mcp-client-stdio-core.rs).
+
+## Message Observer (Telemetry & Monitoring)
+
+The SDK provides a `McpObserver` trait that serves as a non-blocking hook for intercepting all incoming and outgoing MCP messages. This is particularly useful for applying telemetry, logging, debugging, or monitoring across your server or client without modifying your core business logic.
+
+You can implement `McpObserver` and attach it to your client or server during initialization:
+
+```rs
+// Create a server with a custom observer
+let server = server_runtime::create_server_with_options(ServerOptions {
+    initialize_result: server_details,
+    transport,
+    handler: handler.to_mcp_server_handler(),
+    task_store: None,
+    client_task_store: None,        
+    // example observer that will log some info about incoming/outgoing messages
+    message_observer: Some(SimpleServerObserver::new()),
+});
+```
+
+👉 See [server_observer.rs](crates/rust-mcp-sdk/examples/common/server_observer.rs) and [client_observer.rs](crates/rust-mcp-sdk/examples/common/client_observer.rs) for example implementations that log messages to a remote HTTP endpoint.
+
+These observers are utilized in the [hello-world-mcp-server-stdio](crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) and [simple-mcp-client-streamable-http](crates/rust-mcp-sdk/examples/simple-mcp-client-streamable-http.rs) examples. You can monitor the generated logs in real-time at [https://app.beeceptor.com/console/rustmcp](https://app.beeceptor.com/console/rustmcp).
 
 ## Health Check Endpoint
 
