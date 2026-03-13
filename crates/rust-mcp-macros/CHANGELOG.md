@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.8.1...rust-mcp-macros-v0.9.0) (2026-03-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* update to rust-mcp-schema 0.10 with BTreeMap for deterministic serialization ([#137](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/137))
+
+### 🚀 Features
+
+* Update to rust-mcp-schema 0.10 with BTreeMap for deterministic serialization ([#137](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/137)) ([2e6df18](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/2e6df18de13d590a5dae527e90e115c81c658900))
+
+
+### 🐛 Bug Fixes
+
+* Upgrade dependencies to fix security vulnerabilities ([19473ee](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/19473ee0e9e51a18a4ee80ce23881f61346d7d17))
+
 ## [0.8.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.8.0...rust-mcp-macros-v0.8.1) (2026-02-01)
 
 
