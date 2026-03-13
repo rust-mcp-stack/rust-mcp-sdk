@@ -166,11 +166,11 @@ impl InquiryUtils {
         Ok(())
     }
 
-    pub async fn call_add_tool(&self, a: i64, b: i64) -> SdkResult<()> {
-        // Invoke the "add" tool with 100 and 25 as arguments, and display the result
+    pub async fn call_get_sum_tool(&self, a: i64, b: i64) -> SdkResult<()> {
+        // Invoke the "get-sum" tool with 100 and 25 as arguments, and display the result
         println!(
             "{}",
-            format!("\nCalling the \"add\" tool with {a} and {b} ...").magenta()
+            format!("\nCalling the \"get-sum\" tool with {a} and {b} ...").magenta()
         );
 
         // Create a `Map<String, Value>` to represent the tool parameters
@@ -186,7 +186,7 @@ impl InquiryUtils {
         let result = self
             .client
             .request_tool_call(CallToolRequestParams {
-                name: "add".to_string(),
+                name: "get-sum".to_string(),
                 arguments: Some(params),
                 meta: None,
                 task: None,

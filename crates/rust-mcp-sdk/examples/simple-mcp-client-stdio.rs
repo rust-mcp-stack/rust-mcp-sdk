@@ -90,8 +90,8 @@ async fn main() -> SdkResult<()> {
     // Display the list of resource templates available on the server
     utils.print_resource_templates().await?;
 
-    // Call add tool, and print the result
-    utils.call_add_tool(100, 25).await?;
+    // Call get-sum tool, and print the result
+    utils.call_get_sum_tool(100, 25).await?;
 
     // Set the log level
     utils
