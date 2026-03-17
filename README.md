@@ -4,6 +4,8 @@
 
 # Rust MCP SDK
 
+[![AgentRank](https://agentrank-ai.com/api/badge/tool/rust-mcp-stack--rust-mcp-sdk)](https://agentrank-ai.com/tool/rust-mcp-stack--rust-mcp-sdk/)
+
 [<img alt="crates.io" src="https://img.shields.io/crates/v/rust-mcp-sdk?style=for-the-badge&logo=rust&color=FE965D" height="22">](https://crates.io/crates/rust-mcp-sdk)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs" height="22">](https://docs.rs/rust-mcp-sdk)
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/ci.yml?style=for-the-badge" height="22">
