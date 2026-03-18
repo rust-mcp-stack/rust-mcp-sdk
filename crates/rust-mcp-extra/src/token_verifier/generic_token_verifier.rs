@@ -511,9 +511,11 @@ mod tests {
     async fn test_jwks_strategy() {
         let server = OAuthTestServer::start().await;
 
-        let client = server.register_client(
-            json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
+            )
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::JWKs {
@@ -544,9 +546,11 @@ mod tests {
     async fn test_userinfo_strategy() {
         let server = OAuthTestServer::start().await;
 
-        let client = server.register_client(
-            json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
+            )
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::UserInfo {
@@ -557,7 +561,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("rustmcp").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("rustmcp").build())
+            .await;
 
         let auth_info = verifier.verify_token(token.access_token).await.unwrap();
 
@@ -578,9 +584,11 @@ mod tests {
     async fn test_introspect_strategy() {
         let server = OAuthTestServer::start().await;
 
-        let client = server.register_client(
-            json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid", "redirect_uris":["http://localhost:8080/callback"]}),
+            )
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::Introspection {
@@ -595,7 +603,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("rustmcp").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("rustmcp").build())
+            .await;
         let auth_info = verifier.verify_token(token.access_token).await.unwrap();
 
         assert_eq!(
@@ -615,9 +625,11 @@ mod tests {
     async fn test_introspect_strategy_with_client_secret_post() {
         let server = OAuthTestServer::start().await;
 
-        let client = server.register_client(
-            json!({ "scope": "openid profile", "redirect_uris":["http://localhost:8080/cb"]}),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid profile", "redirect_uris":["http://localhost:8080/cb"]}),
+            )
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::Introspection {
@@ -632,7 +644,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("alice").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("alice").build())
+            .await;
 
         let auth_info = verifier.verify_token(token.access_token).await.unwrap();
 
@@ -648,7 +662,8 @@ mod tests {
     async fn test_introspect_rejects_inactive_token() {
         let server = OAuthTestServer::start().await;
         let client = server
-            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }));
+            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }))
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::Introspection {
@@ -663,8 +678,9 @@ mod tests {
         )
         .await;
 
-        let token_response =
-            server.generate_token(&client, server.jwt_options().user_id("bob").build());
+        let token_response = server
+            .generate_token(&client, server.jwt_options().user_id("bob").build())
+            .await;
         server
             .revoke_token(&client, &token_response.access_token)
             .await;
@@ -676,9 +692,11 @@ mod tests {
     #[tokio::test]
     async fn test_expired_token_rejected_by_jwks_and_introspection() {
         let server = OAuthTestServer::start().await;
-        let client = server.register_client(
-            json!({ "scope": "openid email", "redirect_uris": ["http://localhost"] }),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid email", "redirect_uris": ["http://localhost"] }),
+            )
+            .await;
 
         // Use both strategies → expect rejection on expiration alone
         let verifier = token_verifier(
@@ -705,10 +723,10 @@ mod tests {
             .user_id("charlie")
             .expires_in(1)
             .build();
-        let token = server.generate_token(&client, short_lived);
+        let token = server.generate_token(&client, short_lived).await;
 
         // Wait for expiry
-        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(2500)).await;
 
         // JWKS should reject immediately (exp validation)
         // But since fallback is enabled, it hits introspection → active: false → error
@@ -728,7 +746,8 @@ mod tests {
     async fn test_jwks_and_introspection_cache_works() {
         let server = OAuthTestServer::start().await;
         let client = server
-            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }));
+            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }))
+            .await;
 
         let verifier = token_verifier(
             vec![
@@ -748,7 +767,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("dave").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("dave").build())
+            .await;
 
         // First call → goes through full flow
         let info1 = verifier
@@ -770,7 +791,8 @@ mod tests {
     async fn test_audience_validation_rejects_wrong_aud() {
         let server = OAuthTestServer::start().await;
         let client = server
-            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }));
+            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }))
+            .await;
 
         let verifier = token_verifier(
             vec![VerificationStrategies::Introspection {
@@ -785,7 +807,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("eve").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("eve").build())
+            .await;
 
         let err = verifier.verify_token(token.access_token).await.unwrap_err();
         assert!(matches!(
@@ -798,7 +822,8 @@ mod tests {
     async fn test_issuer_validation_rejects_wrong_iss() {
         let server = OAuthTestServer::start().await;
         let client = server
-            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }));
+            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }))
+            .await;
 
         let _verifier = token_verifier(
             vec![VerificationStrategies::JWKs {
@@ -820,7 +845,9 @@ mod tests {
         })
         .unwrap();
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("frank").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("frank").build())
+            .await;
 
         let err = wrong_verifier
             .verify_token(token.access_token)
@@ -835,9 +862,11 @@ mod tests {
     #[tokio::test]
     async fn test_userinfo_enriches_jwt_claims() {
         let server = OAuthTestServer::start().await;
-        let client = server.register_client(
-            json!({ "scope": "openid profile email", "redirect_uris": ["http://localhost"] }),
-        );
+        let client = server
+            .register_client(
+                json!({ "scope": "openid profile email", "redirect_uris": ["http://localhost"] }),
+            )
+            .await;
 
         let verifier = token_verifier(
             vec![
@@ -853,7 +882,9 @@ mod tests {
         )
         .await;
 
-        let token = server.generate_token(&client, server.jwt_options().user_id("grace").build());
+        let token = server
+            .generate_token(&client, server.jwt_options().user_id("grace").build())
+            .await;
 
         let auth_info = verifier.verify_token(token.access_token).await.unwrap();
 
