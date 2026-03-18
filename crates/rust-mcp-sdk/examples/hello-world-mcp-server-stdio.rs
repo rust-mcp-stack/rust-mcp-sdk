@@ -1,6 +1,7 @@
 pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandler, SimpleServerObserver};
+use rust_mcp_schema::ServerCapabilitiesPrompts;
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
     ServerCapabilitiesResources, ServerCapabilitiesTools,
@@ -41,6 +42,7 @@ async fn main() -> SdkResult<()> {
             resources: Some(ServerCapabilitiesResources { list_changed: None, subscribe: None }),
             completions:Some(serde_json::Map::new()),
             tasks: None,
+            prompts: Some(ServerCapabilitiesPrompts{ list_changed: None }),
             ..Default::default() // Using default values for other fields
         },
         meta: None,

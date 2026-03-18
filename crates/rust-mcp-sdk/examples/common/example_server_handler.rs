@@ -2,10 +2,13 @@ use super::tools::GreetingTools;
 use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
 use async_trait::async_trait;
 use rust_mcp_schema::{
-    CompleteRequestParams, CompleteResult, ListResourceTemplatesResult, ListResourcesResult,
-    ReadResourceRequestParams, ReadResourceResult,
+    CompleteRequestParams, CompleteResult, ContentBlock, GetPromptRequest, GetPromptRequestParams,
+    GetPromptResult, ListPromptsRequest, ListPromptsResult, ListResourceTemplatesResult,
+    ListResourcesResult, Prompt, PromptArgument, PromptMessage, ReadResourceRequestParams,
+    ReadResourceResult, Role,
 };
 use rust_mcp_sdk::{
+    mcp_icon,
     mcp_server::ServerHandler,
     schema::{
         schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ListToolsResult,
@@ -123,5 +126,74 @@ impl ServerHandler for ExampleServerHandler {
                 params.argument.name,
             )))
         }
+    }
+
+    /// Handles requests to list available prompts.
+    ///
+    /// Default implementation returns method not found error.
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_list_prompts_request(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListPromptsResult, RpcError> {
+        let prompt = Prompt {
+            name: "greet_user_prompt".into(),
+            title: Some("Greet User Prompt".into()),
+            description: Some("Generates a message asking for a greeting".into()),
+            arguments: vec![PromptArgument {
+                description: Some("".into()),
+                name: "person_name".into(),
+                required: Some(true),
+                title: Some("Person Name".into()),
+            }],
+            icons: vec![],
+            meta: None,
+        };
+
+        Ok(ListPromptsResult {
+            meta: None,
+            next_cursor: None,
+            prompts: vec![prompt],
+        })
+    }
+
+    /// Handles requests to get a specific prompt.
+    ///
+    /// Default implementation returns method not found error.
+    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
+    async fn handle_get_prompt_request(
+        &self,
+        params: GetPromptRequestParams,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<GetPromptResult, RpcError> {
+        if params.name.eq("greet_user_prompt") {
+            let Some(args) = params.arguments.as_ref() else {
+                return Err(RpcError::invalid_params()
+                    .with_message(format!("No parameter is provided for  '{}'.", &params.name)));
+            };
+
+            let Some(person_name) = args.get("person_name") else {
+                return Err(RpcError::invalid_params()
+                    .with_message(format!("`person_name` parameter is not provided!")));
+            };
+
+            return Ok(GetPromptResult {
+                messages: vec![PromptMessage {
+                    content: ContentBlock::text_content(format!(
+                        "Please say hello to '{}'",
+                        person_name
+                    )),
+                    role: Role::User,
+                }],
+                description: None,
+                meta: None,
+            });
+        }
+
+        Err(RpcError::method_not_found().with_message(format!(
+            "No handler is implemented for '{}'.",
+            &GetPromptRequest::method_value(),
+        )))
     }
 }
