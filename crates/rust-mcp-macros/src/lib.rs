@@ -342,7 +342,12 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Features
 /// - **Basic Types:** Maps `String` to `"string"`, `i32` to `"integer"`, `bool` to `"boolean"`, etc.
-/// - **`Option<T>`:** Adds `"nullable": true` to the schema of the inner type, indicating the field is optional.
+/// - **`Option<T>`:** Encodes nullability the JSON-Schema-canonical way: when the inner schema has
+///   a string `type` (e.g. `"string"`, `"integer"`), it is widened to a type union
+///   `["X", "null"]`. When the inner schema has an array `type`, `"null"` is appended. Otherwise
+///   the inner schema is wrapped in `{"anyOf": [<inner>, {"type": "null"}]}`. The OpenAPI 3.0
+///   extension keyword `"nullable": true` is NOT emitted — strict JSON Schema validators
+///   (notably the Anthropic API tool-call validator) reject extension keywords.
 /// - **`Vec<T>`:** Generates an `"array"` schema with an `"items"` field describing the inner type.
 /// - **Nested Structs:** Recursively includes the schema of nested structs (assumed to derive `JsonSchema`),
 ///   embedding their `"properties"` and `"required"` fields.

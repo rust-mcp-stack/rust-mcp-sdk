@@ -168,12 +168,42 @@ pub fn generate_form_schema(
 ) -> proc_macro2::TokenStream {
     quote! {
         {
+            // Companion to the JSON-Schema-canonical Option<T> emission:
+            // when a field is `Option<T>`, its emitted schema now uses the
+            // JSON-Schema-canonical type union `{"type": ["X", "null"]}`
+            // rather than the OpenAPI 3.0 `nullable` extension keyword.
+            // The downstream `PrimitiveSchemaDefinition::TryFrom` in
+            // rust-mcp-schema 0.10 reads `type` via `.as_str()` and
+            // silently drops fields whose type is an array — which would
+            // surface here as missing form properties. To preserve the
+            // form-elicit shape across crates, collapse `["X", "null"]`
+            // back to the single non-null primitive `"X"` for the
+            // form-schema conversion path. The original (full) JSON schema,
+            // used by sub-agent tool validation, is untouched.
+            fn __mcp_strip_null_from_type(
+                obj: &serde_json::Map<String, serde_json::Value>,
+            ) -> serde_json::Map<String, serde_json::Value> {
+                let mut out = obj.clone();
+                if let Some(serde_json::Value::Array(arr)) = out.get("type").cloned() {
+                    let primitive = arr.iter().find_map(|v| {
+                        v.as_str().filter(|s| *s != "null").map(|s| s.to_string())
+                    });
+                    if let Some(p) = primitive {
+                        out.insert("type".to_string(), serde_json::Value::String(p));
+                    }
+                }
+                out
+            }
+
             let json = #struct_name::json_schema();
             let properties = json.get("properties")
                 .and_then(|v| v.as_object())
                 .into_iter()
                 .flatten()
-                .filter_map(|(k, v)| #base::PrimitiveSchemaDefinition::try_from(v.as_object()?).ok().map(|def| (k.clone(), def)))
+                .filter_map(|(k, v)| {
+                    let normalized = __mcp_strip_null_from_type(v.as_object()?);
+                    #base::PrimitiveSchemaDefinition::try_from(&normalized).ok().map(|def| (k.clone(), def))
+                })
                 .collect();
 
             let required = json.get("required")

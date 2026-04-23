@@ -290,7 +290,47 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                                 return quote! {
                                     {
                                         let mut map = #inner_schema;
-                                        map.insert("nullable".to_string(), serde_json::Value::Bool(true));
+                                        // JSON Schema (Draft 7 / 2020-12) does NOT define "nullable" — that
+                                        // is an OpenAPI 3.0 extension keyword. The MCP spec references JSON
+                                        // Schema for the inputSchema field, and strict validators (notably
+                                        // the Anthropic API tool-call validator used by Claude sub-agents)
+                                        // reject the keyword. Encode "this field may be null" the canonical
+                                        // JSON Schema way: union the existing primitive `type` with "null"
+                                        // (`{"type": ["X", "null"]}`), or fall back to a top-level `anyOf`
+                                        // when the inner schema has no string `type` (e.g. nested object
+                                        // or `$ref` schemas).
+                                        match map.get("type").cloned() {
+                                            Some(serde_json::Value::String(t)) if t != "null" => {
+                                                map.insert(
+                                                    "type".to_string(),
+                                                    serde_json::Value::Array(vec![
+                                                        serde_json::Value::String(t),
+                                                        serde_json::Value::String("null".to_string()),
+                                                    ]),
+                                                );
+                                            }
+                                            Some(serde_json::Value::Array(mut arr)) => {
+                                                let null_v = serde_json::Value::String("null".to_string());
+                                                if !arr.iter().any(|v| v == &null_v) {
+                                                    arr.push(null_v);
+                                                    map.insert("type".to_string(), serde_json::Value::Array(arr));
+                                                }
+                                            }
+                                            _ => {
+                                                // No primitive `type` to extend — wrap in anyOf so the schema
+                                                // remains JSON-Schema-valid.
+                                                let inner = serde_json::Value::Object(map.into_iter().collect());
+                                                let mut wrapper = serde_json::Map::new();
+                                                wrapper.insert(
+                                                    "anyOf".to_string(),
+                                                    serde_json::Value::Array(vec![
+                                                        inner,
+                                                        serde_json::json!({ "type": "null" }),
+                                                    ]),
+                                                );
+                                                map = wrapper;
+                                            }
+                                        }
                                         #description_quote
                                         #title_quote
                                         #format_quote
@@ -662,11 +702,16 @@ mod tests {
 
     #[test]
     fn test_type_to_json_schema_option() {
+        // Emit JSON-Schema-canonical `["X", "null"]` type union, NOT the
+        // OpenAPI 3.0 `nullable: true` extension keyword.
         let ty: Type = parse_quote!(Option<i32>);
         let attrs: Vec<Attribute> = vec![];
         let tokens = type_to_json_schema(&ty, &attrs);
         let output = tokens.to_string();
-        assert!(output.contains("\"nullable\""));
+        // Must NOT emit the OpenAPI extension.
+        assert!(!output.contains("\"nullable\""));
+        // Must emit a `null` member that the type-union branch will append.
+        assert!(output.contains("\"null\""));
     }
 
     #[test]
@@ -881,12 +926,26 @@ mod tests {
 
     #[test]
     fn test_json_schema_option_of_number() {
+        // Emit JSON-Schema-canonical `["integer", "null"]` type union, NOT
+        // the OpenAPI 3.0 `nullable: true` extension keyword.
         let ty: syn::Type = parse_quote!(Option<u64>);
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
-        assert!(output.contains("\"nullable\".to_string(),serde_json::Value::Bool(true)"));
-        assert!(output
-            .contains("\"type\".to_string(),serde_json::Value::String(\"integer\".to_string())"));
+        // Must NOT emit the OpenAPI extension.
+        assert!(
+            !output.contains("\"nullable\""),
+            "must not emit OpenAPI 3.0 nullable keyword (got: {output})"
+        );
+        // Must produce code that constructs the union — both "integer" and
+        // "null" string literals appear in the emitted token stream.
+        assert!(
+            output.contains("\"integer\""),
+            "expected inner type string literal in emitted tokens (got: {output})"
+        );
+        assert!(
+            output.contains("\"null\""),
+            "expected null string literal in emitted tokens (got: {output})"
+        );
     }
 
     #[test]
