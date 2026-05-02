@@ -300,7 +300,7 @@ pub struct HyperServer {
     app: Router,
     state: Arc<McpAppState>,
     pub(crate) options: HyperServerOptions,
-    handle: Handle,
+    handle: Handle<SocketAddr>,
 }
 
 impl HyperServer {
@@ -489,7 +489,7 @@ impl HyperServer {
     }
 
     /// Returns server handle that could be used for graceful shutdown
-    pub fn server_handle(&self) -> Handle {
+    pub fn server_handle(&self) -> Handle<SocketAddr> {
         self.handle.clone()
     }
 
@@ -541,7 +541,7 @@ impl HyperServer {
 }
 
 // Shutdown signal handler
-async fn shutdown_signal(handle: Handle, state: Arc<McpAppState>) {
+async fn shutdown_signal(handle: Handle<SocketAddr>, state: Arc<McpAppState>) {
     // Wait for a Ctrl+C or SIGTERM signal
     let ctrl_c = async {
         signal::ctrl_c()

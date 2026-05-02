@@ -20,6 +20,7 @@ use crate::{
 };
 use axum_server::Handle;
 use futures::StreamExt;
+use std::net::SocketAddr;
 use rust_mcp_schema::{
     schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
@@ -34,7 +35,7 @@ use tokio::task::JoinHandle;
 pub struct HyperRuntime {
     pub(crate) state: Arc<McpAppState>,
     pub(crate) server_task: JoinHandle<Result<(), TransportServerError>>,
-    pub(crate) server_handle: Handle,
+    pub(crate) server_handle: Handle<SocketAddr>,
 }
 
 impl HyperRuntime {
