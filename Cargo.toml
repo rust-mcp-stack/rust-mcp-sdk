@@ -39,7 +39,7 @@ base64 = "0.22"
 axum = "0.8"
 rustls = "0.23"
 tokio-rustls = "0.26"
-axum-server = { version = "0.7" }
+axum-server = { version = "0.8" }
 reqwest = { version = "0.12", default-features = false, features = [
     "stream",
     "rustls-tls",
