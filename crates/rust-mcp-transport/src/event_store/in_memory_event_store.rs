@@ -262,7 +262,7 @@ impl EventStore for InMemoryEventStore {
                     .cloned()
                     .collect();
 
-                subsequent.sort_by(|a, b| a.time_stamp.cmp(&b.time_stamp));
+                subsequent.sort_by_key(|a| a.time_stamp);
                 subsequent.iter().map(|e| e.message.clone()).collect()
             }
             _ => vec![],
