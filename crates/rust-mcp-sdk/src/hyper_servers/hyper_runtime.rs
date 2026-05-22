@@ -20,7 +20,6 @@ use crate::{
 };
 use axum_server::Handle;
 use futures::StreamExt;
-use std::net::SocketAddr;
 use rust_mcp_schema::{
     schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
     CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
@@ -29,6 +28,7 @@ use rust_mcp_schema::{
     TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
+use std::net::SocketAddr;
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 
