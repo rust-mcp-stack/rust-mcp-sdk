@@ -2,7 +2,7 @@
 .DS_store
 settings.json
 /.vscode
-
+/docs
 
 # test artifacts
 /coverage
