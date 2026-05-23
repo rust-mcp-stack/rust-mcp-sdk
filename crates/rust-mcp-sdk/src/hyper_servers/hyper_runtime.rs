@@ -28,13 +28,14 @@ use rust_mcp_schema::{
     TaskStatusNotificationParams,
 };
 use rust_mcp_transport::SessionId;
+use std::net::SocketAddr;
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 
 pub struct HyperRuntime {
     pub(crate) state: Arc<McpAppState>,
     pub(crate) server_task: JoinHandle<Result<(), TransportServerError>>,
-    pub(crate) server_handle: Handle,
+    pub(crate) server_handle: Handle<SocketAddr>,
 }
 
 impl HyperRuntime {

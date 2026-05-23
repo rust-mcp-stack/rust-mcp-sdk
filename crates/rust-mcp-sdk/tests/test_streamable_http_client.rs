@@ -27,7 +27,7 @@ use rust_mcp_sdk::{
 use serde_json::{json, Map, Value};
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 use wiremock::{
-    http::{HeaderName, HeaderValue},
+    http::HeaderName,
     matchers::{body_json_string, header, method, path},
     Mock, MockServer, ResponseTemplate,
 };
@@ -70,10 +70,12 @@ async fn should_send_json_rpc_messages_via_post() {
     let header_values = received_request
         .headers
         .get(&HeaderName::from_str("accept").unwrap())
+        .unwrap()
+        .to_str()
         .unwrap();
 
-    assert!(header_values.contains(&HeaderValue::from_str("application/json").unwrap()));
-    assert!(header_values.contains(&HeaderValue::from_str("text/event-stream").unwrap()));
+    assert!(header_values.contains("application/json"));
+    assert!(header_values.contains("text/event-stream"));
 
     wait_for_n_requests(&mock_server, 2, None).await;
 }
@@ -176,10 +178,12 @@ async fn should_store_session_id_received_during_initialization() {
     let header_values = received_request
         .headers
         .get(&HeaderName::from_str("accept").unwrap())
+        .unwrap()
+        .to_str()
         .unwrap();
 
-    assert!(header_values.contains(&HeaderValue::from_str("application/json").unwrap()));
-    assert!(header_values.contains(&HeaderValue::from_str("text/event-stream").unwrap()));
+    assert!(header_values.contains("application/json"));
+    assert!(header_values.contains("text/event-stream"));
 
     wait_for_n_requests(&mock_server, 2, None).await;
 }
@@ -338,7 +342,7 @@ async fn should_handle_successful_initial_get_connection_for_sse() {
     let requests = mock_server.received_requests().await.unwrap();
     let get_request = requests
         .iter()
-        .find(|r| r.method == wiremock::http::Method::Get);
+        .find(|r| r.method == wiremock::http::Method::GET);
 
     assert!(get_request.is_some())
 }
@@ -446,7 +450,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     let requests = mock_server.received_requests().await.unwrap();
     let get_request = requests
         .iter()
-        .find(|r| r.method == wiremock::http::Method::Get);
+        .find(|r| r.method == wiremock::http::Method::GET);
 
     assert!(get_request.is_some());
 
@@ -624,7 +628,7 @@ async fn should_always_send_specified_custom_headers() {
     assert_eq!(requests.len(), 4);
     assert!(requests
         .iter()
-        .all(|r| r.headers.get(&"X-Custom-Header".into()).unwrap().as_str() == "CustomValue"));
+        .all(|r| r.headers.get("X-Custom-Header").unwrap().to_str().unwrap() == "CustomValue"));
 
     debug_wiremock(&mock_server).await
 }

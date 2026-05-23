@@ -27,7 +27,7 @@ thiserror = { workspace = true }
 axum = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4"] }
 tokio-stream = { workspace = true, optional = true }
-axum-server = { version = "0.7", features = [], optional = true }
+axum-server = { version = "0.8", features = [], optional = true }
 tracing.workspace = true
 base64.workspace = true
 bytes.workspace = true
@@ -49,7 +49,7 @@ reqwest = { workspace = true, default-features = false, features = [
 time = {version="0.3.0", features = ["formatting", "local-offset"]}
 
 [dev-dependencies]
-wiremock = "0.5"
+wiremock = "0.6"
 tempfile = "3.23.0"
 colored = "3.0.0"
 reqwest = {workspace = true, features = [ "json"]}
