@@ -5,8 +5,8 @@ mod dns_rebind_protector;
 pub mod logging_middleware;
 
 use super::types::{GenericBody, RequestHandler};
+use crate::mcp_http::McpHttpResult;
 use crate::mcp_http::{McpAppState, MiddlewareNext};
-use crate::mcp_server::error::TransportServerResult;
 #[cfg(feature = "auth")]
 pub(crate) use auth_middleware::*;
 pub use cors_middleware::*;
@@ -21,7 +21,7 @@ pub trait Middleware: Send + Sync + 'static {
         req: Request<&'req str>,
         state: Arc<McpAppState>,
         next: MiddlewareNext<'req>,
-    ) -> TransportServerResult<Response<GenericBody>>;
+    ) -> McpHttpResult<Response<GenericBody>>;
 }
 
 /// Build the final handler by folding the middlewares **in reverse**.
@@ -59,8 +59,9 @@ mod tests {
         mcp_http::{
             middleware::{cors_middleware::CorsMiddleware, logging_middleware::LoggingMiddleware},
             types::GenericBodyExt,
+            McpHttpError,
         },
-        mcp_server::{error::TransportServerError, ServerHandler, ToMcpServerHandler},
+        mcp_server::{ServerHandler, ToMcpServerHandler},
         session_store::InMemorySessionStore,
     };
     use async_trait::async_trait;
@@ -192,7 +193,7 @@ mod tests {
             mut req: Request<&'req str>,
             state: Arc<McpAppState>,
             next: MiddlewareNext<'req>,
-        ) -> TransportServerResult<Response<GenericBody>> {
+        ) -> McpHttpResult<Response<GenericBody>> {
             // ---- record request -------------------------------------------------
             let headers = req
                 .headers()
@@ -205,7 +206,7 @@ mod tests {
                 .push((self.id, req.body().to_string(), headers));
 
             if self.fail_request {
-                return Err(TransportServerError::HttpError(format!(
+                return Err(McpHttpError::HttpError(format!(
                     "middleware {} failed request",
                     self.id
                 )));
@@ -239,7 +240,7 @@ mod tests {
             }
 
             if self.fail_response {
-                return Err(TransportServerError::HttpError(format!(
+                return Err(McpHttpError::HttpError(format!(
                     "middleware {} failed response",
                     self.id
                 )));

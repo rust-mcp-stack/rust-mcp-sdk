@@ -7,9 +7,9 @@ use super::types::GenericBody;
 use crate::auth::AuthInfo;
 #[cfg(feature = "auth")]
 use crate::auth::AuthProvider;
+use crate::mcp_http::McpHttpError;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, HealthHandler, RequestExt};
-use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::{
@@ -20,9 +20,8 @@ use crate::{
             process_incoming_message, process_incoming_message_return, start_new_session,
             valid_streaming_http_accept_header,
         },
-        McpAppState,
+        McpAppState, McpHttpResult,
     },
-    mcp_server::error::TransportServerResult,
     utils::valid_initialize_method,
 };
 use http::{self, HeaderMap, Method, StatusCode, Uri};
@@ -145,9 +144,9 @@ impl McpHttpHandler {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let Some(auth_provider) = self.auth.as_ref() else {
-            return Err(TransportServerError::HttpError(
+            return Err(McpHttpError::HttpError(
                 "Authentication is not supported by this server.".to_string(),
             ));
         };
@@ -187,7 +186,7 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         sse_message_endpoint: Option<&str>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         use crate::auth::AuthInfo;
         use crate::mcp_http::RequestExt;
 
@@ -214,7 +213,7 @@ impl McpHttpHandler {
     /// * `state` - Shared application state, including access to the session store.
     ///
     /// # Returns
-    /// * `TransportServerResult<http::Response<GenericBody>>`:
+    /// * `McpHttpResult<http::Response<GenericBody>>`:
     ///   - Returns a `202 Accepted` HTTP response if the message is successfully forwarded.
     ///   - Returns an error if the session ID is missing, invalid, or if any I/O issues occur while processing the message.
     ///
@@ -228,7 +227,7 @@ impl McpHttpHandler {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let handle = with_middlewares!(self, Self::internal_handle_sse_message);
         handle(request, state).await
     }
@@ -236,7 +235,7 @@ impl McpHttpHandler {
     pub async fn handle_health(
         &self,
         request: http::Request<&str>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         if let Some(health_handler) = self.health_handler.as_ref() {
             Ok(health_handler.call(request))
         } else {
@@ -269,13 +268,13 @@ impl McpHttpHandler {
     /// - Returns `405 Method Not Allowed` for unsupported methods.
     ///
     /// # Returns
-    /// * A `TransportServerResult` wrapping an HTTP response indicating success or failure of the operation.
+    /// * A `McpHttpResult` wrapping an HTTP response indicating success or failure of the operation.
     ///
     pub async fn handle_streamable_http(
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let handle = with_middlewares!(self, Self::internal_handle_streamable_http);
         handle(request, state).await
     }
@@ -283,14 +282,16 @@ impl McpHttpHandler {
     async fn internal_handle_sse_message(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let session_id =
-            query_param(&request, "sessionId").ok_or(TransportServerError::SessionIdMissing)?;
+            query_param(&request, "sessionId").ok_or(McpHttpError::SessionIdMissing)?;
 
         // transmit to the readable stream, that transport is reading from
-        let transmit = state.session_store.get(&session_id).await.ok_or(
-            TransportServerError::SessionIdInvalid(session_id.to_string()),
-        )?;
+        let transmit = state
+            .session_store
+            .get(&session_id)
+            .await
+            .ok_or(McpHttpError::SessionIdInvalid(session_id.to_string()))?;
 
         let message = request.body();
 
@@ -299,19 +300,19 @@ impl McpHttpHandler {
             .await
             .map_err(|err| {
                 tracing::trace!("{}", err);
-                TransportServerError::StreamIoError(err.to_string())
+                McpHttpError::StreamIoError(err.to_string())
             })?;
 
         http::Response::builder()
             .status(StatusCode::ACCEPTED)
             .body(GenericBody::empty())
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 
     async fn internal_handle_streamable_http(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let (request, auth_info) = request.take::<AuthInfo>();
 
         let method = request.method();
@@ -336,7 +337,7 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         auth_info: Option<AuthInfo>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if !valid_streaming_http_accept_header(headers) {
@@ -393,7 +394,7 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         auth_info: Option<AuthInfo>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if !accepts_event_stream(headers) {
@@ -437,7 +438,7 @@ impl McpHttpHandler {
     async fn handle_http_delete(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {

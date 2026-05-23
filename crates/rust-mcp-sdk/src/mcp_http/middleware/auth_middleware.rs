@@ -1,7 +1,8 @@
 use crate::{
     auth::{AuthInfo, AuthProvider, AuthenticationError},
-    mcp_http::{types::GenericBody, GenericBodyExt, McpAppState, Middleware, MiddlewareNext},
-    mcp_server::error::TransportServerResult,
+    mcp_http::{
+        types::GenericBody, GenericBodyExt, McpAppState, McpHttpResult, Middleware, MiddlewareNext,
+    },
 };
 use async_trait::async_trait;
 use http::{
@@ -149,7 +150,7 @@ impl Middleware for AuthMiddleware {
         mut req: Request<&'req str>,
         state: Arc<McpAppState>,
         next: MiddlewareNext<'req>,
-    ) -> TransportServerResult<Response<GenericBody>> {
+    ) -> McpHttpResult<Response<GenericBody>> {
         let auth_info = match self.validate(req.headers()).await {
             Ok(auth_info) => auth_info,
             Err(err) => {
@@ -174,7 +175,7 @@ mod tests {
         mcp_server::{ServerHandler, ToMcpServerHandler},
         session_store::InMemorySessionStore,
     };
-    use crate::{mcp_http::GenericBodyExt, mcp_server::error::TransportServerError};
+    use crate::{mcp_http::GenericBodyExt, mcp_http::McpHttpError};
     use bytes::Bytes;
     use http_body_util::combinators::BoxBody;
     use http_body_util::BodyExt;
@@ -189,8 +190,8 @@ mod tests {
     }
 
     pub(crate) async fn body_to_string(
-        body: BoxBody<Bytes, TransportServerError>,
-    ) -> Result<String, TransportServerError> {
+        body: BoxBody<Bytes, McpHttpError>,
+    ) -> Result<String, McpHttpError> {
         let bytes = body.collect().await?.to_bytes();
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
