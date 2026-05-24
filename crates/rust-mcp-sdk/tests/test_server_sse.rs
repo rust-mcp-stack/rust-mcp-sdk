@@ -1,6 +1,5 @@
 #[path = "common/common.rs"]
 pub mod common;
-#[cfg(feature = "hyper-server")]
 mod tets_server_sse {
     use std::{sync::Arc, time::Duration};
 
@@ -10,8 +9,8 @@ mod tets_server_sse {
             collect_sse_lines, create_test_server, TestIdGenerator, INITIALIZE_REQUEST,
         },
     };
+    use mcp_axum::AxumServerOptions;
     use reqwest::Client;
-    use rust_mcp_sdk::mcp_server::HyperServerOptions;
     use rust_mcp_sdk::schema::{
         schema_utils::{ResultFromServer, ServerMessage},
         ServerResult,
@@ -20,7 +19,7 @@ mod tets_server_sse {
 
     #[tokio::test]
     async fn tets_sse_endpoint_event_default() {
-        let server_options = HyperServerOptions {
+        let server_options = AxumServerOptions {
             port: 8081,
             session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
                 "AAA-BBB-CCC".to_string()
@@ -79,7 +78,7 @@ mod tets_server_sse {
 
     #[tokio::test]
     async fn tets_sse_message_endpoint_query_hash() {
-        let server_options = HyperServerOptions {
+        let server_options = AxumServerOptions {
             port: 8082,
             custom_messages_endpoint: Some(
                 "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
@@ -145,7 +144,7 @@ mod tets_server_sse {
 
     #[tokio::test]
     async fn tets_sse_custom_message_endpoint() {
-        let server_options = HyperServerOptions {
+        let server_options = AxumServerOptions {
             port: 8083,
             custom_messages_endpoint: Some(
                 "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
