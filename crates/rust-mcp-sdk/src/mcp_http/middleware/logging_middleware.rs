@@ -4,10 +4,7 @@
 //! using the `Middleware` trait. It logs incoming requests and outgoing
 //! responses. In a real-world application, you might extend this to
 //! include structured logging, tracing, timing, or error reporting.
-use crate::{
-    mcp_http::{types::GenericBody, McpAppState, Middleware, MiddlewareNext},
-    mcp_server::error::TransportServerResult,
-};
+use crate::mcp_http::{types::GenericBody, McpAppState, McpHttpResult, Middleware, MiddlewareNext};
 use async_trait::async_trait;
 use http::{Request, Response};
 use std::sync::Arc;
@@ -25,7 +22,7 @@ impl Middleware for LoggingMiddleware {
         req: Request<&'req str>,
         state: Arc<McpAppState>,
         next: MiddlewareNext<'req>,
-    ) -> TransportServerResult<Response<GenericBody>> {
+    ) -> McpHttpResult<Response<GenericBody>> {
         println!("➡️ Logging request: {}", req.uri());
         let res = next(req, state).await?;
         println!("⬅️ Logging response: {}", res.status());

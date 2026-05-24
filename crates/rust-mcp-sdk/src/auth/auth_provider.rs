@@ -1,8 +1,7 @@
 mod remote_auth_provider;
 use crate::auth::OauthEndpoint;
 use crate::auth::{AuthInfo, AuthenticationError};
-use crate::mcp_http::{GenericBody, GenericBodyExt, McpAppState};
-use crate::mcp_server::error::TransportServerError;
+use crate::mcp_http::{GenericBody, GenericBodyExt, McpAppState, McpHttpError};
 use async_trait::async_trait;
 use http::Method;
 pub use remote_auth_provider::*;
@@ -37,7 +36,7 @@ pub trait AuthProvider: Send + Sync {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> Result<http::Response<GenericBody>, TransportServerError>;
+    ) -> Result<http::Response<GenericBody>, McpHttpError>;
 
     /// Returns the `OauthEndpoint` associated with the given request path.
     ///
