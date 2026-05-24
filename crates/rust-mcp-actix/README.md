@@ -4,8 +4,8 @@ Actix-web HTTP server integration for [rust-mcp-sdk](https://github.com/rust-mcp
 
 ## Features
 
-- **Turnkey server** — `create_actix_server().start().await`
-- **BYO-server** — `mcp_scope()` to mount MCP endpoints on any existing Actix app
+- **Turnkey server**: `create_actix_server().start().await`
+- **BYO-server**: `mcp_scope()` to mount MCP endpoints on any existing Actix app
 - **Streamable HTTP** + **SSE** transports
 - **Authentication** (OAuth via `AuthProvider`)
 - **Health check** endpoint

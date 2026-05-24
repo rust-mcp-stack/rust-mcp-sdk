@@ -80,13 +80,13 @@ impl ActixServer {
     pub fn server_info(&self, addr: Option<std::net::SocketAddr>) -> Result<String, String> {
         let addr = addr.unwrap_or(self.options.resolve_server_address()?);
         let mut info = format!(
-            "\n\u{2022} Streamable HTTP Server is available at http://{}{}",
+            "\n  Streamable HTTP Server is available at http://{}{}",
             addr,
             self.options.streamable_http_endpoint()
         );
         if self.options.sse_support {
             info.push_str(&format!(
-                "\n\u{2022} SSE Server is available at http://{}{}",
+                "\n  SSE Server is available at http://{}{}",
                 addr,
                 self.options.sse_endpoint()
             ));

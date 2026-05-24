@@ -2,7 +2,7 @@ use actix_web::{web, Scope};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::sync::Arc;
 
-/// Lightweight mount configuration for BYO-server scenarios with Actix.
+/// Mount configuration for BYO-server scenarios with Actix.
 ///
 /// Use with [`mcp_scope()`] to mount MCP endpoints on an existing Actix application.
 pub struct ActixMountOptions {

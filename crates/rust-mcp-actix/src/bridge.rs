@@ -44,7 +44,7 @@ pub(crate) async fn to_actix_response(res: http::Response<GenericBody>) -> HttpR
         return builder.streaming(stream);
     }
 
-    // Standard response — drain body to bytes
+    // Standard response: drain body to bytes
     let bytes = body
         .collect()
         .await

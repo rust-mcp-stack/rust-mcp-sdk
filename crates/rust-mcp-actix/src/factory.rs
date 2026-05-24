@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 /// Creates a new `ActixServer` with the given server details, handler, and options.
 ///
-/// This is the **turnkey** entry point — a single function call that returns
+/// This is the **turnkey** entry point: a single function call that returns
 /// a ready-to-start server:
 ///
 /// ```ignore
