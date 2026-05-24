@@ -69,13 +69,11 @@ impl ActixServerOptions {
         if self.host.is_empty() {
             return Err("host must not be empty".into());
         }
-        if self.enable_ssl {
-            if self.ssl_cert_path.is_none() || self.ssl_key_path.is_none() {
-                return Err(
-                    "Both 'ssl_cert_path' and 'ssl_key_path' must be provided when SSL is enabled."
-                        .into(),
-                );
-            }
+        if self.enable_ssl && (self.ssl_cert_path.is_none() || self.ssl_key_path.is_none()) {
+            return Err(
+                "Both 'ssl_cert_path' and 'ssl_key_path' must be provided when SSL is enabled."
+                    .into(),
+            );
         }
         Ok(())
     }
