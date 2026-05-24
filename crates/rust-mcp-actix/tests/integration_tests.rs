@@ -3,9 +3,7 @@ use rust_mcp_actix::{mcp_scope, ActixMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
-};
+use rust_mcp_sdk::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
 use rust_mcp_sdk::session_store::InMemorySessionStore;
 use rust_mcp_sdk::ToMcpServerHandler;
 use std::sync::Arc;
@@ -123,7 +121,9 @@ async fn test_unknown_path_returns_404() {
     let scope = mcp_scope(state, handler, &opts);
     let app = test::init_service(App::new().service(scope)).await;
 
-    let req = test::TestRequest::get().uri("/non-existent-path").to_request();
+    let req = test::TestRequest::get()
+        .uri("/non-existent-path")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 404);
 }
@@ -191,10 +191,16 @@ async fn test_sse_endpoint_returns_event_stream() {
     let resp = test::call_service(&app, req).await;
 
     assert_eq!(resp.status(), 200);
-    let content_type = resp.headers().get("content-type")
-        .and_then(|v| v.to_str().ok()).unwrap_or("");
-    assert!(content_type.starts_with("text/event-stream"),
-        "Expected text/event-stream, got: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        content_type.starts_with("text/event-stream"),
+        "Expected text/event-stream, got: {}",
+        content_type
+    );
 }
 
 #[actix_web::test]
@@ -215,8 +221,14 @@ async fn test_streamable_http_init_returns_session_id() {
         .to_request();
     let resp = test::call_service(&app, req).await;
 
-    assert!(resp.status().is_success(), "Expected 2xx, got {}", resp.status());
-    let session_id = resp.headers().get("mcp-session-id")
+    assert!(
+        resp.status().is_success(),
+        "Expected 2xx, got {}",
+        resp.status()
+    );
+    let session_id = resp
+        .headers()
+        .get("mcp-session-id")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .expect("Expected mcp-session-id header");

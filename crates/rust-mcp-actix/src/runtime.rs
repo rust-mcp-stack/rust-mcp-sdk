@@ -60,12 +60,41 @@ impl ActixRuntime {
                 handler.clone(),
                 &mount_options,
             ))
-        })
-        .bind(addr)
-        .map_err(|e| rust_mcp_sdk::error::McpSdkError::Internal {
-            description: e.to_string(),
-        })?
-        .run();
+        });
+
+        #[cfg(feature = "ssl")]
+        let srv = if server.options().enable_ssl {
+            let config = load_rustls_config(
+                server
+                    .options()
+                    .ssl_cert_path
+                    .as_deref()
+                    .unwrap_or_default(),
+                server.options().ssl_key_path.as_deref().unwrap_or_default(),
+            )
+            .map_err(|e| rust_mcp_sdk::error::McpSdkError::Internal {
+                description: e.to_string(),
+            })?;
+            srv.bind_rustls_0_23(addr, config).map_err(|e| {
+                rust_mcp_sdk::error::McpSdkError::Internal {
+                    description: e.to_string(),
+                }
+            })?
+        } else {
+            srv.bind(addr)
+                .map_err(|e| rust_mcp_sdk::error::McpSdkError::Internal {
+                    description: e.to_string(),
+                })?
+        };
+
+        #[cfg(not(feature = "ssl"))]
+        let srv = srv
+            .bind(addr)
+            .map_err(|e| rust_mcp_sdk::error::McpSdkError::Internal {
+                description: e.to_string(),
+            })?;
+
+        let srv = srv.run();
 
         let server_handle = srv.handle();
         let server_task = tokio::spawn(srv);
@@ -520,4 +549,29 @@ impl McpHttpServer for ActixRuntime {
     async fn runtime_by_session(&self, id: &SessionId) -> SdkResult<Arc<ServerRuntime>> {
         ActixRuntime::runtime_by_session(self, id).await
     }
+}
+
+#[cfg(feature = "ssl")]
+fn load_rustls_config(cert_path: &str, key_path: &str) -> std::io::Result<rustls::ServerConfig> {
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let cert_file = File::open(cert_path)?;
+    let mut cert_reader = BufReader::new(cert_file);
+    let certs: Vec<rustls::pki_types::CertificateDer> = rustls_pemfile::certs(&mut cert_reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+    let key_file = File::open(key_path)?;
+    let mut key_reader = BufReader::new(key_file);
+    let key = rustls_pemfile::private_key(&mut key_reader)?.ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "no private key found")
+    })?;
+
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+    Ok(config)
 }

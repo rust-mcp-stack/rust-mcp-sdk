@@ -55,6 +55,12 @@ pub struct ActixServerOptions {
     pub health_handler: Option<Arc<dyn HealthHandler>>,
     /// Optional message observer for telemetry
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
+    /// Enable TLS/SSL (requires `ssl` feature, default: false)
+    pub enable_ssl: bool,
+    /// Path to TLS certificate PEM file
+    pub ssl_cert_path: Option<String>,
+    /// Path to TLS private key PEM file
+    pub ssl_key_path: Option<String>,
 }
 
 impl ActixServerOptions {
@@ -62,6 +68,14 @@ impl ActixServerOptions {
     pub fn validate(&self) -> Result<(), String> {
         if self.host.is_empty() {
             return Err("host must not be empty".into());
+        }
+        if self.enable_ssl {
+            if self.ssl_cert_path.is_none() || self.ssl_key_path.is_none() {
+                return Err(
+                    "Both 'ssl_cert_path' and 'ssl_key_path' must be provided when SSL is enabled."
+                        .into(),
+                );
+            }
         }
         Ok(())
     }
@@ -86,7 +100,12 @@ impl ActixServerOptions {
     }
 
     pub fn base_url(&self) -> String {
-        format!("http://{}:{}", self.host, self.port)
+        format!(
+            "{}://{}:{}",
+            if self.enable_ssl { "https" } else { "http" },
+            self.host,
+            self.port
+        )
     }
 
     pub fn streamable_http_url(&self) -> String {
@@ -150,6 +169,9 @@ impl Default for ActixServerOptions {
             health_endpoint: None,
             health_handler: None,
             message_observer: None,
+            enable_ssl: false,
+            ssl_cert_path: None,
+            ssl_key_path: None,
         }
     }
 }

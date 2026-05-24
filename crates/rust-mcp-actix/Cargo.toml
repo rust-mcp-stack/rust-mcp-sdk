@@ -22,6 +22,11 @@ bytes = { workspace = true }
 http-body-util = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 serde_json = { workspace = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "aws_lc_rs"] }
+rustls-pemfile = { version = "2", optional = true }
+
+[features]
+ssl = ["actix-web/rustls-0_23", "dep:rustls", "dep:rustls-pemfile"]
 
 [dev-dependencies]
 actix-http = "3"
