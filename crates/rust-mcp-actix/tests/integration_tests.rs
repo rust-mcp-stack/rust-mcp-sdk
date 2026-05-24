@@ -3,7 +3,9 @@ use rust_mcp_actix::{mcp_scope, ActixMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
+use rust_mcp_sdk::schema::{
+    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
+};
 use rust_mcp_sdk::session_store::InMemorySessionStore;
 use rust_mcp_sdk::ToMcpServerHandler;
 use std::sync::Arc;
@@ -48,6 +50,15 @@ fn make_state() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
     (state, handler)
 }
 
+fn make_state_json_mode() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
+    let (state, handler) = make_state();
+    let state = McpAppState {
+        enable_json_response: true,
+        ..Arc::unwrap_or_clone(state)
+    };
+    (Arc::new(state), handler)
+}
+
 fn default_mount() -> ActixMountOptions {
     ActixMountOptions {
         streamable_http_endpoint: "/mcp".into(),
@@ -58,7 +69,7 @@ fn default_mount() -> ActixMountOptions {
 }
 
 // =====================================================================
-// Integration tests (actix runtime required)
+// Basic route tests
 // =====================================================================
 
 #[actix_web::test]
@@ -70,12 +81,7 @@ async fn test_mcp_scope_routes_health() {
 
     let req = test::TestRequest::get().uri("/health").to_request();
     let resp = test::call_service(&app, req).await;
-    // Health endpoint should be registered when health_endpoint is Some
-    assert!(
-        resp.status().is_success() || resp.status() != 404,
-        "Health route should not 404, got {}",
-        resp.status()
-    );
+    assert!(resp.status().is_success() || resp.status() != 404);
 }
 
 #[actix_web::test]
@@ -117,13 +123,14 @@ async fn test_unknown_path_returns_404() {
     let scope = mcp_scope(state, handler, &opts);
     let app = test::init_service(App::new().service(scope)).await;
 
-    let req = test::TestRequest::get()
-        .uri("/non-existent-path")
-        .to_request();
+    let req = test::TestRequest::get().uri("/non-existent-path").to_request();
     let resp = test::call_service(&app, req).await;
-
     assert_eq!(resp.status(), 404);
 }
+
+// =====================================================================
+// Streamable HTTP route tests
+// =====================================================================
 
 #[actix_web::test]
 async fn test_streamable_http_get_returns_error_without_session() {
@@ -148,6 +155,7 @@ async fn test_streamable_http_post_invalid_body() {
         .uri("/mcp")
         .set_payload("not-valid-json")
         .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(!resp.status().is_success());
@@ -165,15 +173,59 @@ async fn test_streamable_http_delete_returns_error_without_session() {
     assert!(!resp.status().is_success());
 }
 
+// =====================================================================
+// SSE streaming endpoint
+// =====================================================================
+
 #[actix_web::test]
-async fn test_sse_endpoint_registered() {
-    // Verify that mcp_scope can be constructed and app initialized without panicking.
-    // SSE connections are long-lived streams not suited for the synchronous test client.
+async fn test_sse_endpoint_returns_event_stream() {
     let (state, handler) = make_state();
     let opts = default_mount();
     let scope = mcp_scope(state, handler, &opts);
-    let _app = test::init_service(App::new().service(scope)).await;
+    let app = test::init_service(App::new().service(scope)).await;
+
+    let req = test::TestRequest::get()
+        .uri("/sse")
+        .insert_header(("Accept", "text/event-stream"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), 200);
+    let content_type = resp.headers().get("content-type")
+        .and_then(|v| v.to_str().ok()).unwrap_or("");
+    assert!(content_type.starts_with("text/event-stream"),
+        "Expected text/event-stream, got: {}", content_type);
 }
+
+#[actix_web::test]
+async fn test_streamable_http_init_returns_session_id() {
+    let (state, handler) = make_state_json_mode();
+    let opts = default_mount();
+    let scope = mcp_scope(state, handler, &opts);
+    let app = test::init_service(App::new().service(scope)).await;
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .set_payload(serde_json::json!({
+            "jsonrpc":"2.0","id":1,"method":"initialize",
+            "params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}
+        }).to_string())
+        .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert!(resp.status().is_success(), "Expected 2xx, got {}", resp.status());
+    let session_id = resp.headers().get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .expect("Expected mcp-session-id header");
+    assert!(!session_id.is_empty());
+}
+
+// =====================================================================
+// Messages endpoint
+// =====================================================================
 
 #[actix_web::test]
 async fn test_messages_endpoint_rejects_invalid_session() {
@@ -186,13 +238,18 @@ async fn test_messages_endpoint_rejects_invalid_session() {
         .uri("/messages")
         .set_payload("{}")
         .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(!resp.status().is_success());
 }
 
+// =====================================================================
+// Error status code mapping
+// =====================================================================
+
 #[actix_web::test]
-async fn test_error_bridge_session_id_missing() {
+async fn test_error_mapping_session_missing_returns_400() {
     let (state, handler) = make_state();
     let opts = default_mount();
     let scope = mcp_scope(state, handler, &opts);
@@ -202,8 +259,25 @@ async fn test_error_bridge_session_id_missing() {
         .uri("/messages")
         .set_payload("{}")
         .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
         .to_request();
     let resp = test::call_service(&app, req).await;
-
     assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn test_error_mapping_invalid_session_returns_404() {
+    let (state, handler) = make_state();
+    let opts = default_mount();
+    let scope = mcp_scope(state, handler, &opts);
+    let app = test::init_service(App::new().service(scope)).await;
+
+    let req = test::TestRequest::post()
+        .uri("/messages?sessionId=nonexistent")
+        .set_payload("{}")
+        .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 404);
 }
