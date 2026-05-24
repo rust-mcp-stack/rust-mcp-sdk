@@ -2,6 +2,7 @@ use crate::error::{TransportServerError, TransportServerResult};
 use crate::AxumServer;
 use axum_server::Handle;
 use futures::StreamExt;
+use rust_mcp_sdk::McpHttpServer;
 use rust_mcp_sdk::{
     error::SdkResult,
     mcp_server::ServerRuntime,
@@ -500,5 +501,24 @@ impl AxumRuntime {
 
     pub fn client_task_store(&self) -> Option<Arc<ClientTaskStore>> {
         self.state.client_task_store.clone()
+    }
+}
+
+use async_trait::async_trait;
+
+#[async_trait]
+impl McpHttpServer for AxumRuntime {
+    async fn graceful_shutdown(&self) {
+        self.graceful_shutdown(None);
+    }
+
+    async fn sessions(&self) -> Vec<SessionId> {
+        AxumRuntime::sessions(self).await
+    }
+
+    async fn runtime_by_session(&self, id: &SessionId) -> SdkResult<Arc<ServerRuntime>> {
+        AxumRuntime::runtime_by_session(self, id)
+            .await
+            .map_err(Into::into)
     }
 }

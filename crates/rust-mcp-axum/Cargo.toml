@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 [dependencies]
 rust-mcp-sdk = { workspace = true, features = ["server", "streamable-http", "sse", "auth"] }
 thiserror = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true }
 axum-server = { workspace = true, features = [] }
 tokio = { workspace = true }

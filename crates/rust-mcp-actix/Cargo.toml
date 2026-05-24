@@ -1,0 +1,31 @@
+[package]
+name = "rust-mcp-actix"
+version = "0.1.0"
+authors = ["Ali Hashemi"]
+description = "Actix-web HTTP server integration for rust-mcp-sdk"
+repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
+documentation = "https://docs.rs/rust-mcp-actix"
+keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk", "actix"]
+license = "MIT"
+edition = "2021"
+rust-version = { workspace = true }
+
+[dependencies]
+rust-mcp-sdk = { workspace = true, features = ["server", "streamable-http", "sse", "auth"] }
+actix-web = "4"
+actix-rt = "2"
+async-trait = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+http = { workspace = true }
+bytes = { workspace = true }
+http-body-util = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+actix-http = "3"
+futures-util = "0.3"
+
+[lints]
+workspace = true

@@ -6,6 +6,7 @@ members = [
     "crates/rust-mcp-transport",
     "crates/rust-mcp-extra",
     "crates/rust-mcp-axum",
+    "crates/rust-mcp-actix",
 ]
 
 [workspace.package]
@@ -18,6 +19,7 @@ rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
 rust-mcp-macros = { version = "0.9.0", path = "crates/rust-mcp-macros", default-features = false }
 rust-mcp-extra = { version="0.1.0", path = "crates/rust-mcp-extra", default-features = false }
 rust-mcp-axum = { version = "0.1.0", path = "crates/rust-mcp-axum" }
+rust-mcp-actix = { version = "0.1.0", path = "crates/rust-mcp-actix" }
 
 # External crates
 rust-mcp-schema = { version="0.10",  default-features = false }
