@@ -12,6 +12,17 @@ pub struct ActixMountOptions {
     pub health_endpoint: Option<String>,
 }
 
+impl Clone for ActixMountOptions {
+    fn clone(&self) -> Self {
+        Self {
+            streamable_http_endpoint: self.streamable_http_endpoint.clone(),
+            sse_endpoint: self.sse_endpoint.clone(),
+            sse_messages_endpoint: self.sse_messages_endpoint.clone(),
+            health_endpoint: self.health_endpoint.clone(),
+        }
+    }
+}
+
 impl Default for ActixMountOptions {
     fn default() -> Self {
         Self {

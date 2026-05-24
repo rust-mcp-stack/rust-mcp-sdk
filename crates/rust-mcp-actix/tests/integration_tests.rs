@@ -205,5 +205,5 @@ async fn test_error_bridge_session_id_missing() {
         .to_request();
     let resp = test::call_service(&app, req).await;
 
-    assert_eq!(resp.status(), 500);
+    assert_eq!(resp.status(), 400);
 }

@@ -26,6 +26,8 @@ serde_json = { workspace = true }
 [dev-dependencies]
 actix-http = "3"
 futures-util = "0.3"
+tracing-subscriber = { workspace = true }
+rust-mcp-schema = { workspace = true }
 
 [lints]
 workspace = true

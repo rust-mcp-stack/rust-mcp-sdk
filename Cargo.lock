@@ -2271,10 +2271,12 @@ dependencies = [
  "futures-util",
  "http 1.4.0",
  "http-body-util",
+ "rust-mcp-schema",
  "rust-mcp-sdk",
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

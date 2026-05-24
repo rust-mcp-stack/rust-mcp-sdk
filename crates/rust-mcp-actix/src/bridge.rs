@@ -1,16 +1,50 @@
 use actix_web::HttpResponse;
+use bytes::Bytes;
+use futures::StreamExt;
 use http_body_util::BodyExt;
+use http_body_util::BodyStream;
 use rust_mcp_sdk::mcp_http::GenericBody;
 
 /// Converts an `http::Response<GenericBody>` into an Actix `HttpResponse`.
 ///
-/// Drains the body bytes asynchronously and copies status/headers.
+/// Handles two response modes:
+/// - **SSE streams** (`content-type: text/event-stream`): uses `HttpResponse::streaming()` to
+///   forward body frames as-is, preserving the long-lived connection.
+/// - **Standard responses**: drains body bytes asynchronously and copies status/headers.
 pub(crate) async fn to_actix_response(res: http::Response<GenericBody>) -> HttpResponse {
     let (parts, body) = res.into_parts();
 
     let status = actix_web::http::StatusCode::from_u16(parts.status.as_u16())
         .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR);
 
+    let is_sse = parts
+        .headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.starts_with("text/event-stream"))
+        .unwrap_or(false);
+
+    if is_sse {
+        let stream = BodyStream::new(body).map(|result| match result {
+            Ok(frame) => {
+                let data = frame
+                    .into_data()
+                    .unwrap_or_else(|_| Bytes::from_static(b""));
+                Ok(data)
+            }
+            Err(err) => Err(actix_web::error::ErrorInternalServerError(err.to_string())),
+        });
+
+        let mut builder = HttpResponse::build(status);
+        for (name, value) in parts.headers.iter() {
+            if let Ok(v) = value.to_str() {
+                builder.insert_header((name.as_str(), v));
+            }
+        }
+        return builder.streaming(stream);
+    }
+
+    // Standard response — drain body to bytes
     let bytes = body
         .collect()
         .await
@@ -56,15 +90,22 @@ pub(crate) fn from_actix_request<'a>(
 }
 
 /// Converts an `McpHttpError` into an Actix `HttpResponse` with a JSON error body.
+///
+/// Maps error variants to appropriate HTTP status codes:
+/// - `SessionIdMissing` → 400 Bad Request
+/// - `SessionIdInvalid` → 404 Not Found
+/// - `StreamIoError` → 500 Internal Server Error
+/// - `HttpError` → 500 Internal Server Error
+/// - `TransportError` → 502 Bad Gateway
 pub(crate) fn to_actix_error(err: rust_mcp_sdk::mcp_http::McpHttpError) -> HttpResponse {
+    use rust_mcp_sdk::mcp_http::McpHttpError;
+
     let status = match &err {
-        rust_mcp_sdk::mcp_http::McpHttpError::SessionIdMissing => {
-            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
-        }
-        rust_mcp_sdk::mcp_http::McpHttpError::SessionIdInvalid(_) => {
-            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
-        }
-        _ => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+        McpHttpError::SessionIdMissing => actix_web::http::StatusCode::BAD_REQUEST,
+        McpHttpError::SessionIdInvalid(_) => actix_web::http::StatusCode::NOT_FOUND,
+        McpHttpError::StreamIoError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+        McpHttpError::HttpError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+        McpHttpError::TransportError(_) => actix_web::http::StatusCode::BAD_GATEWAY,
     };
 
     let body = serde_json::json!({ "error": err.to_string() });
