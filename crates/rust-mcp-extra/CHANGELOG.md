@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.4...rust-mcp-extra-v0.3.0) (2026-05-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146))
+* extract Axum to standalone rust-mcp-axum crate
+
+### 🚀 Features
+
+* Extract Axum to standalone rust-mcp-axum crate ([0bd6cf6](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0bd6cf6721b25c1066c702d2bdf752143ad2ecf3))
+* Extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146)) ([ddc5600](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ddc56001cd561aef0eccadd0c3bb788c176575ff))
+
+
+### 🚜 Code Refactoring
+
+* Switch mcp http to framework-agnostic McpHttpError  ([#144](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/144)) ([e0c44c0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e0c44c0e4f8aaed9bfc59b9274d11c346646a635))
+* Switch mcp_http layer to framework-agnostic McpHttpError ([afaf4b1](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/afaf4b1ebfe070f565a1857ed707da678b9d16ae))
+
 ## [0.2.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.3...rust-mcp-extra-v0.2.4) (2026-03-13)
 
 ## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.2.2...rust-mcp-extra-v0.2.3) (2026-02-01)
