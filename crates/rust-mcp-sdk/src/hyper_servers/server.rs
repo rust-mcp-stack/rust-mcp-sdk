@@ -40,6 +40,8 @@ use tokio::signal;
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
+// Default maximum size (in bytes) of an incoming HTTP request body (4 MiB)
+const DEFAULT_MAX_REQUEST_BODY_SIZE: usize = 4 * 1024 * 1024;
 
 /// Configuration struct for the Hyper server
 /// Used to configure the HyperServer instance.
@@ -96,6 +98,11 @@ pub struct HyperServerOptions {
 
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
+
+    /// Maximum size in bytes of an incoming HTTP request body. Requests larger
+    /// than this are rejected with `413 Payload Too Large`.
+    /// Defaults to 4 MiB when `None`.
+    pub max_request_body_size: Option<usize>,
 
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
@@ -254,6 +261,13 @@ impl HyperServerOptions {
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
 
+    /// Maximum incoming HTTP request body size in bytes, falling back to the
+    /// default (4 MiB) when not configured.
+    pub fn max_request_body_size(&self) -> usize {
+        self.max_request_body_size
+            .unwrap_or(DEFAULT_MAX_REQUEST_BODY_SIZE)
+    }
+
     pub fn needs_dns_protection(&self) -> bool {
         self.dns_rebinding_protection
             && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
@@ -273,6 +287,7 @@ impl Default for HyperServerOptions {
             custom_streamable_http_endpoint: None,
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
+            max_request_body_size: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,

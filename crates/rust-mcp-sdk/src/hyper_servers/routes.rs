@@ -11,7 +11,7 @@ pub mod streamable_http_routes;
 use super::HyperServerOptions;
 use crate::mcp_http::McpAppState;
 use crate::mcp_http::McpHttpHandler;
-use axum::{Extension, Router};
+use axum::{extract::DefaultBodyLimit, Extension, Router};
 use std::sync::Arc;
 
 /// Constructs the Axum router with all application routes
@@ -63,7 +63,12 @@ pub fn app_routes(
         }
 
         router = router.merge(fallback_routes::routes());
-        router.with_state(state).layer(Extension(http_handler))
+        router
+            .with_state(state)
+            .layer(Extension(http_handler))
+            // Reject oversized request bodies with `413 Payload Too Large`
+            // before they are buffered into memory.
+            .layer(DefaultBodyLimit::max(server_options.max_request_body_size()))
     };
 
     router
