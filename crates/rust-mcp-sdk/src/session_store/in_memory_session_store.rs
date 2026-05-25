@@ -3,7 +3,9 @@ use crate::mcp_server::ServerRuntime;
 use super::SessionId;
 use super::SessionStore;
 use async_trait::async_trait;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -11,6 +13,10 @@ use tokio::sync::RwLock;
 
 /// Default maximum number of concurrent sessions retained by the store.
 pub const DEFAULT_MAX_SESSIONS: usize = 10_000;
+
+/// Number of lock shards. Spreading sessions across independent locks reduces
+/// contention on the hot get/set path under many concurrent clients.
+const SHARD_COUNT: usize = 16;
 
 fn now_millis() -> u64 {
     SystemTime::now()
@@ -44,8 +50,12 @@ impl SessionEntry {
     }
 }
 
+type Shard = RwLock<HashMap<String, SessionEntry>>;
+
 /// In-memory session store with a bounded session count and optional idle TTL.
 ///
+/// Sessions are spread across [`SHARD_COUNT`] independently locked shards, so
+/// concurrent requests for different sessions rarely contend on the same lock.
 /// Idle sessions (older than the configured TTL) are evicted lazily, on access
 /// and whenever the store is checked for capacity. Once `max_sessions` is
 /// reached the server rejects new sessions with `503 Service Unavailable`,
@@ -53,7 +63,7 @@ impl SessionEntry {
 /// `initialize` requests.
 #[derive(Clone)]
 pub struct InMemorySessionStore {
-    store: Arc<RwLock<HashMap<String, SessionEntry>>>,
+    shards: Arc<[Shard; SHARD_COUNT]>,
     max_sessions: usize,
     idle_ttl: Option<Duration>,
 }
@@ -80,23 +90,40 @@ impl InMemorySessionStore {
     ///   disables idle expiry.
     pub fn with_limits(max_sessions: Option<usize>, idle_ttl: Option<Duration>) -> Self {
         Self {
-            store: Arc::new(RwLock::new(HashMap::new())),
+            shards: Arc::new(std::array::from_fn(|_| RwLock::new(HashMap::new()))),
             max_sessions: max_sessions.unwrap_or(DEFAULT_MAX_SESSIONS),
             idle_ttl,
         }
     }
 
+    /// Returns the shard responsible for the given session key.
+    fn shard(&self, key: &str) -> &Shard {
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        &self.shards[(hasher.finish() as usize) % SHARD_COUNT]
+    }
+
     /// Evicts sessions idle past the configured TTL and returns the resulting
-    /// session count.
+    /// total session count across all shards.
     async fn evict_idle(&self) -> usize {
-        let Some(ttl) = self.idle_ttl else {
-            return self.store.read().await.len();
-        };
-        let ttl_ms = ttl.as_millis() as u64;
-        let now = now_millis();
-        let mut store = self.store.write().await;
-        store.retain(|_, entry| !entry.is_idle(now, ttl_ms));
-        store.len()
+        let mut total = 0;
+        match self.idle_ttl {
+            Some(ttl) => {
+                let ttl_ms = ttl.as_millis() as u64;
+                let now = now_millis();
+                for shard in self.shards.iter() {
+                    let mut guard = shard.write().await;
+                    guard.retain(|_, entry| !entry.is_idle(now, ttl_ms));
+                    total += guard.len();
+                }
+            }
+            None => {
+                for shard in self.shards.iter() {
+                    total += shard.read().await.len();
+                }
+            }
+        }
+        total
     }
 }
 
@@ -104,40 +131,43 @@ impl InMemorySessionStore {
 #[async_trait]
 impl SessionStore for InMemorySessionStore {
     async fn get(&self, key: &SessionId) -> Option<Arc<ServerRuntime>> {
-        let store = self.store.read().await;
-        let entry = store.get(key)?;
+        let shard = self.shard(key).read().await;
+        let entry = shard.get(key)?;
         entry.touch();
         Some(entry.runtime.clone())
     }
 
     async fn set(&self, key: SessionId, value: Arc<ServerRuntime>) {
-        let mut store = self.store.write().await;
-        store.insert(key, SessionEntry::new(value));
+        let mut shard = self.shard(&key).write().await;
+        shard.insert(key, SessionEntry::new(value));
     }
 
     async fn delete(&self, key: &SessionId) {
-        let mut store = self.store.write().await;
-        store.remove(key);
+        let mut shard = self.shard(key).write().await;
+        shard.remove(key);
     }
 
     async fn clear(&self) {
-        let mut store = self.store.write().await;
-        store.clear();
+        for shard in self.shards.iter() {
+            shard.write().await.clear();
+        }
     }
     async fn keys(&self) -> Vec<SessionId> {
-        let store = self.store.read().await;
-        store.keys().cloned().collect::<Vec<_>>()
+        let mut keys = Vec::new();
+        for shard in self.shards.iter() {
+            keys.extend(shard.read().await.keys().cloned());
+        }
+        keys
     }
     async fn values(&self) -> Vec<Arc<ServerRuntime>> {
-        let store = self.store.read().await;
-        store
-            .values()
-            .map(|entry| entry.runtime.clone())
-            .collect::<Vec<_>>()
+        let mut values = Vec::new();
+        for shard in self.shards.iter() {
+            values.extend(shard.read().await.values().map(|entry| entry.runtime.clone()));
+        }
+        values
     }
     async fn has(&self, session: &SessionId) -> bool {
-        let store = self.store.read().await;
-        store.contains_key(session)
+        self.shard(session).read().await.contains_key(session)
     }
 
     async fn is_full(&self) -> bool {
