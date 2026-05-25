@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use reqwest::{header::AUTHORIZATION, StatusCode};
 use rust_mcp_sdk::{
     auth::{
-        decode_token_header, Audience, AuthInfo, AuthenticationError, IntrospectionResponse,
-        JsonWebKeySet, OauthTokenVerifier,
+        decode_token_header, default_jwks_algorithms, Algorithm, Audience, AuthInfo,
+        AuthenticationError, IntrospectionResponse, JsonWebKeySet, OauthTokenVerifier,
     },
     mcp_http::error_message_from_response,
 };
@@ -151,6 +151,8 @@ pub struct GenericOauthTokenVerifier {
     validate_audience: Option<Audience>,
     /// Optional issuer value to validate against the token's `iss` claim.
     validate_issuer: Option<String>,
+    /// Signature algorithms accepted during JWKS verification.
+    allowed_algorithms: Vec<Algorithm>,
     jwt_cache: Option<RwLock<JwtCache>>,
     json_web_key_set: RwLock<Option<JwksCache>>,
     introspection_uri: Option<Url>,
@@ -185,6 +187,7 @@ impl GenericOauthTokenVerifier {
         Ok(Self {
             validate_issuer,
             validate_audience,
+            allowed_algorithms: default_jwks_algorithms(),
             jwt_cache,
             json_web_key_set: RwLock::new(None),
             introspection_uri: strategy_options.introspection_uri,
@@ -371,6 +374,7 @@ impl GenericOauthTokenVerifier {
                     {
                         let token_info = cache.jwks.verify(
                             token.to_string(),
+                            &self.allowed_algorithms,
                             self.validate_audience.as_ref(),
                             self.validate_issuer.as_ref(),
                         )?;
@@ -389,6 +393,7 @@ impl GenericOauthTokenVerifier {
         if let Some(cache) = guard.as_ref() {
             let token_info = cache.jwks.verify(
                 token.to_string(),
+                &self.allowed_algorithms,
                 self.validate_audience.as_ref(),
                 self.validate_issuer.as_ref(),
             )?;
