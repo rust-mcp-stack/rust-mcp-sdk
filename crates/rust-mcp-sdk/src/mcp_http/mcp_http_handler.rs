@@ -358,10 +358,13 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers) {
+            Ok(id) => id,
+            Err(()) => {
+                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let payload = request.body();
 
@@ -409,10 +412,13 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers) {
+            Ok(id) => id,
+            Err(()) => {
+                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let last_event_id: Option<SessionId> = headers
             .get(MCP_LAST_EVENT_ID_HEADER)
@@ -447,10 +453,13 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers) {
+            Ok(id) => id,
+            Err(()) => {
+                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let response = match session_id {
             Some(id) => delete_session(id, state).await,
@@ -461,5 +470,54 @@ impl McpHttpHandler {
         };
 
         response
+    }
+}
+
+/// Maximum accepted length (in bytes) of the `Mcp-Session-Id` header.
+const MAX_SESSION_ID_LEN: usize = 128;
+
+/// Returns true if the session id is non-empty, within the length cap, and uses
+/// only URL-safe characters (covers UUIDs, base64url, and prefixed ids).
+fn is_valid_session_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_SESSION_ID_LEN
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~'))
+}
+
+/// Extracts and validates the `Mcp-Session-Id` header.
+///
+/// Returns `Ok(None)` when the header is absent, `Ok(Some(id))` when present and
+/// valid, and `Err(())` when present but oversized or malformed. Validating up
+/// front avoids unbounded allocations and map lookups from a hostile value.
+fn parse_session_id_header(headers: &HeaderMap) -> Result<Option<SessionId>, ()> {
+    match headers.get(MCP_SESSION_ID_HEADER) {
+        None => Ok(None),
+        Some(value) => match value.to_str() {
+            Ok(s) if is_valid_session_id(s) => Ok(Some(s.to_string())),
+            _ => Err(()),
+        },
+    }
+}
+
+#[cfg(test)]
+mod session_id_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_uuid_and_prefixed_ids() {
+        assert!(is_valid_session_id("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(is_valid_session_id("tsk_abcDEF123"));
+        assert!(is_valid_session_id("s_0001"));
+    }
+
+    #[test]
+    fn rejects_empty_oversized_and_bad_charset() {
+        assert!(!is_valid_session_id(""));
+        assert!(!is_valid_session_id(&"a".repeat(MAX_SESSION_ID_LEN + 1)));
+        assert!(!is_valid_session_id("has space"));
+        assert!(!is_valid_session_id("../etc/passwd"));
+        assert!(!is_valid_session_id("naïve"));
     }
 }
