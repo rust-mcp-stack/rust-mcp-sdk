@@ -464,6 +464,14 @@ impl HyperServer {
     /// * `TransportServerResult<()>` - Ok if the server starts successfully, Err otherwise
     #[cfg(feature = "ssl")]
     pub(crate) async fn start_ssl(self, addr: SocketAddr) -> TransportServerResult<()> {
+        // Install a process-wide rustls crypto provider before the first TLS
+        // handshake. With both `aws-lc-rs` (via jsonwebtoken) and `ring`
+        // potentially in the dependency graph, rustls otherwise has no
+        // unambiguous default and the first handshake panics. `install_default`
+        // returns an error if a provider is already installed, which we
+        // intentionally ignore so embedders may install their own first.
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
         let config = RustlsConfig::from_pem_file(
             self.options.ssl_cert_path.as_deref().unwrap_or_default(),
             self.options.ssl_key_path.as_deref().unwrap_or_default(),
