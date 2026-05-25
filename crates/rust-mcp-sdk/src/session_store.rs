@@ -39,4 +39,13 @@ pub trait SessionStore: Send + Sync {
 
     /// Clears all sessions from the store
     async fn clear(&self);
+
+    /// Returns `true` when the store cannot accept a new session.
+    ///
+    /// Callers should reject new-session creation (e.g. `initialize`) with
+    /// `503 Service Unavailable` when this returns `true`. The default
+    /// implementation reports unlimited capacity.
+    async fn is_full(&self) -> bool {
+        false
+    }
 }
