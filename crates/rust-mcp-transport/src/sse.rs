@@ -189,6 +189,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
             self.pending_requests.clone(),
             self.options.timeout,
             cancellation_token,
+            self.options.channel_capacity,
         );
 
         if let (Some(session_id), Some(stream_id), Some(event_store)) = (
