@@ -376,6 +376,14 @@ pub(crate) async fn start_new_session(
     payload: &str,
     auth_info: Option<AuthInfo>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
+    if state.session_store.is_full().await {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            SdkError::internal_error()
+                .with_message("Server is at maximum session capacity, try again later."),
+        );
+    }
+
     let session_id: SessionId = state.id_generator.generate();
 
     let h: Arc<dyn McpServerHandler> = state.handler.clone();
@@ -716,6 +724,14 @@ pub(crate) async fn handle_sse_connection(
     sse_message_endpoint: Option<&str>,
     auth_info: Option<AuthInfo>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
+    if state.session_store.is_full().await {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            SdkError::internal_error()
+                .with_message("Server is at maximum session capacity, try again later."),
+        );
+    }
+
     let session_id: SessionId = state.id_generator.generate();
 
     let sse_message_endpoint = sse_message_endpoint.unwrap_or(DEFAULT_MESSAGES_ENDPOINT);

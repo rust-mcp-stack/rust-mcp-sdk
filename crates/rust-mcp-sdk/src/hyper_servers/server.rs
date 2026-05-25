@@ -97,6 +97,15 @@ pub struct HyperServerOptions {
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
 
+    /// Maximum number of concurrent sessions retained by the default in-memory
+    /// session store. New sessions past this limit are rejected with
+    /// `503 Service Unavailable`. `None` uses the store default.
+    pub max_sessions: Option<usize>,
+
+    /// Evict sessions that have been idle for longer than this duration.
+    /// `None` disables idle expiry.
+    pub session_idle_ttl: Option<Duration>,
+
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
 
@@ -273,6 +282,8 @@ impl Default for HyperServerOptions {
             custom_streamable_http_endpoint: None,
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
+            max_sessions: None,
+            session_idle_ttl: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
@@ -321,7 +332,10 @@ impl HyperServer {
         mut server_options: HyperServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
-            session_store: Arc::new(InMemorySessionStore::new()),
+            session_store: Arc::new(InMemorySessionStore::with_limits(
+                server_options.max_sessions,
+                server_options.session_idle_ttl,
+            )),
             id_generator: server_options
                 .session_id_generator
                 .take()
