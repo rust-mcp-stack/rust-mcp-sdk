@@ -128,7 +128,7 @@ Various implementations of the IdGenerator trait (from [rust-mcp-sdk](https://gi
 
 
 ### How to use
-Provide an instance of your chosen ID generator in the **HyperServerOptions** when initializing the server.
+Provide an instance of your chosen ID generator in the **AxumServerOptions** when initializing the server.
 
 For example to use **SnowflakeIdGenerator** :
 
@@ -136,10 +136,10 @@ For example to use **SnowflakeIdGenerator** :
 use rust_mcp_extra::id_generator::SnowflakeIdGenerator;
 
 
-let server = hyper_server::create_server(
+let server = rust_mcp_axum::create_axum_server(
     server_details,
     handler,
-    HyperServerOptions {
+    AxumServerOptions {
         host: "127.0.0.1".to_string(),
         session_id_generator: Some(Arc::new(SnowflakeIdGenerator::new(1015))), // use SnowflakeIdGenerator
         ..Default::default()

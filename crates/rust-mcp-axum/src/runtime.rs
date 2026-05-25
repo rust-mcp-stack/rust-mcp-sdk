@@ -1,15 +1,15 @@
-use crate::{
+use crate::error::{TransportServerError, TransportServerResult};
+use crate::AxumServer;
+use axum_server::Handle;
+use futures::StreamExt;
+use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_server::{
-        error::{TransportServerError, TransportServerResult},
-        ServerRuntime,
-    },
+    mcp_server::ServerRuntime,
     session_store::SessionStore,
     task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller},
 };
-use crate::{
+use rust_mcp_sdk::{
     mcp_http::McpAppState,
-    mcp_server::HyperServer,
     schema::{
         schema_utils::{NotificationFromServer, RequestFromServer, ResultFromClient},
         CreateMessageRequestParams, CreateMessageResult, InitializeRequestParams, ListRootsResult,
@@ -18,27 +18,27 @@ use crate::{
     },
     McpServer,
 };
-use axum_server::Handle;
-use futures::StreamExt;
-use rust_mcp_schema::{
-    schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
-    CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
-    ElicitCompleteParams, ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams,
-    GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams, RpcError,
-    TaskStatusNotificationParams,
+use rust_mcp_sdk::{
+    schema::{
+        schema_utils::{ClientTaskResult, CustomNotification, CustomRequest},
+        CancelTaskParams, CancelTaskResult, CancelledNotificationParams, CreateTaskResult,
+        ElicitCompleteParams, ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams,
+        GetTaskPayloadParams, GetTaskResult, ProgressNotificationParams, RpcError,
+        TaskStatusNotificationParams,
+    },
+    SessionId,
 };
-use rust_mcp_transport::SessionId;
 use std::net::SocketAddr;
 use std::{sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 
-pub struct HyperRuntime {
+pub struct AxumRuntime {
     pub(crate) state: Arc<McpAppState>,
     pub(crate) server_task: JoinHandle<Result<(), TransportServerError>>,
     pub(crate) server_handle: Handle<SocketAddr>,
 }
 
-impl HyperRuntime {
+impl AxumRuntime {
     fn task_poller_callback(
         client_task_store: Arc<ClientTaskStore>,
         session_store: Arc<dyn SessionStore>,
@@ -69,7 +69,7 @@ impl HyperRuntime {
         });
         callback
     }
-    pub async fn create(server: HyperServer) -> SdkResult<Self> {
+    pub async fn create(server: AxumServer) -> SdkResult<Self> {
         let addr = server.options.resolve_server_address().await?;
         let state = server.state();
 
@@ -234,7 +234,7 @@ impl HyperRuntime {
         session_id: &SessionId,
         params: Option<RequestParams>,
         timeout: Option<Duration>,
-    ) -> SdkResult<crate::schema::Result> {
+    ) -> SdkResult<rust_mcp_sdk::schema::Result> {
         let runtime = self.runtime_by_session(session_id).await?;
         runtime.ping(params, timeout).await
     }

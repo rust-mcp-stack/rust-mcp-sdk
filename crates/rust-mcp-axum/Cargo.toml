@@ -1,0 +1,35 @@
+[package]
+name = "rust-mcp-axum"
+version = "0.1.0"
+authors = ["Ali Hashemi"]
+categories = ["data-structures", "parser-implementations", "parsing"]
+description = "Axum HTTP server integration for rust-mcp-sdk"
+repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
+documentation = "https://docs.rs/rust-mcp-axum"
+keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk", "axum"]
+license = "MIT"
+edition = "2021"
+rust-version = { workspace = true }
+
+[dependencies]
+rust-mcp-sdk = { workspace = true, features = ["server", "streamable-http", "sse", "auth"] }
+thiserror = { workspace = true }
+axum = { workspace = true }
+axum-server = { workspace = true, features = [] }
+tokio = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+http = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+tower = "0.5"
+serde_json = { workspace = true }
+http-body-util = { workspace = true }
+
+[features]
+ssl = ["axum-server/tls-rustls"]
+tls-no-provider = ["axum-server/tls-rustls-no-provider"]
+
+[lints]
+workspace = true

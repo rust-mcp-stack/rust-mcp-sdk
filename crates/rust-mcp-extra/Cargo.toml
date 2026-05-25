@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 exclude = ["assets/", "tests/"]
 
 [dependencies]
-rust-mcp-sdk = {  version = "0.9.0" , path = "../rust-mcp-sdk", default-features = false, features=["server","auth","hyper-server","macros"] }
+rust-mcp-sdk = {  version = "0.9.0" , path = "../rust-mcp-sdk", default-features = false, features=["server","auth","sse","macros"] }
 base64 = {workspace = true, optional=true}
 url= {workspace = true, optional=true}
 nanoid = {version="0.4", optional=true}
@@ -37,6 +37,7 @@ tracing = { workspace = true }
 
 
 [dev-dependencies]
+rust-mcp-axum = { workspace = true }
 oauth2-test-server = "0.2"
 tokio={ workspace = true}
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
@@ -48,7 +49,7 @@ nano_id = ["nanoid"]
 snowflake_id = ["once_cell"]
 random_62_id = ["rand","rand_distr"]
 time_64_id = ["base64"]
-auth=["url","reqwest","async-lock","async-trait","rust-mcp-sdk/auth","rust-mcp-sdk/hyper-server"
+auth=["url","reqwest","async-lock","async-trait","rust-mcp-sdk/auth"
 ,"rust-mcp-sdk/sse", "serde","serde_json","http","bytes","http-body","http-body-util"]
 
 [lints]
