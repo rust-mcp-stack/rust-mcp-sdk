@@ -10,7 +10,7 @@ use rust_mcp_sdk::schema::{
     LATEST_PROTOCOL_VERSION,
 };
 use rust_mcp_sdk::{
-    auth::{AuthMetadataBuilder, RemoteAuthProvider},
+    auth::{Audience, AuthMetadataBuilder, RemoteAuthProvider},
     error::SdkResult,
     event_store::InMemoryEventStore,
     mcp_icon,
@@ -54,7 +54,9 @@ pub async fn create_oauth_provider() -> SdkResult<RemoteAuthProvider> {
     //  GenericOauthTokenVerifier is used from rust-mcp-extra crate
     // you can implement yours by implementing the OauthTokenVerifier trait
     let token_verifier = GenericOauthTokenVerifier::new(TokenVerifierOptions {
-        validate_audience: None,
+        // Validate the audience against this server's resource identifier so a
+        // token minted for another resource cannot be replayed here.
+        validate_audience: Some(Audience::Single("http://localhost:3000".to_string())),
         validate_issuer: Some(auth_server_meta.issuer.to_string()),
         strategies: vec![
             VerificationStrategies::JWKs {

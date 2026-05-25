@@ -26,6 +26,8 @@ async fn main() -> SdkResult<()> {
         resource_name: Some("Workos Oauth Test MCP Server".to_string()),
         resource_documentation: None,
         token_verifier: None,
+        validate_audience: None,
+        disable_audience_validation: false,
     })?;
 
     let server = hyper_server::create_server(

@@ -28,6 +28,8 @@ async fn main() -> SdkResult<()> {
         client_secret: env::var("CLIENT_SECRET").ok(),
         token_verifier: None,
         resource_documentation: None,
+        validate_audience: None,
+        disable_audience_validation: false,
     })?;
 
     let server = hyper_server::create_server(
