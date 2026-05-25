@@ -223,6 +223,7 @@ where
                 self.pending_requests.clone(),
                 self.options.timeout,
                 cancellation_token,
+                self.options.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
@@ -237,6 +238,7 @@ where
                 self.pending_requests.clone(),
                 self.options.timeout,
                 cancellation_token,
+                self.options.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
