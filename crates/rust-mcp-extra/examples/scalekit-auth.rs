@@ -3,13 +3,9 @@ use crate::common::{
     handler::McpServerHandler,
     utils::{create_server_info, enable_tracing},
 };
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::auth_provider::scalekit::{ScalekitAuthOptions, ScalekitAuthProvider};
-use rust_mcp_sdk::{
-    error::SdkResult,
-    event_store::InMemoryEventStore,
-    mcp_server::{hyper_server, HyperServerOptions},
-    ToMcpServerHandler,
-};
+use rust_mcp_sdk::{error::SdkResult, event_store::InMemoryEventStore, ToMcpServerHandler};
 use std::{env, sync::Arc};
 
 #[tokio::main]
@@ -32,10 +28,10 @@ async fn main() -> SdkResult<()> {
     })
     .await?;
 
-    let server = hyper_server::create_server(
+    let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
             event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability

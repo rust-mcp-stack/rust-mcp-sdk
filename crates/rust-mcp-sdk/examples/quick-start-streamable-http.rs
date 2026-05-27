@@ -1,13 +1,10 @@
 pub mod common;
 
 use async_trait::async_trait;
+use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
-    error::SdkResult,
-    event_store::InMemoryEventStore,
-    macros,
-    mcp_server::{hyper_server, HyperServerOptions, ServerHandler},
-    schema::*,
-    *,
+    error::SdkResult, event_store::InMemoryEventStore, macros, mcp_server::ServerHandler,
+    schema::*, *,
 };
 
 use crate::common::initialize_tracing;
@@ -79,10 +76,10 @@ async fn main() -> SdkResult<()> {
     };
 
     let handler = HelloHandler::default().to_mcp_server_handler();
-    let server = hyper_server::create_server(
+    let server = create_axum_server(
         server_info,
         handler,
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".to_string(),
             event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
             health_endpoint: Some("/health".into()), // enable health check endpoint
