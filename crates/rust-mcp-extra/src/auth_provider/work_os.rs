@@ -29,10 +29,10 @@
 //! })?;
 //!
 //! // Register in your MCP server
-//! let server = hyper_server::create_server(
+//! let server = rust_mcp_axum::create_axum_server(
 //! server_details,
 //! handler,
-//! HyperServerOptions {
+//! rust_mcp_axum::AxumServerOptions {
 //!     host: "localhost".to_string(),
 //!     port: 3000,
 //!     auth: Some(Arc::new(auth_provider)),

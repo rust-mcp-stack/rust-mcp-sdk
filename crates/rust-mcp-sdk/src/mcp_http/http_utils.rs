@@ -10,13 +10,14 @@ use crate::{
     mcp_traits::{IdGenerator, McpServerHandler},
     utils::validate_mcp_protocol_version,
 };
-use axum::http::HeaderValue;
 use bytes::Bytes;
 use futures::stream;
-use http::header::{ACCEPT, CONNECTION, CONTENT_TYPE};
+use http::{
+    header::{ACCEPT, CONNECTION, CONTENT_TYPE},
+    HeaderMap, HeaderValue, StatusCode,
+};
 use http_body::Frame;
 use http_body_util::{BodyExt, Full, StreamBody};
-use hyper::{HeaderMap, StatusCode};
 use rust_mcp_transport::{
     EventId, McpDispatch, SessionId, SseEvent, SseTransport, StreamId, ID_SEPARATOR,
     MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
@@ -27,11 +28,11 @@ use tokio::io::{duplex, AsyncBufReadExt, BufReader};
 use tokio_stream::StreamExt;
 
 // Default Server-Sent Events (SSE) endpoint path
-pub(crate) const DEFAULT_SSE_ENDPOINT: &str = "/sse";
+pub const DEFAULT_SSE_ENDPOINT: &str = "/sse";
 // Default MCP Messages endpoint path
-pub(crate) const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
+pub const DEFAULT_MESSAGES_ENDPOINT: &str = "/messages";
 // Default Streamable HTTP endpoint path
-pub(crate) const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
+pub const DEFAULT_STREAMABLE_HTTP_ENDPOINT: &str = "/mcp";
 const DUPLEX_BUFFER_SIZE: usize = 8192;
 
 /// Creates an initial SSE event that returns the messages endpoint

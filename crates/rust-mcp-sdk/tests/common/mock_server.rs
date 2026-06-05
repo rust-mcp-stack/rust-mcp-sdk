@@ -1,4 +1,6 @@
-use axum::{
+use core::fmt;
+use futures::stream;
+use mcp_axum::axum::{
     body::Body,
     extract::Request,
     http::{header::CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
@@ -9,8 +11,6 @@ use axum::{
     routing::any,
     Router,
 };
-use core::fmt;
-use futures::stream;
 use std::collections::VecDeque;
 use std::{future::Future, net::SocketAddr, pin::Pin};
 use std::{
@@ -413,7 +413,9 @@ impl SimpleMockServer {
         ) -> impl IntoResponse {
             // Take ownership of the body using std::mem::take
             let body = std::mem::take(req.body_mut());
-            let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+            let body_bytes = mcp_axum::axum::body::to_bytes(body, usize::MAX)
+                .await
+                .unwrap();
             let body_str = String::from_utf8_lossy(&body_bytes).to_string();
 
             let request_record = RequestRecord {
@@ -515,7 +517,7 @@ impl SimpleMockServer {
         let url = format!("http://{local_addr}");
 
         tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            mcp_axum::axum::serve(listener, app).await.unwrap();
         });
 
         (

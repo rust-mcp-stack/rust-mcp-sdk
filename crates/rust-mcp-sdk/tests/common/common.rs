@@ -176,7 +176,7 @@ use futures::stream::Stream;
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
 /// reads sse events and return them as (id, event, data) tuple
 pub async fn read_sse_event_from_stream(
-    stream: &mut (impl Stream<Item = Result<hyper::body::Bytes, reqwest::Error>> + Unpin),
+    stream: &mut (impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin),
     event_count: usize,
 ) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut buffer = String::new();
