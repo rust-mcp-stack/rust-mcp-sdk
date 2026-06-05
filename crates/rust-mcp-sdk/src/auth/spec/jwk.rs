@@ -3,6 +3,28 @@ use http::StatusCode;
 use jsonwebtoken::{decode, decode_header, jwk::Jwk, DecodingKey, TokenData, Validation};
 use serde::{Deserialize, Serialize};
 
+pub use jsonwebtoken::Algorithm;
+
+/// Asymmetric signature algorithms accepted by default when verifying a JWT
+/// against a JWKS.
+///
+/// HMAC algorithms (`HS*`) are intentionally excluded: a JWKS exposes public
+/// keys, so accepting `HS*` would let an attacker sign a token with the public
+/// key as the HMAC secret (the RS256 -> HS256 algorithm-confusion attack).
+pub fn default_jwks_algorithms() -> Vec<Algorithm> {
+    vec![
+        Algorithm::RS256,
+        Algorithm::RS384,
+        Algorithm::RS512,
+        Algorithm::PS256,
+        Algorithm::PS384,
+        Algorithm::PS512,
+        Algorithm::ES256,
+        Algorithm::ES384,
+        Algorithm::EdDSA,
+    ]
+}
+
 /// A JSON Web Key Set (JWKS) containing a list of JSON Web Keys.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonWebKeySet {
@@ -23,10 +45,19 @@ impl JsonWebKeySet {
     pub fn verify(
         &self,
         token: String,
+        allowed_algorithms: &[Algorithm],
         validate_audience: Option<&Audience>,
         validate_issuer: Option<&String>,
     ) -> Result<TokenData<AuthClaims>, AuthenticationError> {
         let header = decode_token_header(&token)?;
+
+        // Pin the verification algorithm to a configured allowlist instead of
+        // trusting the algorithm advertised in the token header.
+        if !allowed_algorithms.contains(&header.alg) {
+            return Err(AuthenticationError::InvalidToken {
+                description: "Token algorithm is not allowed",
+            });
+        }
 
         let kid = header.kid.ok_or(AuthenticationError::InvalidToken {
             description: "Missing kid in token header",
@@ -47,6 +78,8 @@ impl JsonWebKeySet {
             }
         })?;
 
+        // `header.alg` is now guaranteed to be in the allowlist, so pinning the
+        // validation to it cannot be downgraded to an HMAC algorithm.
         let mut validation = Validation::new(header.alg);
 
         let mut required_claims = vec![];
@@ -90,5 +123,43 @@ impl JsonWebKeySet {
             })?;
 
         Ok(token_data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jsonwebtoken::{encode, EncodingKey, Header};
+
+    #[test]
+    fn default_algorithms_exclude_hmac() {
+        let algs = default_jwks_algorithms();
+        assert!(!algs.contains(&Algorithm::HS256));
+        assert!(!algs.contains(&Algorithm::HS384));
+        assert!(!algs.contains(&Algorithm::HS512));
+        assert!(algs.contains(&Algorithm::RS256));
+    }
+
+    #[test]
+    fn rejects_token_with_disallowed_algorithm() {
+        // A token whose header advertises HS256 must be rejected up front,
+        // regardless of the keys in the set, so it can never be verified with
+        // a public key as an HMAC secret.
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &serde_json::json!({ "sub": "attacker" }),
+            &EncodingKey::from_secret(b"public-key-as-secret"),
+        )
+        .unwrap();
+
+        let jwks = JsonWebKeySet { keys: vec![] };
+        let result = jwks.verify(token, &default_jwks_algorithms(), None, None);
+
+        assert!(matches!(
+            result,
+            Err(AuthenticationError::InvalidToken {
+                description: "Token algorithm is not allowed"
+            })
+        ));
     }
 }
