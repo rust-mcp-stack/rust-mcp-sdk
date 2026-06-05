@@ -200,6 +200,15 @@ impl GenericOauthTokenVerifier {
         })
     }
 
+    /// Override the set of algorithms allowed during JWKS verification.
+    ///
+    /// By default only asymmetric algorithms (RS/PS/ES/EdDSA) are accepted.
+    /// Use this builder method if you need a custom allowlist.
+    pub fn with_allowed_algorithms(mut self, algorithms: Vec<Algorithm>) -> Self {
+        self.allowed_algorithms = algorithms;
+        self
+    }
+
     async fn verify_user_info(
         &self,
         token: &str,
@@ -900,5 +909,34 @@ mod tests {
         );
         assert_eq!(extra.get("name").unwrap().as_str().unwrap(), "Test User");
         assert!(extra.get("picture").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_with_allowed_algorithms_rejects_restricted_allowlist() {
+        let server = OAuthTestServer::start().await;
+        let client = server
+            .register_client(
+                json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }),
+            )
+            .await;
+
+        let verifier = token_verifier(
+            vec![VerificationStrategies::JWKs {
+                jwks_uri: server.endpoints.jwks.clone(),
+            }],
+            &server.endpoints,
+            None,
+        )
+        .await
+        .with_allowed_algorithms(vec![Algorithm::ES256]);
+
+        let token = server
+            .generate_jwt(&client, server.jwt_options().user_id("hal").build());
+
+        let err = verifier.verify_token(token).await.unwrap_err();
+        assert!(matches!(
+            err,
+            AuthenticationError::TokenVerificationFailed { .. }
+        ));
     }
 }

@@ -54,8 +54,9 @@ impl JsonWebKeySet {
         // Pin the verification algorithm to a configured allowlist instead of
         // trusting the algorithm advertised in the token header.
         if !allowed_algorithms.contains(&header.alg) {
-            return Err(AuthenticationError::InvalidToken {
-                description: "Token algorithm is not allowed",
+            return Err(AuthenticationError::TokenVerificationFailed {
+                description: format!("Token algorithm {:?} is not allowed", header.alg),
+                status_code: Some(StatusCode::UNAUTHORIZED.as_u16()),
             });
         }
 
@@ -157,9 +158,31 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(AuthenticationError::InvalidToken {
-                description: "Token algorithm is not allowed"
-            })
+            Err(AuthenticationError::TokenVerificationFailed { .. })
         ));
+    }
+
+    #[test]
+    fn error_message_reports_rejected_algorithm() {
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &serde_json::json!({ "sub": "attacker" }),
+            &EncodingKey::from_secret(b"public-key-as-secret"),
+        )
+        .unwrap();
+
+        let jwks = JsonWebKeySet { keys: vec![] };
+        let result = jwks.verify(token, &default_jwks_algorithms(), None, None);
+
+        match result {
+            Err(AuthenticationError::TokenVerificationFailed { description, .. }) => {
+                assert!(
+                    description.contains("HS256"),
+                    "Error description should mention the rejected algorithm, got: {}",
+                    description
+                );
+            }
+            other => panic!("Expected TokenVerificationFailed, got {:?}", other),
+        }
     }
 }
