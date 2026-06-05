@@ -3,10 +3,9 @@ use std::net::AddrParseError;
 use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
-use crate::mcp_http::McpHttpError;
+use rust_mcp_sdk::mcp_http::McpHttpError;
 
-#[cfg(feature = "auth")]
-use crate::auth::AuthenticationError;
+use rust_mcp_sdk::auth::AuthenticationError;
 
 pub type TransportServerResult<T> = core::result::Result<T, TransportServerError>;
 
@@ -30,13 +29,11 @@ pub enum TransportServerError {
     SslCertError(String),
     #[error("{0}")]
     TransportError(String),
-    #[cfg(feature = "auth")]
     #[error("{0}")]
     AuthenticationError(#[from] AuthenticationError),
 }
 
 impl IntoResponse for TransportServerError {
-    //consume self and returns a Response
     fn into_response(self) -> axum::response::Response {
         let mut response = StatusCode::INTERNAL_SERVER_ERROR.into_response();
         response.extensions_mut().insert(self);
@@ -65,7 +62,6 @@ impl From<TransportServerError> for McpHttpError {
             TransportServerError::HttpError(s) => McpHttpError::HttpError(s),
             TransportServerError::TransportError(s) => McpHttpError::TransportError(s),
 
-            #[cfg(feature = "auth")]
             TransportServerError::AuthenticationError(e) => McpHttpError::HttpError(e.to_string()),
 
             TransportServerError::AddrParseError(e) => McpHttpError::HttpError(e.to_string()),
@@ -76,10 +72,18 @@ impl From<TransportServerError> for McpHttpError {
     }
 }
 
+impl From<TransportServerError> for rust_mcp_sdk::error::McpSdkError {
+    fn from(err: TransportServerError) -> Self {
+        rust_mcp_sdk::error::McpSdkError::Internal {
+            description: err.to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp_http::McpHttpResult;
+    use rust_mcp_sdk::mcp_http::{McpHttpError, McpHttpResult};
 
     // McpHttpError to TransportServerError
 
@@ -189,7 +193,6 @@ mod tests {
         assert!(matches!(m, McpHttpError::HttpError(ref s) if s == "cert expired"));
     }
 
-    #[cfg(feature = "auth")]
     #[test]
     fn transport_to_mcp_authentication_lossy() {
         let auth_err = AuthenticationError::InactiveToken;
@@ -198,7 +201,7 @@ mod tests {
         assert!(matches!(m, McpHttpError::HttpError(ref s) if s.contains("Inactive")));
     }
 
-    // Round-trip: McpHttpError to TransportServerError to McpHttpError
+    // Round-trip
 
     #[test]
     fn round_trip_session_id_missing() {
@@ -240,7 +243,7 @@ mod tests {
         assert_eq!(format!("{}", m), format!("{}", back));
     }
 
-    //  Round-trip: TransportServerError > McpHttpError > TransportServerError
+    // Reverse round-trip
 
     #[test]
     fn reverse_round_trip_session_id_missing() {
@@ -296,9 +299,6 @@ mod tests {
     fn mcp_http_result_from_transport_error() {
         let r: TransportServerResult<()> = Err(TransportServerError::SessionIdInvalid("x".into()));
         let m: McpHttpResult<()> = r.map_err(Into::into);
-        assert!(matches!(
-            m.unwrap_err(),
-            McpHttpError::SessionIdInvalid(ref s) if s == "x"
-        ));
+        assert!(matches!(m.unwrap_err(), McpHttpError::SessionIdInvalid(ref s) if s == "x"));
     }
 }

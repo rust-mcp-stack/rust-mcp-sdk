@@ -59,7 +59,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - [Authentication](#authentication)
   - [RemoteAuthProvider](#remoteauthprovider)
   - [OAuthProxy](#oauthproxy)
-- [HyperServerOptions](#hyperserveroptions)
+- [AxumServerOptions](#axumserveroptions)
 - [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
@@ -164,14 +164,15 @@ async fn main() -> SdkResult<()> {
 
 ## Minimal MCP Server (Streamable HTTP)
 Creating an MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup.
-The setup is nearly identical to the stdio example shown above. You only need to create a Hyper server via `hyper_server::create_server()` and pass in the same handler and `HyperServerOptions`.  
+The setup is nearly identical to the stdio example shown above. You only need to install the `rust-mcp-axum` crate and use `create_axum_server()` with `AxumServerOptions`.
 
-💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `HyperServerOptions`.
+💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `AxumServerOptions`.
 
 ```rust
 use async_trait::async_trait;
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,macros,
-    mcp_server::{hyper_server, HyperServerOptions, ServerHandler},schema::*,    
+    mcp_server::ServerHandler,schema::*,
 };
 
 // Define a mcp tool
@@ -232,10 +233,10 @@ async fn main() -> SdkResult<()> {
     };
 
     let handler = HelloHandler::default().to_mcp_server_handler();
-    let server = hyper_server::create_server(
+    let server = create_axum_server(
         server_info,
         handler,
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".to_string(),
             event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
             ..Default::default()
@@ -442,20 +443,20 @@ MCP server can verify tokens issued by other systems, integrate with external id
 
 
 
-## HyperServerOptions
+## AxumServerOptions
 
-HyperServer is a lightweight Axum-based server that streamlines MCP servers by supporting **Streamable HTTP** and **SSE** transports. It supports simultaneous client connections, internal session management, and includes built-in security features like DNS rebinding protection and more.
+AxumServer is a lightweight Axum-based server provided by the `rust-mcp-axum` crate that streamlines MCP servers by supporting **Streamable HTTP** and **SSE** transports. It supports simultaneous client connections, internal session management, and includes built-in security features like DNS rebinding protection and more.
 
-HyperServer is highly customizable through HyperServerOptions provided during initialization.
+AxumServer is highly customizable through AxumServerOptions provided during initialization.
 
-A typical example of creating a HyperServer that exposes the MCP server via Streamable HTTP and SSE transports at:
+A typical example of creating an AxumServer that exposes the MCP server via Streamable HTTP and SSE transports at:
 
 ```rs
 
-let server = hyper_server::create_server(
+let server = create_axum_server(
     server_details,
     handler.to_mcp_server_handler(),
-    HyperServerOptions {
+    AxumServerOptions {
         host: "127.0.0.1".to_string(),
         port: 8080,
         event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
@@ -468,7 +469,7 @@ let server = hyper_server::create_server(
 server.start().await?;
 ```
 
-📝 Refer to [HyperServerOptions](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/hyper_servers/server.rs#L43) for a complete overview of HyperServerOptions attributes and options.
+📝 Refer to [AxumServerOptions](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-axum/src/server.rs#L43) for a complete overview of AxumServerOptions attributes and options.
 
 
 ### Security Considerations
@@ -488,8 +489,6 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 
 - `server`: Activates MCP server capabilities in `rust-mcp-sdk`, providing modules and APIs for building and managing MCP servers.
 - `client`: Activates MCP client capabilities, offering modules and APIs for client development and communicating with MCP servers.
-- `hyper-server`: This feature is necessary to enable `Streamable HTTP` or `Server-Sent Events (SSE)` transports for MCP servers. It must be used alongside the server feature to support the required server functionalities.
-- `ssl`: This feature enables TLS/SSL support for the `Streamable HTTP` or `Server-Sent Events (SSE)` transport when used with the `hyper-server`.
 - `macros`: Provides procedural macros for simplifying the creation and manipulation of MCP Tool structures.
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
@@ -520,7 +519,7 @@ If you only need the MCP Server functionality, you can disable the default featu
 [dependencies]
 rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros","stdio"] }
 ```
-Optionally add `hyper-server` and `streamable-http` for **Streamable HTTP** transport, and `ssl` feature for tls/ssl support of the `hyper-server`
+Optionally add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) and the `streamable-http` feature for **Streamable HTTP** transport, and use `rust-mcp-axum`'s `ssl` feature for TLS/SSL support.
 
 <!-- x-release-please-end -->
 
@@ -557,11 +556,11 @@ Learn when to use the  `mcp_*_handler` traits versus the lower-level `mcp_*_hand
 
 - For `ServerHandler`:
   - Use `server_runtime::create_server()` for servers with stdio transport
-  - Use `hyper_server::create_server()` for servers with sse transport
+  - Use `rust_mcp_axum::create_axum_server()` for servers with Streamable HTTP/SSE transport
 
 - For `ServerHandlerCore`:
   - Use `server_runtime_core::create_server()` for servers with stdio transport
-  - Use `hyper_server_core::create_server()` for servers with sse transport
+  - Use `rust_mcp_axum::create_axum_server()` for servers with Streamable HTTP/SSE transport
 
 ---
 
@@ -609,13 +608,13 @@ While not part of the official MCP spec, `rust-mcp-sdk` provides an optional HTT
 - Exposed behind load balancers or reverse proxies (e.g., NGINX, HAProxy, Cloudflare).
 - Running in container orchestration environments (e.g., Kubernetes, Docker Swarm, AWS ECS).
 
-The health check endpoint is disabled by default. You can enable it and optionally provide your own custom handler (to return specific metrics or metadata) via `HyperServerOptions`:
+The health check endpoint is disabled by default. You can enable it and optionally provide your own custom handler (to return specific metrics or metadata) via `AxumServerOptions`:
 
 ```rs
-let server = hyper_server::create_server(
+let server = create_axum_server(
     server_details,
     handler.to_mcp_server_handler(),
-    HyperServerOptions {
+    AxumServerOptions {
         host: "127.0.0.1".into(),
         health_endpoint: Some("/health".into()),             // enables the endpoint
         health_handler: Some(Arc::new(CustomHealth {})),     // optional: overrides default 200 OK

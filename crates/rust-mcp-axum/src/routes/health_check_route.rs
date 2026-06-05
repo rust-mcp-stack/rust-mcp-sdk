@@ -1,11 +1,12 @@
-use crate::hyper_servers::error::TransportServerResult;
-use crate::mcp_http::McpHttpHandler;
-use crate::{mcp_http::McpAppState, utils::remove_query_and_hash};
+use crate::error::TransportServerResult;
+use crate::utils::remove_query_and_hash;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Extension;
 use axum::Router;
 use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::McpAppState;
+use rust_mcp_sdk::mcp_http::McpHttpHandler;
 use std::sync::Arc;
 
 pub fn routes(health_check_endpoint: &str) -> Router<Arc<McpAppState>> {
@@ -23,7 +24,7 @@ pub fn routes(health_check_endpoint: &str) -> Router<Arc<McpAppState>> {
 // Many load balancers and proxies periodically send health check requests to determine
 // if a backend is still alive.
 //
-// Custom path can be set in HyperServerOptions.
+// Custom path can be set in AxumServerOptions.
 pub async fn handle_health_check(
     headers: HeaderMap,
     uri: Uri,

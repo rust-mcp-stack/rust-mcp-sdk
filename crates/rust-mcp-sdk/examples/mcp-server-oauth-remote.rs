@@ -2,6 +2,7 @@ pub mod common;
 extern crate mcp_extra as rust_mcp_extra; // Prevent release-please from mistakenly treating this dev dependency as a cyclic dependency
 
 use crate::common::ServerHandlerAuth;
+use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
@@ -13,9 +14,7 @@ use rust_mcp_sdk::{
     auth::{AuthMetadataBuilder, RemoteAuthProvider},
     error::SdkResult,
     event_store::InMemoryEventStore,
-    mcp_icon,
-    mcp_server::{hyper_server, HyperServerOptions},
-    ToMcpServerHandler,
+    mcp_icon, ToMcpServerHandler,
 };
 use std::env;
 use std::sync::Arc;
@@ -125,10 +124,10 @@ async fn main() -> SdkResult<()> {
 
     let oauth_metadata_provider = create_oauth_provider().await?;
 
-    let server = hyper_server::create_server(
+    let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
-        HyperServerOptions {
+        AxumServerOptions {
             host: "localhost".into(),
             port: 3000,
             custom_streamable_http_endpoint: Some("/".into()),

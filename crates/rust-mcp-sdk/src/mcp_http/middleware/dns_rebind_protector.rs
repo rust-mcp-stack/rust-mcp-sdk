@@ -45,7 +45,7 @@ use std::sync::Arc;
 /// - Avoid wildcards or overly broad patterns
 /// - For local development, include `localhost:PORT` explicitly
 /// - Never allow raw IP addresses in production allowlists
-pub(crate) struct DnsRebindProtector {
+pub struct DnsRebindProtector {
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
