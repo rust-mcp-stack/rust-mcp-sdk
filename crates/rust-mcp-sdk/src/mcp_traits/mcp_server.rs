@@ -100,7 +100,6 @@ pub trait McpServer: Sync + Send {
     /// Sends a message to the standard error output (stderr) asynchronously.
     async fn stderr_message(&self, message: String) -> SdkResult<()>;
 
-    #[cfg(feature = "hyper-server")]
     fn session_id(&self) -> Option<SessionId>;
 
     async fn send(
@@ -175,14 +174,7 @@ pub trait McpServer: Sync + Send {
         if let ResultFromClient::CreateTaskResult(create_task_result) = &client_response.result {
             if let Some(request_to_store) = request_clone {
                 if let Some(client_task_store) = self.client_task_store() {
-                    let session_id = {
-                        #[cfg(feature = "hyper-server")]
-                        {
-                            self.session_id()
-                        }
-                        #[cfg(not(feature = "hyper-server"))]
-                        None
-                    };
+                    let session_id = self.session_id();
                     client_task_store
                         .create_task(
                             CreateTaskOptions {

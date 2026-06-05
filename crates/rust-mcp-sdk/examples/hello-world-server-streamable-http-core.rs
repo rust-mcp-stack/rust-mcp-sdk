@@ -6,17 +6,14 @@ use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
 
+use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
-    error::SdkResult,
-    event_store::InMemoryEventStore,
-    mcp_icon,
-    mcp_server::{hyper_server, HyperServerOptions, ServerHandler},
-    task_store::InMemoryTaskStore,
-    ToMcpServerHandlerCore,
+    error::SdkResult, event_store::InMemoryEventStore, mcp_icon, mcp_server::ServerHandlerCore,
+    task_store::InMemoryTaskStore, ToMcpServerHandlerCore,
 };
 use std::sync::Arc;
 
-pub struct AppState<H: ServerHandler> {
+pub struct AppState<H: ServerHandlerCore> {
     pub server_details: InitializeResult,
     pub handler: H,
 }
@@ -57,11 +54,11 @@ async fn main() -> SdkResult<()> {
     // STEP 2: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandlerCore {};
 
-    // STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
-    let server = hyper_server::create_server(
+    // STEP 3: instantiate AxumServer, providing `server_details` , `handler` and AxumServerOptions
+    let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".into(),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             task_store: Some(Arc::new(InMemoryTaskStore::new(None))),

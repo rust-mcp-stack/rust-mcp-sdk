@@ -6,7 +6,7 @@ use crate::common::{
     init_tracing, read_sse_event, sample_tools::TaskAugmentedTool, send_post_request,
     task_runner::TaskJobInfo, ONE_MILLISECOND,
 };
-use hyper::StatusCode;
+use http::StatusCode;
 use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     schema_utils::{ClientJsonrpcRequest, RequestFromClient},
@@ -96,7 +96,7 @@ async fn test_server_task_normal() {
         )
     );
 
-    let store = server.hyper_runtime.task_store().unwrap().clone();
+    let store = server.axum_runtime.task_store().unwrap().clone();
     let task_result = store
         .get_task_result(&create_task_result.task.task_id, Some(session_id))
         .await
@@ -109,8 +109,8 @@ async fn test_server_task_normal() {
     let text_content = task_result.content[0].as_text_content().unwrap();
     assert_eq!(text_content.text, "task-completed");
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 #[tokio::test]
@@ -131,17 +131,17 @@ async fn test_server_task_wait_for_result() {
     let elicit_params: ElicitRequestParams =
         UserEmail::elicit_request_params().with_task(TaskMetadata { ttl: Some(10000) });
 
-    let hyper_server = Arc::new(server.hyper_runtime);
-    let hyper_server_clone = hyper_server.clone();
+    let axum_server = Arc::new(server.axum_runtime);
+    let axum_server_clone = axum_server.clone();
 
     let session_id_clone = session_id.clone();
     tokio::spawn(async move {
-        let task_result = hyper_server_clone
+        let task_result = axum_server_clone
             .request_elicitation_task(&session_id_clone, elicit_params)
             .await
             .unwrap();
 
-        let task_store = hyper_server_clone.client_task_store().unwrap();
+        let task_store = axum_server_clone.client_task_store().unwrap();
         let task_result = task_store
             .wait_for_task_result(&task_result.task.task_id, Some(session_id_clone))
             .await
@@ -234,5 +234,5 @@ async fn test_server_task_wait_for_result() {
     .await
     .expect("Request failed");
 
-    hyper_server.graceful_shutdown(ONE_MILLISECOND);
+    axum_server.graceful_shutdown(ONE_MILLISECOND);
 }

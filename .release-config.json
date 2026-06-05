@@ -122,6 +122,34 @@
           "path": "CHANGELOG.md"
         }
       ]
+    },
+    "crates/rust-mcp-axum": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
+    },
+    "crates/rust-mcp-actix": {
+      "release-type": "rust",
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelogPath": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "CHANGELOG.md"
+        }
+      ]
     }
   }
 }

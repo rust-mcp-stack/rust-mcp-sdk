@@ -18,7 +18,6 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
 use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
-#[cfg(feature = "hyper-server")]
 use rust_mcp_transport::SessionId;
 use rust_mcp_transport::{IoStream, TaskId, TransportDispatcher};
 use std::panic;
@@ -47,7 +46,6 @@ pub struct ServerRuntime {
     handler: Arc<dyn McpServerHandler>,
     // Information about the server
     server_details: Arc<InitializeResult>,
-    #[cfg(feature = "hyper-server")]
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
     request_id_gen: Box<dyn RequestIdGen>,
@@ -310,7 +308,6 @@ impl McpServer for ServerRuntime {
         Ok(())
     }
 
-    #[cfg(feature = "hyper-server")]
     fn session_id(&self) -> Option<SessionId> {
         self.session_id.to_owned()
     }
@@ -615,7 +612,6 @@ impl ServerRuntime {
         }
     }
 
-    #[cfg(feature = "hyper-server")]
     pub(crate) fn new_instance(
         server_details: Arc<InitializeResult>,
         handler: Arc<dyn McpServerHandler>,
@@ -644,7 +640,7 @@ impl ServerRuntime {
         })
     }
 
-    pub(crate) async fn poll_task_status(
+    pub async fn poll_task_status(
         self: Arc<ServerRuntime>,
         task_id: TaskId,
         session_id: Option<String>,
@@ -691,7 +687,6 @@ impl ServerRuntime {
         let runtime = Arc::new(Self {
             server_details: Arc::new(options.server_details),
             handler: options.handler,
-            #[cfg(feature = "hyper-server")]
             session_id: None,
             transport_map: tokio::sync::RwLock::new(Some(Arc::new(options.transport))),
             client_details_tx,

@@ -1,10 +1,8 @@
-use crate::{
-    hyper_servers::error::TransportServerResult,
-    mcp_http::{McpAppState, McpHttpHandler},
-    utils::remove_query_and_hash,
-};
+use crate::error::TransportServerResult;
+use crate::utils::remove_query_and_hash;
 use axum::{extract::State, response::IntoResponse, routing::post, Extension, Router};
 use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::sync::Arc;
 
 pub fn routes(sse_message_endpoint: &str) -> Router<Arc<McpAppState>> {
