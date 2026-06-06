@@ -24,16 +24,12 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 
-axum = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4"] }
 tokio-stream = { workspace = true, optional = true }
-axum-server = { version = "0.8", features = [], optional = true }
 tracing.workspace = true
 base64.workspace = true
 bytes.workspace = true
 
-# rustls = { workspace = true, optional = true }
-hyper = { version = "1.6.0", optional = true }
 http = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
@@ -55,6 +51,7 @@ colored = "3.0.0"
 reqwest = {workspace = true, features = [ "json"]}
 tokio = { workspace=true, features = ["full", "test-util"] }
 mcp-extra={path="../rust-mcp-extra", package = "rust-mcp-extra"}
+mcp-axum={path="../rust-mcp-axum", package = "rust-mcp-axum"}
 tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "std",
@@ -70,20 +67,15 @@ default = [
     "stdio",
     "sse",
     "streamable-http",
-    "hyper-server",
-    "ssl"
-] # All features enabled by default
+]
 
-sse = ["rust-mcp-transport/sse","http","http-body","http-body-util"]
-streamable-http = ["rust-mcp-transport/streamable-http","http","http-body","http-body-util"]
+sse = ["rust-mcp-transport/sse","http","http-body","http-body-util","tokio-stream"]
+streamable-http = ["rust-mcp-transport/streamable-http","http","http-body","http-body-util","tokio-stream"]
 stdio = ["rust-mcp-transport/stdio"]
 auth=["url","jsonwebtoken/aws_lc_rs","reqwest"]
 
-server = []                                                               # Server feature
-client = []                                                               # Client feature
-hyper-server = ["axum", "axum-server", "hyper", "server", "streamable-http", "tokio-stream","http","http-body","http-body-util"]
-ssl = ["axum-server/tls-rustls"]
-tls-no-provider = ["axum-server/tls-rustls-no-provider"]
+server = []
+client = []
 macros = ["rust-mcp-macros/sdk"]
 
 

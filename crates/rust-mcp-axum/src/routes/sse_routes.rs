@@ -1,7 +1,7 @@
-use crate::hyper_servers::error::TransportServerResult;
-use crate::mcp_http::{McpAppState, McpHttpHandler};
+use crate::error::TransportServerResult;
 use axum::{extract::State, response::IntoResponse, routing::get, Extension, Router};
 use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::sync::Arc;
 
 #[derive(Clone)]

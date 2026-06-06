@@ -1,9 +1,9 @@
-use crate::hyper_servers::error::TransportServerResult;
-use crate::mcp_http::{McpAppState, McpHttpHandler};
+use crate::error::TransportServerResult;
 use axum::routing::any;
 use axum::Extension;
 use axum::{extract::State, response::IntoResponse, Router};
 use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::sync::Arc;
 
 pub fn routes(mcp_handler: Arc<McpHttpHandler>) -> Router<Arc<McpAppState>> {
@@ -16,7 +16,6 @@ pub fn routes(mcp_handler: Arc<McpHttpHandler>) -> Router<Arc<McpAppState>> {
         })
 }
 
-#[cfg(feature = "auth")]
 pub async fn handle_auth_request(
     method: Method,
     uri: Uri,

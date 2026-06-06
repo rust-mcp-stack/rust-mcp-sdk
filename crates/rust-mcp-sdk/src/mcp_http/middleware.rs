@@ -8,9 +8,9 @@ use super::types::{GenericBody, RequestHandler};
 use crate::mcp_http::McpHttpResult;
 use crate::mcp_http::{McpAppState, MiddlewareNext};
 #[cfg(feature = "auth")]
-pub(crate) use auth_middleware::*;
+pub use auth_middleware::*;
 pub use cors_middleware::*;
-pub(crate) use dns_rebind_protector::*;
+pub use dns_rebind_protector::*;
 use http::{Request, Response};
 use std::sync::Arc;
 

@@ -1,5 +1,4 @@
-use crate::hyper_servers::error::TransportServerResult;
-use crate::mcp_http::{McpAppState, McpHttpHandler};
+use crate::error::TransportServerResult;
 use axum::routing::get;
 use axum::Extension;
 use axum::{
@@ -9,6 +8,7 @@ use axum::{
     Router,
 };
 use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::{collections::HashMap, sync::Arc};
 
 pub fn routes(streamable_http_endpoint: &str) -> Router<Arc<McpAppState>> {

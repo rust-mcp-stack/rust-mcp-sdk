@@ -1,9 +1,9 @@
-use crate::mcp_http::McpAppState;
 use axum::{
     http::{StatusCode, Uri},
     response::IntoResponse,
     Router,
 };
+use rust_mcp_sdk::mcp_http::McpAppState;
 use std::sync::Arc;
 
 pub fn routes() -> Router<Arc<McpAppState>> {
