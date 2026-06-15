@@ -1,3 +1,4 @@
+use super::resolve_audience;
 use crate::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
@@ -7,7 +8,7 @@ use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::{BodyExt, Full};
 use rust_mcp_sdk::{
     auth::{
-        create_discovery_endpoints, AuthInfo, AuthMetadataBuilder, AuthProvider,
+        create_discovery_endpoints, Audience, AuthInfo, AuthMetadataBuilder, AuthProvider,
         AuthenticationError, AuthorizationServerMetadata, OauthEndpoint,
         OauthProtectedResourceMetadata, OauthTokenVerifier,
     },
@@ -55,6 +56,13 @@ pub struct KeycloakAuthOptions<'a> {
     pub resource_name: Option<String>,
     /// Documentation URL for this resource (optional)
     pub resource_documentation: Option<String>,
+    /// Audience to validate the token's `aud` claim against.
+    /// When `None`, the audience defaults to `mcp_server_url` (the resource
+    /// identifier), unless `disable_audience_validation` is set.
+    pub validate_audience: Option<Audience>,
+    /// Disables audience validation entirely. Strongly discouraged: without it a
+    /// token issued for another resource can be replayed against this server.
+    pub disable_audience_validation: bool,
 }
 
 /// Keycloak integration implementing `AuthProvider` for MCP servers.
@@ -165,11 +173,17 @@ impl KeycloakAuthProvider {
             tracing::warn!("Keycloak token verification is missing both Introspection and UserInfo strategies. Please provide client_id and client_secret, or ensure openid is included as a required scope.")
         };
 
+        let validate_audience = resolve_audience(
+            options.disable_audience_validation,
+            options.validate_audience.take(),
+            &options.mcp_server_url,
+        );
+
         let token_verifier: Box<dyn OauthTokenVerifier> = match options.token_verifier {
             Some(verifier) => verifier,
             None => Box::new(GenericOauthTokenVerifier::new(TokenVerifierOptions {
                 strategies,
-                validate_audience: None,
+                validate_audience,
                 validate_issuer: Some(options.keycloak_base_url.clone()),
                 cache_capacity: None,
             })?),

@@ -1,3 +1,4 @@
+use super::resolve_audience;
 use crate::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
@@ -7,7 +8,7 @@ use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::{BodyExt, Full};
 use rust_mcp_sdk::{
     auth::{
-        create_discovery_endpoints, AuthInfo, AuthMetadataBuilder, AuthProvider,
+        create_discovery_endpoints, Audience, AuthInfo, AuthMetadataBuilder, AuthProvider,
         AuthenticationError, AuthorizationServerMetadata, OauthEndpoint,
         OauthProtectedResourceMetadata, OauthTokenVerifier,
     },
@@ -43,6 +44,13 @@ pub struct ScalekitAuthOptions<'a> {
     /// Optional custom token verifier.
     /// If omitted, a default JWK-based [`GenericOauthTokenVerifier`] is created.
     pub token_verifier: Option<Box<dyn OauthTokenVerifier>>,
+    /// Audience to validate the token's `aud` claim against.
+    /// When `None`, the audience defaults to `mcp_server_url` (the resource
+    /// identifier), unless `disable_audience_validation` is set.
+    pub validate_audience: Option<Audience>,
+    /// Disables audience validation entirely. Strongly discouraged: without it a
+    /// token issued for another resource can be replayed against this server.
+    pub disable_audience_validation: bool,
 }
 
 /// MCP OAuth provider implementation for Scalekit.
@@ -108,7 +116,7 @@ impl ScalekitAuthProvider {
 
         let mut builder = AuthMetadataBuilder::from_discovery_url(
             discovery_url.as_str(),
-            options.mcp_server_url,
+            options.mcp_server_url.clone(),
             required_scopes.clone(),
         )
         .await
@@ -149,11 +157,17 @@ impl ScalekitAuthProvider {
             });
         };
 
+        let validate_audience = resolve_audience(
+            options.disable_audience_validation,
+            options.validate_audience.take(),
+            &options.mcp_server_url,
+        );
+
         let token_verifier: Box<dyn OauthTokenVerifier> = match options.token_verifier {
             Some(verifier) => verifier,
             None => Box::new(GenericOauthTokenVerifier::new(TokenVerifierOptions {
                 strategies: vec![VerificationStrategies::JWKs { jwks_uri }],
-                validate_audience: None,
+                validate_audience,
                 validate_issuer: Some(issuer.to_string().trim_end_matches("/").to_string()),
                 cache_capacity: None,
             })?),
