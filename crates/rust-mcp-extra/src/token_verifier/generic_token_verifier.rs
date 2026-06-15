@@ -915,9 +915,7 @@ mod tests {
     async fn test_with_allowed_algorithms_rejects_restricted_allowlist() {
         let server = OAuthTestServer::start().await;
         let client = server
-            .register_client(
-                json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }),
-            )
+            .register_client(json!({ "scope": "openid", "redirect_uris": ["http://localhost"] }))
             .await;
 
         let verifier = token_verifier(
@@ -930,8 +928,7 @@ mod tests {
         .await
         .with_allowed_algorithms(vec![Algorithm::ES256]);
 
-        let token = server
-            .generate_jwt(&client, server.jwt_options().user_id("hal").build());
+        let token = server.generate_jwt(&client, server.jwt_options().user_id("hal").build());
 
         let err = verifier.verify_token(token).await.unwrap_err();
         assert!(matches!(
