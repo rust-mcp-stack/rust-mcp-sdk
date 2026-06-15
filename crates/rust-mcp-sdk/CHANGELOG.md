@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.10.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.9.0...rust-mcp-sdk-v0.10.0) (2026-06-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146))
+* extract Axum to standalone rust-mcp-axum crate
+
+### 🚀 Features
+
+* Add allowlist override for JWKS algorithms ([ee680a8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ee680a8e3ffd4cc5e3c742c619b63c1cba063e43))
+* Extract Axum to standalone rust-mcp-axum crate ([0bd6cf6](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0bd6cf6721b25c1066c702d2bdf752143ad2ecf3))
+* Extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146)) ([ddc5600](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ddc56001cd561aef0eccadd0c3bb788c176575ff))
+* Introduce framework-agnostic McpHttpError type ([4199845](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/41998454b9b99b74be090b66aa862211ecfd420b))
+* Introduce framework-agnostic McpHttpError type ([#143](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/143)) ([2e3c4ca](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/2e3c4ca25dc2c0eb1d21e7b1be3a2fee7edee8b3))
+
+
+### 🐛 Bug Fixes
+
+* **auth:** Pin JWT validation algorithms to an allowlist ([#148](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/148)) ([c1ee180](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/c1ee1808145fb29ef95b273fdb30bb7139e959eb))
+* **auth:** Validate token audience by default ([#149](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/149)) ([1f714bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1f714bf728caefcc1f4c07d853ce90b2622456a1))
+
+
+### 🚜 Code Refactoring
+
+* Switch mcp http to framework-agnostic McpHttpError  ([#144](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/144)) ([e0c44c0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e0c44c0e4f8aaed9bfc59b9274d11c346646a635))
+* Switch mcp_http layer to framework-agnostic McpHttpError ([afaf4b1](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/afaf4b1ebfe070f565a1857ed707da678b9d16ae))
+
 ## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.3...rust-mcp-sdk-v0.9.0) (2026-03-13)
 
 
