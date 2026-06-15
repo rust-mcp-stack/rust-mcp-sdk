@@ -21,6 +21,8 @@ async fn main() -> SdkResult<()> {
         token_verifier: None,
         resource_name: Some("Scalekit Oauth Test MCP Server".to_string()),
         resource_documentation: None,
+        validate_audience: None,
+        disable_audience_validation: false,
         environment_url: env::var("ENVIRONMENT_URL")
             .expect("Please set 'ENVIRONMENT_URL' evnrionment variable and try again."),
         resource_id: env::var("RESOURCE_ID")
