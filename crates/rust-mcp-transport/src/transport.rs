@@ -31,11 +31,19 @@ pub struct TransportOptions {
     /// This value defines the maximum amount of time to wait for a response before
     /// considering the request as timed out.
     pub timeout: Duration,
+
+    /// Capacity of the incoming-message channel buffer.
+    ///
+    /// A larger value smooths out head-of-line jitter under bursty traffic at
+    /// the cost of more buffered memory. Defaults to
+    /// [`DEFAULT_MESSAGE_CHANNEL_CAPACITY`](crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY).
+    pub channel_capacity: usize,
 }
 impl Default for TransportOptions {
     fn default() -> Self {
         Self {
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MSEC),
+            channel_capacity: crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
         }
     }
 }
@@ -183,3 +191,25 @@ where
 //         Ok(self)
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_channel_capacity_matches_constant() {
+        assert_eq!(
+            TransportOptions::default().channel_capacity,
+            crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY
+        );
+    }
+
+    #[test]
+    fn channel_capacity_is_overridable() {
+        let options = TransportOptions {
+            channel_capacity: 256,
+            ..Default::default()
+        };
+        assert_eq!(options.channel_capacity, 256);
+    }
+}

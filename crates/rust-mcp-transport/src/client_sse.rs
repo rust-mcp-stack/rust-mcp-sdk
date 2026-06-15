@@ -324,6 +324,7 @@ where
             self.pending_requests.clone(),
             self.request_timeout,
             cancellation_token,
+            crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
         );
 
         self.set_message_sender(sender).await;
