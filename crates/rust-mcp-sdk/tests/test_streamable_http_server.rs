@@ -1936,9 +1936,10 @@ async fn should_reject_malformed_session_id_header() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let error_data: SdkError = response.json().await.unwrap();
     assert!(error_data.message.contains("Invalid Mcp-Session-Id header"));
+    assert!(error_data.message.contains("exceeds maximum length"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should return 400 error for invalid JSON-RPC messages

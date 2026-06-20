@@ -358,10 +358,11 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id = match parse_session_id_header(headers) {
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
             Ok(id) => id,
-            Err(()) => {
-                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
                 return error_response(StatusCode::BAD_REQUEST, error);
             }
         };
@@ -412,18 +413,23 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id = match parse_session_id_header(headers) {
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
             Ok(id) => id,
-            Err(()) => {
-                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
                 return error_response(StatusCode::BAD_REQUEST, error);
             }
         };
 
-        let last_event_id: Option<SessionId> = headers
-            .get(MCP_LAST_EVENT_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let last_event_id = match parse_session_id_header(headers, MCP_LAST_EVENT_ID_HEADER) {
+            Ok(id) => id,
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Last-Event-Id header: {msg}").as_str());
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let response = match session_id {
             Some(session_id) => {
@@ -453,10 +459,11 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id = match parse_session_id_header(headers) {
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
             Ok(id) => id,
-            Err(()) => {
-                let error = SdkError::bad_request().with_message("Invalid Mcp-Session-Id header");
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
                 return error_response(StatusCode::BAD_REQUEST, error);
             }
         };
@@ -473,51 +480,151 @@ impl McpHttpHandler {
     }
 }
 
-/// Maximum accepted length (in bytes) of the `Mcp-Session-Id` header.
+/// Maximum accepted length (in bytes) of the `Mcp-Session-Id`
+/// and `Mcp-Last-Event-Id` headers.
 const MAX_SESSION_ID_LEN: usize = 128;
 
-/// Returns true if the session id is non-empty, within the length cap, and uses
-/// only URL-safe characters (covers UUIDs, base64url, and prefixed ids).
-fn is_valid_session_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= MAX_SESSION_ID_LEN
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~'))
+/// Returns `Ok(())` if the session ID is non-empty, within the length cap,
+/// and contains only printable ASCII non-whitespace characters.
+fn is_valid_session_id(value: &str) -> Result<(), &'static str> {
+    if value.is_empty() {
+        return Err("session ID must not be empty");
+    }
+    if value.len() > MAX_SESSION_ID_LEN {
+        return Err("session ID exceeds maximum length of 128 bytes");
+    }
+    if !value.bytes().all(|b| b.is_ascii_graphic() && b != b' ') {
+        return Err("session ID contains invalid characters");
+    }
+    Ok(())
 }
 
-/// Extracts and validates the `Mcp-Session-Id` header.
+/// Extracts and validates a session-id-like header.
 ///
-/// Returns `Ok(None)` when the header is absent, `Ok(Some(id))` when present and
-/// valid, and `Err(())` when present but oversized or malformed. Validating up
-/// front avoids unbounded allocations and map lookups from a hostile value.
-fn parse_session_id_header(headers: &HeaderMap) -> Result<Option<SessionId>, ()> {
-    match headers.get(MCP_SESSION_ID_HEADER) {
+/// Returns `Ok(None)` when the header is absent, `Ok(Some(id))` when present
+/// and valid, and `Err(msg)` when present but invalid. Validating up front
+/// avoids unbounded allocations and map lookups from a hostile value.
+fn parse_session_id_header(
+    headers: &HeaderMap,
+    header_name: &str,
+) -> Result<Option<SessionId>, &'static str> {
+    match headers.get(header_name) {
         None => Ok(None),
-        Some(value) => match value.to_str() {
-            Ok(s) if is_valid_session_id(s) => Ok(Some(s.to_string())),
-            _ => Err(()),
-        },
+        Some(value) => {
+            let s = value
+                .to_str()
+                .map_err(|_| "session ID is not valid UTF-8")?;
+            is_valid_session_id(s)?;
+            Ok(Some(s.to_string()))
+        }
     }
 }
 
 #[cfg(test)]
 mod session_id_tests {
     use super::*;
+    use http::HeaderValue;
+
+    // ── valid IDs ──
 
     #[test]
-    fn accepts_uuid_and_prefixed_ids() {
-        assert!(is_valid_session_id("550e8400-e29b-41d4-a716-446655440000"));
-        assert!(is_valid_session_id("tsk_abcDEF123"));
-        assert!(is_valid_session_id("s_0001"));
+    fn accepts_uuid() {
+        assert!(is_valid_session_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
     }
 
     #[test]
-    fn rejects_empty_oversized_and_bad_charset() {
-        assert!(!is_valid_session_id(""));
-        assert!(!is_valid_session_id(&"a".repeat(MAX_SESSION_ID_LEN + 1)));
-        assert!(!is_valid_session_id("has space"));
-        assert!(!is_valid_session_id("../etc/passwd"));
-        assert!(!is_valid_session_id("naïve"));
+    fn accepts_prefixed_ids() {
+        assert!(is_valid_session_id("tsk_abcDEF123").is_ok());
+        assert!(is_valid_session_id("s_0001").is_ok());
+    }
+
+    #[test]
+    fn accepts_dot_and_tilde() {
+        assert!(is_valid_session_id("session.id").is_ok());
+        assert!(is_valid_session_id("session~id").is_ok());
+    }
+
+    #[test]
+    fn accepts_base64url() {
+        assert!(is_valid_session_id("aGVsbG8td29ybGQ").is_ok());
+    }
+
+    #[test]
+    fn accepts_exact_max_length() {
+        let id = "a".repeat(MAX_SESSION_ID_LEN);
+        assert!(is_valid_session_id(&id).is_ok());
+    }
+
+    // ── invalid IDs ──
+
+    #[test]
+    fn rejects_empty() {
+        let err = is_valid_session_id("").unwrap_err();
+        assert!(err.contains("must not be empty"));
+    }
+
+    #[test]
+    fn rejects_oversized() {
+        let id = "a".repeat(MAX_SESSION_ID_LEN + 1);
+        let err = is_valid_session_id(&id).unwrap_err();
+        assert!(err.contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn rejects_whitespace() {
+        let err = is_valid_session_id("has space").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_control_chars() {
+        let err = is_valid_session_id("tab\there").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_newline() {
+        let err = is_valid_session_id("line\nbreak").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_non_ascii() {
+        let err = is_valid_session_id("naïve").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_null_byte() {
+        let err = is_valid_session_id("bad\0id").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    // ── header-level parsing ──
+
+    #[test]
+    fn parse_session_id_absent_returns_none() {
+        let headers = HeaderMap::new();
+        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_session_id_valid_returns_some() {
+        let mut headers = HeaderMap::new();
+        headers.insert("mcp-session-id", "test-session".parse().unwrap());
+        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
+        assert_eq!(result, Some("test-session".to_string()));
+    }
+
+    #[test]
+    fn parse_session_id_invalid_returns_err() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "mcp-session-id",
+            HeaderValue::from_bytes(b"\xFF\xFE").unwrap(),
+        );
+        let err = parse_session_id_header(&headers, "mcp-session-id").unwrap_err();
+        assert!(err.contains("not valid UTF-8"));
     }
 }
