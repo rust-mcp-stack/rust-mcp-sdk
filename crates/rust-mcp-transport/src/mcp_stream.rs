@@ -132,7 +132,7 @@ impl MCPStream {
                                 continue;
                             }
                             Ok(LineRead::Line(line)) => {
-                                tracing::trace!("raw payload: {}", line);
+                                tracing::trace!("raw payload: {}", &line[..line.len().min(1024)]);
 
                                 // deserialize and send it to the stream
                                 let message: X = match serde_json::from_str(&line) {
@@ -278,5 +278,46 @@ mod tests {
         data.extend_from_slice(b"ok\n");
         let out = collect_lines(&data, 10).await;
         assert_eq!(out, vec![Err("too-long"), Ok("ok".to_string())]);
+    }
+
+    #[tokio::test]
+    async fn accepts_line_at_exact_max() {
+        let data = format!("{}\n", "a".repeat(10));
+        let out = collect_lines(data.as_bytes(), 10).await;
+        assert_eq!(out, vec![Ok("a".repeat(10))]);
+    }
+
+    #[tokio::test]
+    async fn resyncs_after_consecutive_oversized_lines() {
+        let mut data = vec![b'a'; 100];
+        data.push(b'\n');
+        data.extend_from_slice(b"too-big-again\nok\n");
+        let out = collect_lines(&data, 10).await;
+        assert_eq!(
+            out,
+            vec![Err("too-long"), Err("too-long"), Ok("ok".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn reads_empty_line() {
+        let out = collect_lines(b"\nok\n", 1024).await;
+        assert_eq!(out, vec![Ok("".to_string()), Ok("ok".to_string())]);
+    }
+
+    #[tokio::test]
+    async fn drops_line_just_above_max() {
+        let mut data = vec![b'a'; 11];
+        data.push(b'\n');
+        data.extend_from_slice(b"ok\n");
+        let out = collect_lines(&data, 10).await;
+        assert_eq!(out, vec![Err("too-long"), Ok("ok".to_string())]);
+    }
+
+    #[tokio::test]
+    async fn handles_crlf_at_exact_max() {
+        let data = format!("{}\r\n", "a".repeat(9));
+        let out = collect_lines(data.as_bytes(), 10).await;
+        assert_eq!(out, vec![Ok("a".repeat(9))]);
     }
 }
