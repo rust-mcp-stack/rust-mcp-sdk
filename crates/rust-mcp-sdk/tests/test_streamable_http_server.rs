@@ -1815,6 +1815,32 @@ async fn should_handle_elicitation() {
     server.axum_runtime.await_server().await.unwrap();
 }
 
+// should reject request bodies that exceed the configured size limit
+#[tokio::test]
+async fn should_reject_oversized_request_body() {
+    let server_options = HyperServerOptions {
+        port: random_port(),
+        session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
+            "AAA-BBB-CCC".to_string()
+        ]))),
+        max_request_body_size: Some(1024),
+        ..Default::default()
+    };
+
+    let server = create_start_server(server_options).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let oversized_body = "x".repeat(4096);
+    let response = send_post_request(&server.streamable_url, &oversized_body, None, None)
+        .await
+        .expect("Request failed");
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.hyper_runtime.await_server().await.unwrap()
+}
+
 // should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
 // NA: should reject second initialization request
