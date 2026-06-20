@@ -1,7 +1,7 @@
 use crate::options::ActixServerOptions;
 use crate::ActixRuntime;
 use rust_mcp_sdk::mcp_http::middleware::AuthMiddleware;
-use rust_mcp_sdk::mcp_http::Middleware;
+use rust_mcp_sdk::mcp_http::{resolve_dns_middleware, Middleware};
 use rust_mcp_sdk::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
@@ -49,6 +49,15 @@ impl ActixServer {
         });
 
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
+
+        if let Some(dns) = resolve_dns_middleware(
+            &mut server_options.dns_rebinding,
+            &server_options.host,
+            server_options.port,
+        ) {
+            middlewares.push(Arc::new(dns));
+        }
+
         if let Some(auth_provider) = server_options.auth.take() {
             middlewares.push(Arc::new(AuthMiddleware::new(auth_provider)));
         }

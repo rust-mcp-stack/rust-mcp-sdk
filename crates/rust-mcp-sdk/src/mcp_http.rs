@@ -8,6 +8,8 @@ pub mod mount;
 pub mod middleware;
 mod types;
 
+mod dns_rebinding;
+
 pub use app_state::*;
 pub use error::*;
 pub use http_utils::*;
@@ -16,6 +18,7 @@ pub use mount::*;
 
 pub use types::*;
 
+pub use dns_rebinding::*;
 pub use health_handler::*;
 pub use http;
 pub use middleware::Middleware;
