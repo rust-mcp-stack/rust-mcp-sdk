@@ -23,6 +23,12 @@ pub enum IoStream {
     Writable(Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>),
 }
 
+/// Maximum size (in bytes) of a single newline-delimited incoming message
+/// for all transports (stdio, SSE, streamable HTTP). Messages exceeding
+/// this limit are dropped silently; increase this value if you expect
+/// large tool results or responses.
+pub const DEFAULT_MAX_LINE_LENGTH: usize = 16 * 1024 * 1024;
+
 /// Configuration for the transport layer
 #[derive(Debug, Clone)]
 pub struct TransportOptions {
@@ -31,11 +37,19 @@ pub struct TransportOptions {
     /// This value defines the maximum amount of time to wait for a response before
     /// considering the request as timed out.
     pub timeout: Duration,
+    /// Maximum size (in bytes) of a single newline-delimited incoming message.
+    ///
+    /// Messages exceeding this limit are dropped and logged with a warning;
+    /// the stream stays alive and resumes on the next line. If you expect
+    /// large tool results or responses, increase this value.
+    /// Default: 16 MiB.
+    pub max_line_length: usize,
 }
 impl Default for TransportOptions {
     fn default() -> Self {
         Self {
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MSEC),
+            max_line_length: DEFAULT_MAX_LINE_LENGTH,
         }
     }
 }
