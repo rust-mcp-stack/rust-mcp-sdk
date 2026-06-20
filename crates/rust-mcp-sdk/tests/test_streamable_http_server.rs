@@ -1854,6 +1854,40 @@ async fn should_reject_oversized_request_body() {
     server.axum_runtime.await_server().await.unwrap()
 }
 
+// should reject new sessions once the store reaches its capacity
+#[tokio::test]
+async fn should_reject_new_session_when_at_capacity() {
+    let server_options = HyperServerOptions {
+        port: random_port(),
+        max_sessions: Some(1),
+        ..Default::default()
+    };
+
+    let server = create_start_server(server_options).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let init = ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request());
+    let body = serde_json::to_string(&init).unwrap();
+
+    // first session is accepted
+    let first = send_post_request(&server.streamable_url, &body, None, None)
+        .await
+        .expect("Request failed");
+    assert_eq!(first.status(), StatusCode::OK);
+
+    // second session is rejected: the store is full
+    let second = send_post_request(&server.streamable_url, &body, None, None)
+        .await
+        .expect("Request failed");
+    assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    // keep the first session's stream open until the assertions complete
+    drop(first);
+
+    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.hyper_runtime.await_server().await.unwrap()
+}
+
 // should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
 // NA: should reject second initialization request
