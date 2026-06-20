@@ -144,7 +144,8 @@ pub struct AxumServerOptions {
     pub allowed_origins: Option<Vec<String>>,
 
     /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is false for backwards compatibility.
+    /// Default is `true`; a startup warning is logged if neither `allowed_hosts`
+    /// nor `allowed_origins` is set. Set to `false` to opt out.
     pub dns_rebinding_protection: bool,
 
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
@@ -330,7 +331,7 @@ impl Default for AxumServerOptions {
             sse_support: true,
             allowed_hosts: None,
             allowed_origins: None,
-            dns_rebinding_protection: false,
+            dns_rebinding_protection: true,
             event_store: None,
             auth: None,
             task_store: None,
@@ -387,6 +388,17 @@ impl AxumServer {
 
         // populate middlewares
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
+        if server_options.dns_rebinding_protection
+            && server_options.allowed_hosts.is_none()
+            && server_options.allowed_origins.is_none()
+        {
+            tracing::warn!(
+                "DNS-rebinding protection is enabled but neither `allowed_hosts` nor \
+                 `allowed_origins` is configured, so Host/Origin validation is not enforced. \
+                 Set `allowed_hosts`/`allowed_origins`, or set `dns_rebinding_protection = false` \
+                 to silence this warning."
+            );
+        }
         if server_options.needs_dns_protection() {
             //dns pritection middleware
             middlewares.push(Arc::new(DnsRebindProtector::new(
