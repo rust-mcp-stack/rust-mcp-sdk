@@ -476,7 +476,7 @@ server.start().await?;
 
 When using Streamable HTTP transport, following security best practices are recommended:
 
-- Enable DNS rebinding protection and provide proper `allowed_hosts` and `allowed_origins` to prevent DNS rebinding attacks.
+- DNS rebinding protection is enabled by default. If `allowed_hosts` is not set, it auto-derives from `host:port` (e.g. `127.0.0.1:8080`). For wildcard binds (`0.0.0.0`, `::`), explicitly configure `allowed_hosts`.
 - When running locally, bind only to localhost (127.0.0.1 / localhost) rather than all network interfaces (0.0.0.0)
 - Use TLS/HTTPS for production deployments
 

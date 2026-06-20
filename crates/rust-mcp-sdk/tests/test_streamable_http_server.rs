@@ -20,6 +20,7 @@ use rust_mcp_schema::{
     CallToolRequestParams, ElicitResult, ElicitResultContent, ListRootsResult, LoggingLevel,
     LoggingMessageNotificationParams, RequestId, ServerRequest,
 };
+use rust_mcp_sdk::mcp_http::DnsRebindingOptions;
 use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
@@ -1228,8 +1229,10 @@ async fn should_accept_requests_with_allowed_host_headers() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["127.0.0.1:9090".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["127.0.0.1:9090".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1267,8 +1270,10 @@ async fn should_reject_requests_with_disallowed_host_headers() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["example.com:3001".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["example.com:3001".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1300,8 +1305,10 @@ async fn should_reject_get_requests_with_disallowed_host_headers() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["example.com:3001".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["example.com:3001".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1336,11 +1343,13 @@ async fn should_accept_requests_with_allowed_origin_headers() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_origins: Some(vec![
-            "http://localhost:3000".to_string(),
-            "https://example.com".to_string(),
-        ]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_origins: Some(vec![
+                "http://localhost:3000".to_string(),
+                "https://example.com".to_string(),
+            ]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1386,8 +1395,10 @@ async fn should_reject_requests_with_disallowed_origin_headers() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_origins: Some(vec!["http://localhost:3000".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_origins: Some(vec!["http://localhost:3000".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1430,9 +1441,11 @@ async fn should_skip_all_validations_when_false() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["localhost".to_string()]),
-        allowed_origins: Some(vec!["http://localhost:3030".to_string()]),
-        dns_rebinding_protection: false,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["localhost".to_string()]),
+            allowed_origins: Some(vec!["http://localhost:3030".to_string()]),
+            dns_rebinding_protection: false,
+        },
         ..Default::default()
     };
 

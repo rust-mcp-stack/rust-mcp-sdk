@@ -13,7 +13,9 @@ use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_sdk::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{middleware::DnsRebindProtector, HealthHandler, McpAppState, McpHttpHandler},
+    mcp_http::{
+        resolve_dns_middleware, DnsRebindingOptions, HealthHandler, McpAppState, McpHttpHandler,
+    },
     session_store::InMemorySessionStore,
     task_store::{ClientTaskStore, ServerTaskStore},
     IdGenerator, McpObserver, McpServerHandler,
@@ -135,17 +137,12 @@ pub struct AxumServerOptions {
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
 
-    /// List of allowed host header values for DNS rebinding protection.
-    /// If not specified, host validation is disabled.
-    pub allowed_hosts: Option<Vec<String>>,
-
-    /// List of allowed origin header values for DNS rebinding protection.
-    /// If not specified, origin validation is disabled.
-    pub allowed_origins: Option<Vec<String>>,
-
-    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is false for backwards compatibility.
-    pub dns_rebinding_protection: bool,
+    /// DNS rebinding protection configuration (enabled by default).
+    ///
+    /// When `dns_rebinding_protection` is `true` and no `allowed_hosts` or
+    /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
+    /// `host:port` unless the bind address is a wildcard.
+    pub dns_rebinding: DnsRebindingOptions,
 
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
     pub sse_support: bool,
@@ -287,11 +284,6 @@ impl AxumServerOptions {
             .unwrap_or(rust_mcp_sdk::mcp_http::DEFAULT_MAX_REQUEST_BODY_SIZE)
     }
 
-    pub fn needs_dns_protection(&self) -> bool {
-        self.dns_rebinding_protection
-            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
-    }
-
     /// Resolves the mount options from this server configuration.
     ///
     /// Prepares [`McpMountOptions`] by resolving custom endpoints to their
@@ -328,9 +320,7 @@ impl Default for AxumServerOptions {
             session_id_generator: None,
             enable_json_response: None,
             sse_support: true,
-            allowed_hosts: None,
-            allowed_origins: None,
-            dns_rebinding_protection: false,
+            dns_rebinding: DnsRebindingOptions::default(),
             event_store: None,
             auth: None,
             task_store: None,
@@ -387,12 +377,13 @@ impl AxumServer {
 
         // populate middlewares
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
-        if server_options.needs_dns_protection() {
-            //dns pritection middleware
-            middlewares.push(Arc::new(DnsRebindProtector::new(
-                server_options.allowed_hosts.take(),
-                server_options.allowed_origins.take(),
-            )));
+
+        if let Some(dns) = resolve_dns_middleware(
+            &mut server_options.dns_rebinding,
+            &server_options.host,
+            server_options.port,
+        ) {
+            middlewares.push(Arc::new(dns));
         }
 
         let http_handler = {
@@ -670,37 +661,6 @@ mod tests {
             "http://127.0.0.1:8080/abcd/messages"
         );
         assert_eq!(options.sse_messages_endpoint(), "/abcd/messages");
-    }
-
-    #[test]
-    fn test_server_options_needs_dns_protection() {
-        let options = AxumServerOptions::default();
-
-        // should be false by default
-        assert!(!options.needs_dns_protection());
-
-        // should still be false unless allowed_hosts or allowed_origins are also provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            ..Default::default()
-        };
-        assert!(!options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_hosts is provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            allowed_hosts: Some(vec![String::from("127.0.0.1")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_origins is provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            allowed_origins: Some(vec![String::from("http://127.0.0.1:8080")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
     }
 
     #[test]

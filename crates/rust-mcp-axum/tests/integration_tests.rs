@@ -446,41 +446,6 @@ fn test_axum_server_options_base_url_ssl() {
 }
 
 #[test]
-fn test_axum_server_options_needs_dns_protection_disabled_by_default() {
-    let options = AxumServerOptions::default();
-    assert!(!options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_needs_dns_protection_enabled_with_hosts() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        allowed_hosts: Some(vec!["127.0.0.1".into()]),
-        ..AxumServerOptions::default()
-    };
-    assert!(options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_needs_dns_protection_enabled_with_origins() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        allowed_origins: Some(vec!["http://localhost".into()]),
-        ..AxumServerOptions::default()
-    };
-    assert!(options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_dns_protection_requires_hosts_or_origins() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        ..AxumServerOptions::default()
-    };
-    assert!(!options.needs_dns_protection());
-}
-
-#[test]
 fn test_axum_server_options_sse_url_methods() {
     let options = AxumServerOptions {
         host: "127.0.0.1".into(),

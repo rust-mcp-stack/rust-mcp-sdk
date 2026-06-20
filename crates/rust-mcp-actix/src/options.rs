@@ -1,6 +1,7 @@
 use rust_mcp_sdk::auth::AuthProvider;
 use rust_mcp_sdk::event_store::EventStore;
 use rust_mcp_sdk::id_generator::IdGenerator;
+use rust_mcp_sdk::mcp_http::DnsRebindingOptions;
 use rust_mcp_sdk::mcp_http::HealthHandler;
 use rust_mcp_sdk::mcp_http::McpMountOptions;
 use rust_mcp_sdk::mcp_http::{
@@ -59,6 +60,12 @@ pub struct ActixServerOptions {
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
     /// Maximum request body size in bytes. Defaults to 4 MiB when None.
     pub max_request_body_size: Option<usize>,
+    /// DNS rebinding protection configuration (enabled by default).
+    ///
+    /// When `dns_rebinding_protection` is `true` and no `allowed_hosts` or
+    /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
+    /// `host:port` unless the bind address is a wildcard.
+    pub dns_rebinding: DnsRebindingOptions,
     /// Enable TLS/SSL (requires `ssl` feature, default: false)
     pub enable_ssl: bool,
     /// Path to TLS certificate PEM file
@@ -180,6 +187,7 @@ impl Default for ActixServerOptions {
             health_handler: None,
             message_observer: None,
             max_request_body_size: None,
+            dns_rebinding: DnsRebindingOptions::default(),
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,

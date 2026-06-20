@@ -43,7 +43,9 @@ use std::sync::Arc;
 /// # Security Considerations
 /// - Always pin exact hostnames (e.g., `app.example.com:8443`)
 /// - Avoid wildcards or overly broad patterns
-/// - For local development, include `localhost:PORT` explicitly
+/// - For local development, the host is auto-derived from the bind address
+///   by default. When binding to a wildcard (`0.0.0.0`), configure
+///   `allowed_hosts` explicitly.
 /// - Never allow raw IP addresses in production allowlists
 pub struct DnsRebindProtector {
     /// List of allowed host header values for DNS rebinding protection.
