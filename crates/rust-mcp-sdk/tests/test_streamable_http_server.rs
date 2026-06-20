@@ -7,7 +7,8 @@ use crate::common::{
     TestTokenVerifier, ONE_MILLISECOND,
 };
 use http::header::{ACCEPT, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE};
-use hyper::StatusCode;
+use http::StatusCode;
+use mcp_axum::AxumServerOptions;
 use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     schema_utils::{
@@ -19,10 +20,10 @@ use rust_mcp_schema::{
     CallToolRequestParams, ElicitResult, ElicitResultContent, ListRootsResult, LoggingLevel,
     LoggingMessageNotificationParams, RequestId, ServerRequest,
 };
+use rust_mcp_sdk::mcp_http::DnsRebindingOptions;
 use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
-    mcp_server::HyperServerOptions,
     schema::ResultFromClient,
     task_store::InMemoryTaskStore,
 };
@@ -94,7 +95,7 @@ pub async fn initialize_server(
 
     let oauth_metadata_provider = auth.map(|v| -> Arc<dyn AuthProvider> { Arc::new(v) });
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
@@ -144,7 +145,7 @@ async fn should_initialize_server_and_generate_session_id() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
@@ -171,14 +172,14 @@ async fn should_initialize_server_and_generate_session_id() {
     );
     assert!(response.headers().get("mcp-session-id").is_some());
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject batch initialize request
 #[tokio::test]
 async fn should_reject_batch_initialize_request() {
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
@@ -260,8 +261,8 @@ async fn should_handle_post_requests_via_sse_response_correctly() {
         r#"Accepts a person's name and says a personalized "Hello" to that person"#
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should call a tool and return the result
@@ -309,8 +310,8 @@ async fn should_call_a_tool_and_return_the_result() {
         "Hello, Ali!"
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject requests without a valid session ID
@@ -336,8 +337,8 @@ async fn should_reject_requests_without_a_valid_session_id() {
     let error_data: SdkError = response.json().await.unwrap();
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject invalid session ID
@@ -364,8 +365,8 @@ async fn should_reject_invalid_session_id() {
     let error_data: SdkError = response.json().await.unwrap();
     assert_eq!(error_data.code, SdkErrorCodes::SESSION_NOT_FOUND as i64); // Typescript sdk uses -32001 code
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 pub async fn get_standalone_stream(
@@ -418,7 +419,7 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
 
     // Send a notification (server-initiated message) that should appear on SSE stream
     server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -444,8 +445,8 @@ async fn should_establish_standalone_stream_and_receive_server_messages() {
         "Test notification"
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should establish standalone SSE stream and receive server-initiated requests
@@ -476,14 +477,14 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
         "text/event-stream"
     );
 
-    let hyper_server = Arc::new(server.hyper_runtime);
+    let axum_server = Arc::new(server.axum_runtime);
 
     // Send two server-initiated request that should appear on SSE stream with a valid request_id
     for _ in 0..2 {
-        let hyper_server_clone = hyper_server.clone();
+        let axum_server_clone = axum_server.clone();
         let session_id_clone = session_id.to_string();
         tokio::spawn(async move {
-            hyper_server_clone
+            axum_server_clone
                 .list_roots(&session_id_clone, None)
                 .await
                 .unwrap();
@@ -528,7 +529,7 @@ async fn should_establish_standalone_stream_and_receive_server_requests() {
     // ensure request_ids are unique
     assert!(message2.request_id() != message1.request_id());
 
-    hyper_server.graceful_shutdown(ONE_MILLISECOND);
+    axum_server.graceful_shutdown(ONE_MILLISECOND);
 }
 
 // should not close GET SSE stream after sending multiple server notifications
@@ -540,7 +541,7 @@ async fn should_not_close_get_sse_stream() {
     assert_eq!(response.status(), StatusCode::OK);
 
     server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -568,7 +569,7 @@ async fn should_not_close_get_sse_stream() {
     );
 
     server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -594,8 +595,8 @@ async fn should_not_close_get_sse_stream() {
         "Second notification"
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 //should reject second SSE stream for the same session
@@ -611,8 +612,8 @@ async fn should_reject_second_sse_stream_for_the_same_session() {
     let error_data: SdkError = second_response.json().await.unwrap();
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject GET requests without Accept: text/event-stream header
@@ -634,8 +635,8 @@ async fn should_reject_get_requests() {
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
     assert!(error_data.message.contains("must accept text/event-stream"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject POST requests without proper Accept header
@@ -670,8 +671,8 @@ async fn reject_post_requests_without_accept_header() {
         .message
         .contains("must accept both application/json and text/event-stream"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 //should reject unsupported Content-Type
@@ -707,8 +708,8 @@ async fn should_reject_unsupported_content_type() {
         .message
         .contains("Content-Type must be application/json"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should handle JSON-RPC batch notification messages with 202 response
@@ -843,8 +844,8 @@ async fn should_send_response_messages_to_the_connection_that_sent_the_request()
         r#"Accepts a person's name and says a personalized "Hello" to that person"#
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should properly handle DELETE requests and close session
@@ -864,8 +865,8 @@ async fn should_properly_handle_delete_requests_and_close_session() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject DELETE requests with invalid session ID
@@ -894,8 +895,8 @@ async fn should_reject_delete_requests_with_invalid_session_id() {
     assert_eq!(error_data.code, SdkErrorCodes::SESSION_NOT_FOUND as i64); // Typescript sdk uses -32001 code
     assert!(error_data.message.contains("Session not found"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 /**
@@ -927,8 +928,8 @@ async fn should_accept_requests_without_protocol_version_header() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject requests with unsupported protocol version
@@ -961,8 +962,8 @@ async fn should_reject_requests_with_unsupported_protocol_version() {
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
     assert!(error_data.message.contains("Unsupported protocol version"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should handle protocol version validation for get requests
@@ -986,8 +987,8 @@ async fn should_handle_protocol_version_validation_for_get_requests() {
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
     assert!(error_data.message.contains("Unsupported protocol version"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should handle protocol version validation for DELETE requests
@@ -1010,8 +1011,8 @@ async fn should_handle_protocol_version_validation_for_delete_requests() {
     assert_eq!(error_data.code, SdkErrorCodes::BAD_REQUEST as i64); // Typescript sdk uses -32000 code
     assert!(error_data.message.contains("Unsupported protocol version"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 /**
@@ -1059,8 +1060,8 @@ async fn should_return_json_response_for_a_single_request() {
         r#"Accepts a person's name and says a personalized "Hello" to that person"#
     );
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should return JSON response for batch requests
@@ -1141,8 +1142,8 @@ async fn should_return_json_response_for_a_batch_request() {
         panic!("Expected a CallToolResult");
     };
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should handle batch request messages with SSE stream for responses
@@ -1223,13 +1224,15 @@ async fn should_accept_requests_with_allowed_host_headers() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: 9090,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["127.0.0.1:9090".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["127.0.0.1:9090".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1252,8 +1255,8 @@ async fn should_accept_requests_with_allowed_host_headers() {
     );
     assert!(response.headers().get("mcp-session-id").is_some());
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject requests with disallowed host headers
@@ -1262,13 +1265,15 @@ async fn should_reject_requests_with_disallowed_host_headers() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["example.com:3001".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["example.com:3001".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1288,20 +1293,22 @@ async fn should_reject_requests_with_disallowed_host_headers() {
     let error_data: SdkError = response.json().await.unwrap();
     assert!(error_data.message.contains("Invalid Host header"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject GET requests with disallowed host headers
 #[tokio::test]
 async fn should_reject_get_requests_with_disallowed_host_headers() {
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["example.com:3001".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["example.com:3001".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1321,8 +1328,8 @@ async fn should_reject_get_requests_with_disallowed_host_headers() {
     let error_data: SdkError = response.json().await.unwrap();
     assert!(error_data.message.contains("Invalid Host header"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should accept requests with allowed origin headers
@@ -1331,16 +1338,18 @@ async fn should_accept_requests_with_allowed_origin_headers() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: 3000,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_origins: Some(vec![
-            "http://localhost:3000".to_string(),
-            "https://example.com".to_string(),
-        ]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_origins: Some(vec![
+                "http://localhost:3000".to_string(),
+                "https://example.com".to_string(),
+            ]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1371,8 +1380,8 @@ async fn should_accept_requests_with_allowed_origin_headers() {
     );
     assert!(response.headers().get("mcp-session-id").is_some());
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 //should reject requests with disallowed origin headers
@@ -1381,13 +1390,15 @@ async fn should_reject_requests_with_disallowed_origin_headers() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: 3000,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_origins: Some(vec!["http://localhost:3000".to_string()]),
-        dns_rebinding_protection: true,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_origins: Some(vec!["http://localhost:3000".to_string()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -1415,8 +1426,8 @@ async fn should_reject_requests_with_disallowed_origin_headers() {
 
     assert!(error_data.message.contains("Invalid Origin header"));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should skip all validations when enableDnsRebindingProtection is false
@@ -1425,14 +1436,16 @@ async fn should_skip_all_validations_when_false() {
     let json_rpc_message: ClientJsonrpcRequest =
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: 3030,
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        allowed_hosts: Some(vec!["localhost".to_string()]),
-        allowed_origins: Some(vec!["http://localhost:3030".to_string()]),
-        dns_rebinding_protection: false,
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec!["localhost".to_string()]),
+            allowed_origins: Some(vec!["http://localhost:3030".to_string()]),
+            dns_rebinding_protection: false,
+        },
         ..Default::default()
     };
 
@@ -1457,8 +1470,8 @@ async fn should_skip_all_validations_when_false() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should store and include event IDs in server SSE messages
@@ -1471,7 +1484,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let _ = server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -1484,7 +1497,7 @@ async fn should_store_and_include_event_ids_in_server_sse_messages() {
         .await;
 
     let _ = server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -1541,7 +1554,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let _ = server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -1574,7 +1587,7 @@ async fn should_store_and_replay_mcp_server_tool_notifications() {
     tokio::task::yield_now().await;
     // we send another notification while SSE is disconnected
     let _result = server
-        .hyper_runtime
+        .axum_runtime
         .notify_log_message(
             &session_id,
             LoggingMessageNotificationParams {
@@ -1779,7 +1792,7 @@ async fn should_handle_elicitation() {
     });
 
     server
-        .hyper_runtime
+        .axum_runtime
         .request_elicitation(&session_id, UserInfo::elicit_request_params())
         .await
         .unwrap();
@@ -1811,8 +1824,34 @@ async fn should_handle_elicitation() {
     );
     println!("tags: {}", user.tags.join(","));
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap();
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap();
+}
+
+// should reject request bodies that exceed the configured size limit
+#[tokio::test]
+async fn should_reject_oversized_request_body() {
+    let server_options = AxumServerOptions {
+        port: random_port(),
+        session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
+            "AAA-BBB-CCC".to_string()
+        ]))),
+        max_request_body_size: Some(1024),
+        ..Default::default()
+    };
+
+    let server = create_start_server(server_options).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let oversized_body = "x".repeat(4096);
+    let response = send_post_request(&server.streamable_url, &oversized_body, None, None)
+        .await
+        .expect("Request failed");
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should reject an oversized / malformed Mcp-Session-Id header

@@ -1,34 +1,33 @@
 use super::{
     error::{TransportServerError, TransportServerResult},
-    routes::app_routes,
+    routes::mcp_routes,
 };
-#[cfg(feature = "auth")]
-use crate::auth::AuthProvider;
-#[cfg(feature = "auth")]
-use crate::mcp_http::middleware::AuthMiddleware;
-use crate::{
-    error::SdkResult,
-    id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{
-        http_utils::{
-            DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
-        },
-        middleware::DnsRebindProtector,
-        HealthHandler, McpAppState, McpHttpHandler,
-    },
-    mcp_server::hyper_runtime::HyperRuntime,
-    mcp_traits::{IdGenerator, McpServerHandler},
-    session_store::InMemorySessionStore,
-    task_store::{ClientTaskStore, ServerTaskStore},
-    McpObserver,
-};
-use crate::{mcp_http::Middleware, schema::InitializeResult};
+use crate::AxumRuntime;
 use axum::Router;
 #[cfg(feature = "ssl")]
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
-use rust_mcp_schema::schema_utils::{ClientMessage, ServerMessage};
-use rust_mcp_transport::{event_store::EventStore, SessionId, TransportOptions};
+use rust_mcp_sdk::auth::AuthProvider;
+use rust_mcp_sdk::mcp_http::middleware::AuthMiddleware;
+use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
+use rust_mcp_sdk::{
+    error::SdkResult,
+    id_generator::{FastIdGenerator, UuidGenerator},
+    mcp_http::{
+        resolve_dns_middleware, DnsRebindingOptions, HealthHandler, McpAppState, McpHttpHandler,
+    },
+    session_store::InMemorySessionStore,
+    task_store::{ClientTaskStore, ServerTaskStore},
+    IdGenerator, McpObserver, McpServerHandler,
+};
+use rust_mcp_sdk::{event_store::EventStore, SessionId, TransportOptions};
+use rust_mcp_sdk::{
+    mcp_http::{
+        Middleware, DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT,
+        DEFAULT_STREAMABLE_HTTP_ENDPOINT,
+    },
+    schema::InitializeResult,
+};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -41,9 +40,34 @@ use tokio::signal;
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
 
-/// Configuration struct for the Hyper server
-/// Used to configure the HyperServer instance.
-pub struct HyperServerOptions {
+/// Lightweight mount configuration for BYO-server scenarios.
+///
+/// Use with [`mcp_routes()`] to mount MCP endpoints on an existing Axum router.
+/// Unlike [`AxumServerOptions`], this does not include server-level settings
+/// (host, port, SSL, task store, etc.) — it only configures the route paths.
+///
+/// # Example
+///
+/// ```ignore
+/// use rust_mcp_axum::{mcp_routes, McpMountOptions};
+///
+/// let mount = McpMountOptions {
+///     streamable_http_endpoint: "/mcp".into(),
+///     sse_endpoint: "/sse".into(),
+///     sse_messages_endpoint: "/messages".into(),
+///     health_endpoint: Some("/health".into()),
+///     ..Default::default()
+/// };
+///
+/// let app = axum::Router::new()
+///     .route("/api/custom", get(my_handler))
+///     .merge(mcp_routes(state, http_handler, &mount));
+/// ```
+pub use rust_mcp_sdk::mcp_http::McpMountOptions;
+
+/// Configuration struct for the Axum server
+/// Used to configure the AxumServer instance.
+pub struct AxumServerOptions {
     /// Hostname or IP address the server will bind to (default: "127.0.0.1")
     pub host: String,
 
@@ -97,6 +121,11 @@ pub struct HyperServerOptions {
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
 
+    /// Maximum size in bytes of an incoming HTTP request body. Requests larger
+    /// than this are rejected with `413 Payload Too Large`.
+    /// Defaults to 4 MiB when `None`.
+    pub max_request_body_size: Option<usize>,
+
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
 
@@ -108,17 +137,12 @@ pub struct HyperServerOptions {
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
 
-    /// List of allowed host header values for DNS rebinding protection.
-    /// If not specified, host validation is disabled.
-    pub allowed_hosts: Option<Vec<String>>,
-
-    /// List of allowed origin header values for DNS rebinding protection.
-    /// If not specified, origin validation is disabled.
-    pub allowed_origins: Option<Vec<String>>,
-
-    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is false for backwards compatibility.
-    pub dns_rebinding_protection: bool,
+    /// DNS rebinding protection configuration (enabled by default).
+    ///
+    /// When `dns_rebinding_protection` is `true` and no `allowed_hosts` or
+    /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
+    /// `host:port` unless the bind address is a wildcard.
+    pub dns_rebinding: DnsRebindingOptions,
 
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
     pub sse_support: bool,
@@ -132,7 +156,6 @@ pub struct HyperServerOptions {
     pub custom_messages_endpoint: Option<String>,
 
     /// Optional authentication provider for protecting MCP server.
-    #[cfg(feature = "auth")]
     pub auth: Option<Arc<dyn AuthProvider>>,
 
     /// Path for the optional health-check endpoint.
@@ -150,7 +173,7 @@ pub struct HyperServerOptions {
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
-impl HyperServerOptions {
+impl AxumServerOptions {
     /// Validates the server configuration options
     ///
     /// Ensures that SSL-related paths are provided and valid when SSL is enabled.
@@ -254,17 +277,33 @@ impl HyperServerOptions {
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
 
-    pub fn needs_dns_protection(&self) -> bool {
-        self.dns_rebinding_protection
-            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
+    /// Maximum incoming HTTP request body size in bytes, falling back to the
+    /// default (4 MiB) when not configured.
+    pub fn max_request_body_size(&self) -> usize {
+        self.max_request_body_size
+            .unwrap_or(rust_mcp_sdk::mcp_http::DEFAULT_MAX_REQUEST_BODY_SIZE)
+    }
+
+    /// Resolves the mount options from this server configuration.
+    ///
+    /// Prepares [`McpMountOptions`] by resolving custom endpoints to their
+    /// default values when they are `None`.
+    pub fn resolve_mount_options(&self) -> McpMountOptions {
+        McpMountOptions {
+            streamable_http_endpoint: self.streamable_http_endpoint().to_string(),
+            sse_endpoint: self.sse_endpoint().to_string(),
+            sse_messages_endpoint: self.sse_messages_endpoint().to_string(),
+            health_endpoint: self.health_endpoint.clone(),
+            max_request_body_size: self.max_request_body_size(),
+        }
     }
 }
 
-/// Default implementation for HyperServerOptions
+/// Default implementation for AxumServerOptions
 ///
 /// Provides default values for the server configuration, including 127.0.0.1 address,
 /// port 8080, default Streamable HTTP endpoint, and 12-second ping interval.
-impl Default for HyperServerOptions {
+impl Default for AxumServerOptions {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
@@ -273,6 +312,7 @@ impl Default for HyperServerOptions {
             custom_streamable_http_endpoint: None,
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
+            max_request_body_size: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
@@ -280,11 +320,8 @@ impl Default for HyperServerOptions {
             session_id_generator: None,
             enable_json_response: None,
             sse_support: true,
-            allowed_hosts: None,
-            allowed_origins: None,
-            dns_rebinding_protection: false,
+            dns_rebinding: DnsRebindingOptions::default(),
             event_store: None,
-            #[cfg(feature = "auth")]
             auth: None,
             task_store: None,
             client_task_store: None,
@@ -295,16 +332,16 @@ impl Default for HyperServerOptions {
     }
 }
 
-/// Hyper server struct for managing the Axum-based web server
-pub struct HyperServer {
+/// Axum server struct for managing the Axum-based web server
+pub struct AxumServer {
     app: Router,
     state: Arc<McpAppState>,
-    pub(crate) options: HyperServerOptions,
+    pub(crate) options: AxumServerOptions,
     handle: Handle<SocketAddr>,
 }
 
-impl HyperServer {
-    /// Creates a new HyperServer instance
+impl AxumServer {
+    /// Creates a new AxumServer instance
     ///
     /// Initializes the server with the provided server details, handler, and options.
     ///
@@ -314,11 +351,11 @@ impl HyperServer {
     /// * `server_options` - Server configuration options
     ///
     /// # Returns
-    /// * `Self` - A new HyperServer instance
-    pub(crate) fn new(
+    /// * `Self` - A new AxumServer instance
+    pub fn new(
         server_details: InitializeResult,
         handler: Arc<dyn McpServerHandler + 'static>,
-        mut server_options: HyperServerOptions,
+        mut server_options: AxumServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
             session_store: Arc::new(InMemorySessionStore::new()),
@@ -340,33 +377,30 @@ impl HyperServer {
 
         // populate middlewares
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
-        if server_options.needs_dns_protection() {
-            //dns pritection middleware
-            middlewares.push(Arc::new(DnsRebindProtector::new(
-                server_options.allowed_hosts.take(),
-                server_options.allowed_origins.take(),
-            )));
+
+        if let Some(dns) = resolve_dns_middleware(
+            &mut server_options.dns_rebinding,
+            &server_options.host,
+            server_options.port,
+        ) {
+            middlewares.push(Arc::new(dns));
         }
 
         let http_handler = {
-            #[cfg(feature = "auth")]
-            {
-                let auth_provider = server_options.auth.take();
-                // add auth middleware if there is a auth_provider
-                if let Some(auth_provider) = auth_provider.as_ref() {
-                    middlewares.push(Arc::new(AuthMiddleware::new(auth_provider.clone())))
-                }
-                McpHttpHandler::new(
-                    auth_provider,
-                    middlewares,
-                    server_options.health_handler.clone(),
-                )
+            let auth_provider = server_options.auth.take();
+            // add auth middleware if there is a auth_provider
+            if let Some(auth_provider) = auth_provider.as_ref() {
+                middlewares.push(Arc::new(AuthMiddleware::new(auth_provider.clone())))
             }
-            #[cfg(not(feature = "auth"))]
-            McpHttpHandler::new(middlewares, server_options.health_handler.clone())
+            McpHttpHandler::new(
+                auth_provider,
+                middlewares,
+                server_options.health_handler.clone(),
+            )
         };
 
-        let app = app_routes(Arc::clone(&state), &server_options, http_handler);
+        let mount_options = server_options.resolve_mount_options();
+        let app = mcp_routes(Arc::clone(&state), &mount_options, http_handler);
 
         Self {
             app,
@@ -391,7 +425,7 @@ impl HyperServer {
     /// * `route` - The Axum MethodRouter for handling the route
     ///
     /// # Returns
-    /// * `Self` - The modified HyperServer instance
+    /// * `Self` - The modified AxumServer instance
     pub fn with_route(mut self, path: &'static str, route: axum::routing::MethodRouter) -> Self {
         self.app = self.app.route(path, route);
         self
@@ -427,7 +461,6 @@ impl HyperServer {
             self.options.streamable_http_endpoint()
         );
 
-        #[cfg(feature = "sse")]
         if self.options.sse_support {
             let sse_url = format!(
                 "\n• SSE {} is available at {}://{}{}",
@@ -442,7 +475,7 @@ impl HyperServer {
         Ok(server_url)
     }
 
-    pub fn options(&self) -> &HyperServerOptions {
+    pub fn options(&self) -> &AxumServerOptions {
         &self.options
     }
 
@@ -525,18 +558,18 @@ impl HyperServer {
     /// # Returns
     /// * `SdkResult<()>` - Ok if the server starts successfully, Err otherwise
     pub async fn start(self) -> SdkResult<()> {
-        let runtime = HyperRuntime::create(self).await?;
+        let runtime = AxumRuntime::create(self).await?;
         runtime.await_server().await
     }
 
-    /// Similar to start() , but returns a HyperRuntime after server started
+    /// Similar to start() , but returns a AxumRuntime after server started
     ///
-    /// HyperRuntime could be used to access sessions and send server initiated messages if needed
+    /// AxumRuntime could be used to access sessions and send server initiated messages if needed
     ///
     /// # Returns
-    /// * `SdkResult<HyperRuntime>` - Ok if the server starts successfully, Err otherwise
-    pub async fn start_runtime(self) -> SdkResult<HyperRuntime> {
-        HyperRuntime::create(self).await
+    /// * `SdkResult<AxumRuntime>` - Ok if the server starts successfully, Err otherwise
+    pub async fn start_runtime(self) -> SdkResult<AxumRuntime> {
+        AxumRuntime::create(self).await
     }
 }
 
@@ -579,7 +612,7 @@ mod tests {
 
     #[test]
     fn test_server_options_base_url_custom() {
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             host: String::from("127.0.0.1"),
             port: 8081,
             enable_ssl: true,
@@ -590,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_server_options_streamable_http_custom() {
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             custom_streamable_http_endpoint: Some(String::from("/abcd/mcp")),
             host: String::from("127.0.0.1"),
             port: 8081,
@@ -606,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_server_options_sse_custom() {
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             custom_sse_endpoint: Some(String::from("/abcd/sse")),
             host: String::from("127.0.0.1"),
             port: 8081,
@@ -619,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_server_options_sse_messages_custom() {
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             custom_messages_endpoint: Some(String::from("/abcd/messages")),
             ..Default::default()
         };
@@ -631,50 +664,19 @@ mod tests {
     }
 
     #[test]
-    fn test_server_options_needs_dns_protection() {
-        let options = HyperServerOptions::default();
-
-        // should be false by default
-        assert!(!options.needs_dns_protection());
-
-        // should still be false unless allowed_hosts or allowed_origins are also provided
-        let options = HyperServerOptions {
-            dns_rebinding_protection: true,
-            ..Default::default()
-        };
-        assert!(!options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_hosts is provided
-        let options = HyperServerOptions {
-            dns_rebinding_protection: true,
-            allowed_hosts: Some(vec![String::from("127.0.0.1")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_origins is provided
-        let options = HyperServerOptions {
-            dns_rebinding_protection: true,
-            allowed_origins: Some(vec![String::from("http://127.0.0.1:8080")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
-    }
-
-    #[test]
     fn test_server_options_validate() {
-        let options = HyperServerOptions::default();
+        let options = AxumServerOptions::default();
         assert!(options.validate().is_ok());
 
         // with ssl enabled but no cert or key provided, validate should fail
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             enable_ssl: true,
             ..Default::default()
         };
         assert!(options.validate().is_err());
 
         // with ssl enabled and invalid cert/key paths, validate should fail
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             enable_ssl: true,
             ssl_cert_path: Some(String::from("/invalid/path/to/cert.pem")),
             ssl_key_path: Some(String::from("/invalid/path/to/key.pem")),
@@ -698,7 +700,7 @@ mod tests {
             .expect("Expected to get key path")
             .to_string();
 
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             enable_ssl: true,
             ssl_cert_path: Some(ssl_cert_path),
             ssl_key_path: Some(ssl_key_path),
@@ -709,11 +711,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_options_resolve_server_address() {
-        let options = HyperServerOptions::default();
+        let options = AxumServerOptions::default();
         assert!(options.resolve_server_address().await.is_ok());
 
         // valid host should still work
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             host: String::from("8.6.7.5"),
             port: 309,
             ..Default::default()
@@ -721,7 +723,7 @@ mod tests {
         assert!(options.resolve_server_address().await.is_ok());
 
         // valid host (prepended with http://) should still work
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             host: String::from("http://8.6.7.5"),
             port: 309,
             ..Default::default()
@@ -729,7 +731,7 @@ mod tests {
         assert!(options.resolve_server_address().await.is_ok());
 
         // invalid host should raise an error
-        let options = HyperServerOptions {
+        let options = AxumServerOptions {
             host: String::from("invalid-host"),
             port: 309,
             ..Default::default()

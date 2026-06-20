@@ -53,6 +53,7 @@ impl StreamableTransportOptions {
 
 pub struct RequestOptions {
     pub request_timeout: Duration,
+    pub max_line_length: usize,
     pub retry_delay: Option<Duration>,
     pub max_retries: Option<usize>,
     pub custom_headers: Option<HashMap<String, String>>,
@@ -62,6 +63,7 @@ impl Default for RequestOptions {
     fn default() -> Self {
         Self {
             request_timeout: TransportOptions::default().timeout,
+            max_line_length: TransportOptions::default().max_line_length,
             retry_delay: None,
             max_retries: None,
             custom_headers: None,
@@ -79,6 +81,8 @@ where
     is_shut_down: Mutex<bool>,
     /// Timeout duration for MCP messages
     request_timeout: Duration,
+    /// Maximum line length for incoming messages
+    max_line_length: usize,
     /// HTTP client for making requests
     client: Client,
     /// URL for the SSE endpoint
@@ -119,6 +123,7 @@ where
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
             request_timeout: options.request_options.request_timeout,
+            max_line_length: options.request_options.max_line_length,
             client,
             mcp_server_url,
             retry_delay: options
@@ -287,6 +292,7 @@ where
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
                 self.pending_requests.clone(),
                 self.request_timeout,
+                self.max_line_length,
                 cancellation_token,
             );
 
@@ -372,6 +378,7 @@ where
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
                 self.pending_requests.clone(),
                 self.request_timeout,
+                self.max_line_length,
                 cancellation_token,
             );
 

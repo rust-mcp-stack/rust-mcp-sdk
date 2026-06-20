@@ -3,12 +3,9 @@ use crate::common::{
     handler::McpServerHandler,
     utils::{create_server_info, enable_tracing},
 };
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::auth_provider::work_os::{WorkOSAuthOptions, WorkOsAuthProvider};
-use rust_mcp_sdk::{
-    error::SdkResult,
-    mcp_server::{hyper_server, HyperServerOptions},
-    ToMcpServerHandler,
-};
+use rust_mcp_sdk::{error::SdkResult, ToMcpServerHandler};
 use std::{env, sync::Arc};
 
 #[tokio::main]
@@ -26,12 +23,14 @@ async fn main() -> SdkResult<()> {
         resource_name: Some("Workos Oauth Test MCP Server".to_string()),
         resource_documentation: None,
         token_verifier: None,
+        validate_audience: None,
+        disable_audience_validation: false,
     })?;
 
-    let server = hyper_server::create_server(
+    let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".to_string(),
             port: 3000,
             auth: Some(Arc::new(auth_provider)), // enable authentication
