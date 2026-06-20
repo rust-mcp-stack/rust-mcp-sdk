@@ -9,6 +9,7 @@ use rust_mcp_sdk::mcp_http::{
     DEFAULT_STREAMABLE_HTTP_ENDPOINT,
 };
 use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
+use rust_mcp_sdk::session_store::SessionStore;
 use rust_mcp_sdk::task_store::{ClientTaskStore, ServerTaskStore};
 use rust_mcp_sdk::McpObserver;
 use rust_mcp_sdk::SessionId;
@@ -66,6 +67,11 @@ pub struct ActixServerOptions {
     /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
     /// `host:port` unless the bind address is a wildcard.
     pub dns_rebinding: DnsRebindingOptions,
+    /// Optional session store implementation. Defaults to a bounded
+    /// `InMemorySessionStore` (10k max sessions, no idle TTL) when `None`.
+    /// Pass your own [`SessionStore`] implementation to use Redis, custom
+    /// limits, or any other session backend.
+    pub session_store: Option<Arc<dyn SessionStore>>,
     /// Enable TLS/SSL (requires `ssl` feature, default: false)
     pub enable_ssl: bool,
     /// Path to TLS certificate PEM file
@@ -188,6 +194,7 @@ impl Default for ActixServerOptions {
             message_observer: None,
             max_request_body_size: None,
             dns_rebinding: DnsRebindingOptions::default(),
+            session_store: None,
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,

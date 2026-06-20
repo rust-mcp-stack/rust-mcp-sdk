@@ -25,6 +25,7 @@ use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
     schema::ResultFromClient,
+    session_store::InMemorySessionStore,
     task_store::InMemoryTaskStore,
 };
 use serde_json::{json, Map, Value};
@@ -1857,9 +1858,9 @@ async fn should_reject_oversized_request_body() {
 // should reject new sessions once the store reaches its capacity
 #[tokio::test]
 async fn should_reject_new_session_when_at_capacity() {
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
-        max_sessions: Some(1),
+        session_store: Some(Arc::new(InMemorySessionStore::with_limits(Some(1), None))),
         ..Default::default()
     };
 
@@ -1884,8 +1885,8 @@ async fn should_reject_new_session_when_at_capacity() {
     // keep the first session's stream open until the assertions complete
     drop(first);
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should return 400 error for invalid JSON-RPC messages
