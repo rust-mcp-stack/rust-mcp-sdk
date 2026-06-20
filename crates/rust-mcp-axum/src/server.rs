@@ -136,16 +136,18 @@ pub struct AxumServerOptions {
     pub ssl_key_path: Option<String>,
 
     /// List of allowed host header values for DNS rebinding protection.
-    /// If not specified, host validation is disabled.
+    /// If not specified and `dns_rebinding_protection` is true, auto-derives
+    /// from `host:port` unless the host is a wildcard (`0.0.0.0`, `::`).
     pub allowed_hosts: Option<Vec<String>>,
 
     /// List of allowed origin header values for DNS rebinding protection.
     /// If not specified, origin validation is disabled.
     pub allowed_origins: Option<Vec<String>>,
 
-    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is `true`; a startup warning is logged if neither `allowed_hosts`
-    /// nor `allowed_origins` is set. Set to `false` to opt out.
+    /// Enable DNS rebinding protection. Default is `true`.
+    /// When neither `allowed_hosts` nor `allowed_origins` is configured,
+    /// `allowed_hosts` is auto-derived from `host:port` unless the bind
+    /// address is a wildcard (`0.0.0.0`, `::`). Set to `false` to opt out.
     pub dns_rebinding_protection: bool,
 
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
@@ -288,9 +290,36 @@ impl AxumServerOptions {
             .unwrap_or(rust_mcp_sdk::mcp_http::DEFAULT_MAX_REQUEST_BODY_SIZE)
     }
 
-    pub fn needs_dns_protection(&self) -> bool {
-        self.dns_rebinding_protection
-            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
+    /// Resolves `allowed_hosts`, auto-deriving from `host:port` when unset.
+    ///
+    /// When `dns_rebinding_protection` is enabled and `allowed_hosts` is `None`:
+    /// - If the host is a wildcard (`0.0.0.0`, `::`, or empty), a warning is
+    ///   logged and `None` is returned (no enforcement).
+    /// - Otherwise, the host is auto-derived as `"host:port"` and logged at
+    ///   `debug` level.
+    fn resolve_allowed_hosts(&mut self) -> Option<Vec<String>> {
+        if !self.dns_rebinding_protection {
+            return None;
+        }
+        if let Some(hosts) = self.allowed_hosts.take() {
+            return Some(hosts);
+        }
+        let is_wildcard = self.host.is_empty() || self.host == "0.0.0.0" || self.host == "::";
+        if is_wildcard {
+            tracing::warn!(
+                "DNS-rebinding protection is enabled but host is a wildcard ({}) \
+                 and neither `allowed_hosts` nor `allowed_origins` is configured. \
+                 Set `allowed_hosts` explicitly, or set `dns_rebinding_protection = false`.",
+                self.host
+            );
+            return None;
+        }
+        let host = format!("{}:{}", self.host, self.port);
+        tracing::debug!(
+            "DNS-rebinding protection: auto-derived allowed_hosts=[\"{host}\"] \
+             from host config"
+        );
+        Some(vec![host])
     }
 
     /// Resolves the mount options from this server configuration.
@@ -388,23 +417,17 @@ impl AxumServer {
 
         // populate middlewares
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
-        if server_options.dns_rebinding_protection
-            && server_options.allowed_hosts.is_none()
-            && server_options.allowed_origins.is_none()
-        {
-            tracing::warn!(
-                "DNS-rebinding protection is enabled but neither `allowed_hosts` nor \
-                 `allowed_origins` is configured, so Host/Origin validation is not enforced. \
-                 Set `allowed_hosts`/`allowed_origins`, or set `dns_rebinding_protection = false` \
-                 to silence this warning."
-            );
-        }
-        if server_options.needs_dns_protection() {
-            //dns pritection middleware
-            middlewares.push(Arc::new(DnsRebindProtector::new(
-                server_options.allowed_hosts.take(),
-                server_options.allowed_origins.take(),
-            )));
+
+        if server_options.dns_rebinding_protection {
+            let allowed_hosts = server_options.resolve_allowed_hosts();
+            let allowed_origins = server_options.allowed_origins.take();
+
+            if allowed_hosts.is_some() || allowed_origins.is_some() {
+                middlewares.push(Arc::new(DnsRebindProtector::new(
+                    allowed_hosts,
+                    allowed_origins,
+                )));
+            }
         }
 
         let http_handler = {
@@ -685,34 +708,116 @@ mod tests {
     }
 
     #[test]
-    fn test_server_options_needs_dns_protection() {
-        let options = AxumServerOptions::default();
+    fn test_resolve_allowed_hosts_explicit() {
+        let mut options = AxumServerOptions {
+            allowed_hosts: Some(vec!["example.com".into()]),
+            ..Default::default()
+        };
+        assert_eq!(
+            options.resolve_allowed_hosts(),
+            Some(vec!["example.com".into()])
+        );
+    }
 
-        // should be false by default
-        assert!(!options.needs_dns_protection());
-
-        // should still be false unless allowed_hosts or allowed_origins are also provided
-        let options = AxumServerOptions {
+    #[test]
+    fn test_resolve_allowed_hosts_auto_derive() {
+        let mut options = AxumServerOptions {
+            host: "api.example.com".into(),
+            port: 443,
             dns_rebinding_protection: true,
             ..Default::default()
         };
-        assert!(!options.needs_dns_protection());
+        assert_eq!(
+            options.resolve_allowed_hosts(),
+            Some(vec!["api.example.com:443".into()])
+        );
+    }
 
-        // should be true when dns_rebinding_protection is true and allowed_hosts is provided
-        let options = AxumServerOptions {
+    #[test]
+    fn test_resolve_allowed_hosts_localhost_auto_derive() {
+        let mut options = AxumServerOptions::default();
+        assert_eq!(
+            options.resolve_allowed_hosts(),
+            Some(vec!["127.0.0.1:8080".into()])
+        );
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_wildcard_v4_returns_none() {
+        let mut options = AxumServerOptions {
+            host: "0.0.0.0".into(),
             dns_rebinding_protection: true,
-            allowed_hosts: Some(vec![String::from("127.0.0.1")]),
             ..Default::default()
         };
-        assert!(options.needs_dns_protection());
+        assert_eq!(options.resolve_allowed_hosts(), None);
+    }
 
-        // should be true when dns_rebinding_protection is true and allowed_origins is provided
-        let options = AxumServerOptions {
+    #[test]
+    fn test_resolve_allowed_hosts_wildcard_v6_returns_none() {
+        let mut options = AxumServerOptions {
+            host: "::".into(),
+            port: 8080,
             dns_rebinding_protection: true,
-            allowed_origins: Some(vec![String::from("http://127.0.0.1:8080")]),
             ..Default::default()
         };
-        assert!(options.needs_dns_protection());
+        assert_eq!(options.resolve_allowed_hosts(), None);
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_empty_host_returns_none() {
+        let mut options = AxumServerOptions {
+            host: String::new(),
+            dns_rebinding_protection: true,
+            ..Default::default()
+        };
+        assert_eq!(options.resolve_allowed_hosts(), None);
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_ipv6_loopback_auto_derives() {
+        let mut options = AxumServerOptions {
+            host: "::1".into(),
+            port: 3000,
+            dns_rebinding_protection: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            options.resolve_allowed_hosts(),
+            Some(vec!["::1:3000".into()])
+        );
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_auto_derive_respects_custom_port() {
+        let mut options = AxumServerOptions {
+            host: "127.0.0.1".into(),
+            port: 9090,
+            dns_rebinding_protection: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            options.resolve_allowed_hosts(),
+            Some(vec!["127.0.0.1:9090".into()])
+        );
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_disabled_ignores_explicit_lists() {
+        let mut options = AxumServerOptions {
+            allowed_hosts: Some(vec!["example.com".into()]),
+            dns_rebinding_protection: false,
+            ..Default::default()
+        };
+        assert_eq!(options.resolve_allowed_hosts(), None);
+    }
+
+    #[test]
+    fn test_resolve_allowed_hosts_disabled_returns_none() {
+        let mut options = AxumServerOptions {
+            dns_rebinding_protection: false,
+            ..Default::default()
+        };
+        assert_eq!(options.resolve_allowed_hosts(), None);
     }
 
     #[test]
