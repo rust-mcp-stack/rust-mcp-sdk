@@ -1,38 +1,7 @@
+use actix_web::web::PayloadConfig;
 use actix_web::{web, Scope};
-use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler, McpMountOptions};
 use std::sync::Arc;
-
-/// Mount configuration for BYO-server scenarios with Actix.
-///
-/// Use with [`mcp_scope()`] to mount MCP endpoints on an existing Actix application.
-pub struct ActixMountOptions {
-    pub streamable_http_endpoint: String,
-    pub sse_endpoint: String,
-    pub sse_messages_endpoint: String,
-    pub health_endpoint: Option<String>,
-}
-
-impl Clone for ActixMountOptions {
-    fn clone(&self) -> Self {
-        Self {
-            streamable_http_endpoint: self.streamable_http_endpoint.clone(),
-            sse_endpoint: self.sse_endpoint.clone(),
-            sse_messages_endpoint: self.sse_messages_endpoint.clone(),
-            health_endpoint: self.health_endpoint.clone(),
-        }
-    }
-}
-
-impl Default for ActixMountOptions {
-    fn default() -> Self {
-        Self {
-            streamable_http_endpoint: "/mcp".to_string(),
-            sse_endpoint: "/sse".to_string(),
-            sse_messages_endpoint: "/messages".to_string(),
-            health_endpoint: None,
-        }
-    }
-}
 
 /// Builds an Actix [`Scope`] with all MCP endpoint routes mounted.
 ///
@@ -51,7 +20,7 @@ impl Default for ActixMountOptions {
 pub fn mcp_scope(
     state: Arc<McpAppState>,
     http_handler: Arc<McpHttpHandler>,
-    opts: &ActixMountOptions,
+    opts: &McpMountOptions,
 ) -> Scope {
     let sse_message_endpoint = opts.sse_messages_endpoint.clone();
 
@@ -61,6 +30,7 @@ pub fn mcp_scope(
         .app_data(web::Data::new(crate::routes::sse::SseMessageEndpoint(
             sse_message_endpoint,
         )))
+        .app_data(PayloadConfig::new(opts.max_request_body_size))
         .service(
             web::resource(&opts.streamable_http_endpoint)
                 .route(web::get().to(crate::routes::streamable_http::handle_streamable_http_get))

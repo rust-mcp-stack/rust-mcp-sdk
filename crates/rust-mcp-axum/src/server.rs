@@ -13,7 +13,9 @@ use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_sdk::{
     error::SdkResult,
     id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{middleware::DnsRebindProtector, HealthHandler, McpAppState, McpHttpHandler},
+    mcp_http::{
+        resolve_dns_middleware, DnsRebindingOptions, HealthHandler, McpAppState, McpHttpHandler,
+    },
     session_store::InMemorySessionStore,
     task_store::{ClientTaskStore, ServerTaskStore},
     IdGenerator, McpObserver, McpServerHandler,
@@ -47,36 +49,21 @@ const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
 /// # Example
 ///
 /// ```ignore
-/// use rust_mcp_axum::{mcp_routes, AxumMountOptions};
+/// use rust_mcp_axum::{mcp_routes, McpMountOptions};
 ///
-/// let mount = AxumMountOptions {
+/// let mount = McpMountOptions {
 ///     streamable_http_endpoint: "/mcp".into(),
 ///     sse_endpoint: "/sse".into(),
 ///     sse_messages_endpoint: "/messages".into(),
 ///     health_endpoint: Some("/health".into()),
+///     ..Default::default()
 /// };
 ///
 /// let app = axum::Router::new()
 ///     .route("/api/custom", get(my_handler))
 ///     .merge(mcp_routes(state, http_handler, &mount));
 /// ```
-pub struct AxumMountOptions {
-    pub streamable_http_endpoint: String,
-    pub sse_endpoint: String,
-    pub sse_messages_endpoint: String,
-    pub health_endpoint: Option<String>,
-}
-
-impl Default for AxumMountOptions {
-    fn default() -> Self {
-        Self {
-            streamable_http_endpoint: DEFAULT_STREAMABLE_HTTP_ENDPOINT.to_string(),
-            sse_endpoint: DEFAULT_SSE_ENDPOINT.to_string(),
-            sse_messages_endpoint: DEFAULT_MESSAGES_ENDPOINT.to_string(),
-            health_endpoint: None,
-        }
-    }
-}
+pub use rust_mcp_sdk::mcp_http::McpMountOptions;
 
 /// Configuration struct for the Axum server
 /// Used to configure the AxumServer instance.
@@ -134,6 +121,11 @@ pub struct AxumServerOptions {
     /// Interval between automatic ping messages sent to clients to detect disconnects
     pub ping_interval: Duration,
 
+    /// Maximum size in bytes of an incoming HTTP request body. Requests larger
+    /// than this are rejected with `413 Payload Too Large`.
+    /// Defaults to 4 MiB when `None`.
+    pub max_request_body_size: Option<usize>,
+
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
 
@@ -145,17 +137,12 @@ pub struct AxumServerOptions {
     /// Required if `enable_ssl` is `true`.
     pub ssl_key_path: Option<String>,
 
-    /// List of allowed host header values for DNS rebinding protection.
-    /// If not specified, host validation is disabled.
-    pub allowed_hosts: Option<Vec<String>>,
-
-    /// List of allowed origin header values for DNS rebinding protection.
-    /// If not specified, origin validation is disabled.
-    pub allowed_origins: Option<Vec<String>>,
-
-    /// Enable DNS rebinding protection (requires allowedHosts and/or allowedOrigins to be configured).
-    /// Default is false for backwards compatibility.
-    pub dns_rebinding_protection: bool,
+    /// DNS rebinding protection configuration (enabled by default).
+    ///
+    /// When `dns_rebinding_protection` is `true` and no `allowed_hosts` or
+    /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
+    /// `host:port` unless the bind address is a wildcard.
+    pub dns_rebinding: DnsRebindingOptions,
 
     /// If set to true, the SSE transport will also be supported for backward compatibility (default: true)
     pub sse_support: bool,
@@ -290,21 +277,24 @@ impl AxumServerOptions {
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
 
-    pub fn needs_dns_protection(&self) -> bool {
-        self.dns_rebinding_protection
-            && (self.allowed_hosts.is_some() || self.allowed_origins.is_some())
+    /// Maximum incoming HTTP request body size in bytes, falling back to the
+    /// default (4 MiB) when not configured.
+    pub fn max_request_body_size(&self) -> usize {
+        self.max_request_body_size
+            .unwrap_or(rust_mcp_sdk::mcp_http::DEFAULT_MAX_REQUEST_BODY_SIZE)
     }
 
     /// Resolves the mount options from this server configuration.
     ///
-    /// Prepares [`AxumMountOptions`] by resolving custom endpoints to their
+    /// Prepares [`McpMountOptions`] by resolving custom endpoints to their
     /// default values when they are `None`.
-    pub fn resolve_mount_options(&self) -> AxumMountOptions {
-        AxumMountOptions {
+    pub fn resolve_mount_options(&self) -> McpMountOptions {
+        McpMountOptions {
             streamable_http_endpoint: self.streamable_http_endpoint().to_string(),
             sse_endpoint: self.sse_endpoint().to_string(),
             sse_messages_endpoint: self.sse_messages_endpoint().to_string(),
             health_endpoint: self.health_endpoint.clone(),
+            max_request_body_size: self.max_request_body_size(),
         }
     }
 }
@@ -322,6 +312,7 @@ impl Default for AxumServerOptions {
             custom_streamable_http_endpoint: None,
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
+            max_request_body_size: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
@@ -329,9 +320,7 @@ impl Default for AxumServerOptions {
             session_id_generator: None,
             enable_json_response: None,
             sse_support: true,
-            allowed_hosts: None,
-            allowed_origins: None,
-            dns_rebinding_protection: false,
+            dns_rebinding: DnsRebindingOptions::default(),
             event_store: None,
             auth: None,
             task_store: None,
@@ -388,12 +377,13 @@ impl AxumServer {
 
         // populate middlewares
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];
-        if server_options.needs_dns_protection() {
-            //dns pritection middleware
-            middlewares.push(Arc::new(DnsRebindProtector::new(
-                server_options.allowed_hosts.take(),
-                server_options.allowed_origins.take(),
-            )));
+
+        if let Some(dns) = resolve_dns_middleware(
+            &mut server_options.dns_rebinding,
+            &server_options.host,
+            server_options.port,
+        ) {
+            middlewares.push(Arc::new(dns));
         }
 
         let http_handler = {
@@ -671,37 +661,6 @@ mod tests {
             "http://127.0.0.1:8080/abcd/messages"
         );
         assert_eq!(options.sse_messages_endpoint(), "/abcd/messages");
-    }
-
-    #[test]
-    fn test_server_options_needs_dns_protection() {
-        let options = AxumServerOptions::default();
-
-        // should be false by default
-        assert!(!options.needs_dns_protection());
-
-        // should still be false unless allowed_hosts or allowed_origins are also provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            ..Default::default()
-        };
-        assert!(!options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_hosts is provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            allowed_hosts: Some(vec![String::from("127.0.0.1")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
-
-        // should be true when dns_rebinding_protection is true and allowed_origins is provided
-        let options = AxumServerOptions {
-            dns_rebinding_protection: true,
-            allowed_origins: Some(vec![String::from("http://127.0.0.1:8080")]),
-            ..Default::default()
-        };
-        assert!(options.needs_dns_protection());
     }
 
     #[test]

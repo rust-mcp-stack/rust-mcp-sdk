@@ -1,5 +1,5 @@
 use actix_web::{web, App, HttpServer};
-use rust_mcp_actix::{mcp_scope, ActixMountOptions};
+use rust_mcp_actix::{mcp_scope, McpMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_icon;
@@ -56,11 +56,12 @@ async fn main() -> std::io::Result<()> {
     });
     let http_handler = Arc::new(McpHttpHandler::new(None, vec![], None));
 
-    let mount_opts = ActixMountOptions {
+    let mount_opts = McpMountOptions {
         streamable_http_endpoint: "/mcp".into(),
         sse_endpoint: "/sse".into(),
         sse_messages_endpoint: "/messages".into(),
         health_endpoint: Some("/health".into()),
+        ..Default::default()
     };
 
     println!("Starting BYO-server Actix app at http://127.0.0.1:8080");

@@ -1,5 +1,5 @@
 use actix_web::{test, App};
-use rust_mcp_actix::{mcp_scope, ActixMountOptions};
+use rust_mcp_actix::{mcp_scope, McpMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_server::ServerHandler;
@@ -57,12 +57,13 @@ fn make_state_json_mode() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
     (Arc::new(state), handler)
 }
 
-fn default_mount() -> ActixMountOptions {
-    ActixMountOptions {
+fn default_mount() -> McpMountOptions {
+    McpMountOptions {
         streamable_http_endpoint: "/mcp".into(),
         sse_endpoint: "/sse".into(),
         sse_messages_endpoint: "/messages".into(),
         health_endpoint: Some("/health".into()),
+        ..Default::default()
     }
 }
 
@@ -102,7 +103,7 @@ async fn test_health_endpoint_returns_200() {
 #[actix_web::test]
 async fn test_health_endpoint_disabled_when_none() {
     let (state, handler) = make_state();
-    let opts = ActixMountOptions {
+    let opts = McpMountOptions {
         health_endpoint: None,
         ..default_mount()
     };
@@ -126,6 +127,26 @@ async fn test_unknown_path_returns_404() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 404);
+}
+
+#[actix_web::test]
+async fn test_reject_oversized_request_body() {
+    let (state, handler) = make_state();
+    let opts = McpMountOptions {
+        max_request_body_size: 1024,
+        ..default_mount()
+    };
+    let scope = mcp_scope(state, handler, &opts);
+    let app = test::init_service(App::new().service(scope)).await;
+
+    let oversized_body = "x".repeat(4096);
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .set_payload(oversized_body)
+        .insert_header(("Content-Type", "application/json"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 413);
 }
 
 // =====================================================================

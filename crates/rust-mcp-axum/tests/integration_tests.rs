@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use axum::Router;
 use http_body_util::BodyExt;
-use rust_mcp_axum::{mcp_routes, AxumMountOptions, AxumServerOptions};
+use rust_mcp_axum::{mcp_routes, AxumServerOptions, McpMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::McpAppState;
 use rust_mcp_sdk::mcp_http::McpHttpHandler;
@@ -34,7 +34,7 @@ fn test_server_details() -> InitializeResult {
 struct DummyHandler;
 impl ServerHandler for DummyHandler {}
 
-fn make_app(http_handler: McpHttpHandler, mount: &AxumMountOptions) -> Router {
+fn make_app(http_handler: McpHttpHandler, mount: &McpMountOptions) -> Router {
     let state = Arc::new(McpAppState {
         session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
@@ -52,35 +52,38 @@ fn make_app(http_handler: McpHttpHandler, mount: &AxumMountOptions) -> Router {
     mcp_routes(state, mount, http_handler)
 }
 
-fn default_mount() -> AxumMountOptions {
-    AxumMountOptions {
+fn default_mount() -> McpMountOptions {
+    McpMountOptions {
         streamable_http_endpoint: "/mcp".into(),
         sse_endpoint: "/sse".into(),
         sse_messages_endpoint: "/messages".into(),
         health_endpoint: Some("/health".into()),
+        ..Default::default()
     }
 }
 
 // =====================================================================
-// AxumMountOptions tests
+// McpMountOptions tests
 // =====================================================================
 
 #[test]
 fn test_axum_mount_options_default() {
-    let mount = AxumMountOptions::default();
+    let mount = McpMountOptions::default();
     assert_eq!(mount.streamable_http_endpoint, "/mcp");
     assert_eq!(mount.sse_endpoint, "/sse");
     assert_eq!(mount.sse_messages_endpoint, "/messages");
     assert!(mount.health_endpoint.is_none());
+    assert_eq!(mount.max_request_body_size, 4 * 1024 * 1024);
 }
 
 #[test]
 fn test_axum_mount_options_custom() {
-    let mount = AxumMountOptions {
+    let mount = McpMountOptions {
         streamable_http_endpoint: "/api/mcp".into(),
         sse_endpoint: "/api/sse".into(),
         sse_messages_endpoint: "/api/messages".into(),
         health_endpoint: Some("/api/health".into()),
+        ..Default::default()
     };
     assert_eq!(mount.streamable_http_endpoint, "/api/mcp");
     assert_eq!(mount.sse_endpoint, "/api/sse");
@@ -89,7 +92,7 @@ fn test_axum_mount_options_custom() {
 }
 
 // =====================================================================
-// AxumServerOptions -> AxumMountOptions bridge
+// AxumServerOptions -> McpMountOptions bridge
 // =====================================================================
 
 #[test]
@@ -100,6 +103,7 @@ fn test_resolve_mount_options_default() {
     assert_eq!(mount.sse_endpoint, "/sse");
     assert_eq!(mount.sse_messages_endpoint, "/messages");
     assert!(mount.health_endpoint.is_none());
+    assert_eq!(mount.max_request_body_size, 4 * 1024 * 1024);
 }
 
 #[test]
@@ -109,6 +113,7 @@ fn test_resolve_mount_options_custom() {
         custom_sse_endpoint: Some("/custom/sse".into()),
         custom_messages_endpoint: Some("/custom/msg".into()),
         health_endpoint: Some("/custom/health".into()),
+        max_request_body_size: Some(1024),
         ..AxumServerOptions::default()
     };
     let mount = options.resolve_mount_options();
@@ -116,6 +121,7 @@ fn test_resolve_mount_options_custom() {
     assert_eq!(mount.sse_endpoint, "/custom/sse");
     assert_eq!(mount.sse_messages_endpoint, "/custom/msg");
     assert_eq!(mount.health_endpoint, Some("/custom/health".into()));
+    assert_eq!(mount.max_request_body_size, 1024);
 }
 
 // =====================================================================
@@ -150,7 +156,7 @@ async fn test_health_endpoint_returns_200() {
 #[tokio::test]
 async fn test_health_endpoint_disabled_when_none() {
     let handler = McpHttpHandler::new(None, vec![], None);
-    let mount = AxumMountOptions {
+    let mount = McpMountOptions {
         health_endpoint: None,
         ..default_mount()
     };
@@ -237,6 +243,31 @@ async fn test_streamable_http_delete_without_session_id() {
 
     // Without sessionId query param, should get an error
     assert!(!response.status().is_success());
+}
+
+#[tokio::test]
+async fn test_reject_oversized_request_body_byo() {
+    let handler = McpHttpHandler::new(None, vec![], None);
+    let mount = McpMountOptions {
+        max_request_body_size: 1024,
+        ..default_mount()
+    };
+    let app = make_app(handler, &mount);
+
+    let oversized_body = "x".repeat(4096);
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .body(Body::from(oversized_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
 
 // =====================================================================
@@ -412,41 +443,6 @@ fn test_axum_server_options_base_url_ssl() {
         ..AxumServerOptions::default()
     };
     assert_eq!(options.base_url(), "https://api.example.com:443");
-}
-
-#[test]
-fn test_axum_server_options_needs_dns_protection_disabled_by_default() {
-    let options = AxumServerOptions::default();
-    assert!(!options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_needs_dns_protection_enabled_with_hosts() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        allowed_hosts: Some(vec!["127.0.0.1".into()]),
-        ..AxumServerOptions::default()
-    };
-    assert!(options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_needs_dns_protection_enabled_with_origins() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        allowed_origins: Some(vec!["http://localhost".into()]),
-        ..AxumServerOptions::default()
-    };
-    assert!(options.needs_dns_protection());
-}
-
-#[test]
-fn test_axum_server_options_dns_protection_requires_hosts_or_origins() {
-    let options = AxumServerOptions {
-        dns_rebinding_protection: true,
-        ..AxumServerOptions::default()
-    };
-    assert!(!options.needs_dns_protection());
 }
 
 #[test]

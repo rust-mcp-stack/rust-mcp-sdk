@@ -1,9 +1,12 @@
 use rust_mcp_sdk::auth::AuthProvider;
 use rust_mcp_sdk::event_store::EventStore;
 use rust_mcp_sdk::id_generator::IdGenerator;
+use rust_mcp_sdk::mcp_http::DnsRebindingOptions;
 use rust_mcp_sdk::mcp_http::HealthHandler;
+use rust_mcp_sdk::mcp_http::McpMountOptions;
 use rust_mcp_sdk::mcp_http::{
-    DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
+    DEFAULT_MAX_REQUEST_BODY_SIZE, DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT,
+    DEFAULT_STREAMABLE_HTTP_ENDPOINT,
 };
 use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_sdk::task_store::{ClientTaskStore, ServerTaskStore};
@@ -55,6 +58,14 @@ pub struct ActixServerOptions {
     pub health_handler: Option<Arc<dyn HealthHandler>>,
     /// Optional message observer for telemetry
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
+    /// Maximum request body size in bytes. Defaults to 4 MiB when None.
+    pub max_request_body_size: Option<usize>,
+    /// DNS rebinding protection configuration (enabled by default).
+    ///
+    /// When `dns_rebinding_protection` is `true` and no `allowed_hosts` or
+    /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
+    /// `host:port` unless the bind address is a wildcard.
+    pub dns_rebinding: DnsRebindingOptions,
     /// Enable TLS/SSL (requires `ssl` feature, default: false)
     pub enable_ssl: bool,
     /// Path to TLS certificate PEM file
@@ -136,13 +147,21 @@ impl ActixServerOptions {
             .unwrap_or(DEFAULT_STREAMABLE_HTTP_ENDPOINT)
     }
 
+    /// Maximum incoming HTTP request body size in bytes, falling back to the
+    /// default (4 MiB) when not configured.
+    pub fn max_request_body_size(&self) -> usize {
+        self.max_request_body_size
+            .unwrap_or(DEFAULT_MAX_REQUEST_BODY_SIZE)
+    }
+
     /// Resolves mount options from this server configuration.
-    pub fn resolve_mount_options(&self) -> crate::mount::ActixMountOptions {
-        crate::mount::ActixMountOptions {
+    pub fn resolve_mount_options(&self) -> McpMountOptions {
+        McpMountOptions {
             streamable_http_endpoint: self.streamable_http_endpoint().to_string(),
             sse_endpoint: self.sse_endpoint().to_string(),
             sse_messages_endpoint: self.sse_messages_endpoint().to_string(),
             health_endpoint: self.health_endpoint.clone(),
+            max_request_body_size: self.max_request_body_size(),
         }
     }
 }
@@ -167,6 +186,8 @@ impl Default for ActixServerOptions {
             health_endpoint: None,
             health_handler: None,
             message_observer: None,
+            max_request_body_size: None,
+            dns_rebinding: DnsRebindingOptions::default(),
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,

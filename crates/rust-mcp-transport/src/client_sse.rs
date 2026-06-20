@@ -38,6 +38,7 @@ const SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
 /// Defines settings for request timeouts, retry behavior, and custom HTTP headers.
 pub struct ClientSseTransportOptions {
     pub request_timeout: Duration,
+    pub max_line_length: usize,
     pub retry_delay: Option<Duration>,
     pub max_retries: Option<usize>,
     pub custom_headers: Option<HashMap<String, String>>,
@@ -48,6 +49,7 @@ impl Default for ClientSseTransportOptions {
     fn default() -> Self {
         Self {
             request_timeout: TransportOptions::default().timeout,
+            max_line_length: TransportOptions::default().max_line_length,
             retry_delay: None,
             max_retries: None,
             custom_headers: None,
@@ -68,6 +70,8 @@ where
     is_shut_down: Mutex<bool>,
     /// Timeout duration for MCP messages
     request_timeout: Duration,
+    /// Maximum line length for incoming messages
+    max_line_length: usize,
     /// HTTP client for making requests
     client: Client,
     /// URL for the SSE endpoint
@@ -129,6 +133,7 @@ where
             shutdown_source: tokio::sync::RwLock::new(None),
             is_shut_down: Mutex::new(false),
             request_timeout: options.request_timeout,
+            max_line_length: options.max_line_length,
             custom_headers: headers,
             sse_task: tokio::sync::RwLock::new(None),
             post_task: tokio::sync::RwLock::new(None),
@@ -323,6 +328,7 @@ where
             IoStream::Writable(Box::pin(tokio::io::stderr())),
             self.pending_requests.clone(),
             self.request_timeout,
+            self.max_line_length,
             cancellation_token,
         );
 
