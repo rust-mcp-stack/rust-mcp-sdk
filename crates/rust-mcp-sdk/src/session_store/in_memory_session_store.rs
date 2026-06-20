@@ -61,7 +61,7 @@ struct Shards {
 
 /// In-memory session store with a bounded session count and optional idle TTL.
 ///
-/// Sessions are spread across [`SHARD_COUNT`] independently locked shards, so
+/// Sessions are spread across SHARD_COUNT independently locked shards, so
 /// concurrent requests for different sessions rarely contend on the same lock.
 /// Idle sessions (older than the configured TTL) are evicted lazily, on access
 /// and whenever the store is checked for capacity. Once `max_sessions` is
