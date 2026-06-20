@@ -222,6 +222,7 @@ where
                 IoStream::Readable(Box::pin(stderr)),
                 self.pending_requests.clone(),
                 self.options.timeout,
+                self.options.max_line_length,
                 cancellation_token,
             );
 
@@ -236,6 +237,7 @@ where
                 IoStream::Writable(Box::pin(tokio::io::stderr())),
                 self.pending_requests.clone(),
                 self.options.timeout,
+                self.options.max_line_length,
                 cancellation_token,
             );
 
