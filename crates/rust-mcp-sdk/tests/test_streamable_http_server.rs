@@ -25,6 +25,7 @@ use rust_mcp_sdk::{
     auth::{AuthInfo, AuthMetadataBuilder, AuthProvider, RemoteAuthProvider},
     event_store::InMemoryEventStore,
     schema::ResultFromClient,
+    session_store::InMemorySessionStore,
     task_store::InMemoryTaskStore,
 };
 use serde_json::{json, Map, Value};
@@ -1879,6 +1880,40 @@ async fn should_reject_oversized_request_body() {
         .expect("Request failed");
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
+}
+
+// should reject new sessions once the store reaches its capacity
+#[tokio::test]
+async fn should_reject_new_session_when_at_capacity() {
+    let server_options = AxumServerOptions {
+        port: random_port(),
+        session_store: Some(Arc::new(InMemorySessionStore::with_limits(Some(1), None))),
+        ..Default::default()
+    };
+
+    let server = create_start_server(server_options).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let init = ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request());
+    let body = serde_json::to_string(&init).unwrap();
+
+    // first session is accepted
+    let first = send_post_request(&server.streamable_url, &body, None, None)
+        .await
+        .expect("Request failed");
+    assert_eq!(first.status(), StatusCode::OK);
+
+    // second session is rejected: the store is full
+    let second = send_post_request(&server.streamable_url, &body, None, None)
+        .await
+        .expect("Request failed");
+    assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    // keep the first session's stream open until the assertions complete
+    drop(first);
 
     server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
     server.axum_runtime.await_server().await.unwrap()
