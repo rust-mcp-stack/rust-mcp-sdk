@@ -5,10 +5,10 @@ pub mod messages_routes;
 pub mod sse_routes;
 pub mod streamable_http_routes;
 
-use super::AxumMountOptions;
-use axum::{Extension, Router};
+use axum::{extract::DefaultBodyLimit, Extension, Router};
 use rust_mcp_sdk::mcp_http::McpAppState;
 use rust_mcp_sdk::mcp_http::McpHttpHandler;
+use rust_mcp_sdk::mcp_http::McpMountOptions;
 use std::sync::Arc;
 
 /// Constructs the Axum router with all MCP application routes.
@@ -34,7 +34,7 @@ use std::sync::Arc;
 /// * `Router` - An Axum router configured with all application routes and state
 pub fn mcp_routes(
     state: Arc<McpAppState>,
-    mount_options: &AxumMountOptions,
+    mount_options: &McpMountOptions,
     http_handler: McpHttpHandler,
 ) -> Router {
     let http_handler = Arc::new(http_handler);
@@ -63,7 +63,10 @@ pub fn mcp_routes(
             ));
 
         router = router.merge(fallback_routes::routes());
-        router.with_state(state).layer(Extension(http_handler))
+        router
+            .with_state(state)
+            .layer(Extension(http_handler))
+            .layer(DefaultBodyLimit::max(mount_options.max_request_body_size))
     };
 
     router

@@ -26,13 +26,14 @@ server.start().await?;
 ### BYO-server (mount on existing Actix app)
 
 ```rust
-use rust_mcp_actix::{mcp_scope, ActixMountOptions};
+use rust_mcp_actix::{mcp_scope, McpMountOptions};
 
-let mount = ActixMountOptions {
+let mount = McpMountOptions {
     streamable_http_endpoint: "/mcp".into(),
     sse_endpoint: "/sse".into(),
     sse_messages_endpoint: "/messages".into(),
     health_endpoint: Some("/health".into()),
+    ..Default::default()
 };
 
 HttpServer::new(move || {
