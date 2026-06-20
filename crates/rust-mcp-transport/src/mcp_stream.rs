@@ -13,9 +13,6 @@ use tokio::{
 };
 
 const CHANNEL_CAPACITY: usize = 36;
-// Maximum size (in bytes) of a single newline-delimited incoming message.
-// A peer cannot force unbounded buffering: longer lines are dropped.
-const MAX_LINE_LENGTH: usize = 4 * 1024 * 1024;
 
 pub struct MCPStream {}
 
@@ -34,6 +31,7 @@ impl MCPStream {
         error_io: IoStream,
         pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
         request_timeout: Duration,
+        max_line_length: usize,
         cancellation_token: CancellationToken,
     ) -> (
         tokio_stream::wrappers::ReceiverStream<X>,
@@ -47,13 +45,10 @@ impl MCPStream {
         let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
-        // Clone cancellation_token for reader
         let reader_token = cancellation_token.clone();
 
         #[allow(clippy::let_underscore_future)]
-        let _ = Self::spawn_reader(readable, tx, reader_token);
-
-        // rpc message stream that receives incoming messages
+        let _ = Self::spawn_reader(readable, tx, max_line_length, reader_token);
 
         let sender = MessageDispatcher::new(pending_requests, writable, request_timeout);
 
@@ -69,6 +64,7 @@ impl MCPStream {
         error_io: IoStream,
         pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
         request_timeout: Duration,
+        max_line_length: usize,
         cancellation_token: CancellationToken,
     ) -> (
         tokio_stream::wrappers::ReceiverStream<X>,
@@ -82,11 +78,10 @@ impl MCPStream {
         let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
-        // Clone cancellation_token for reader
         let reader_token = cancellation_token.clone();
 
         #[allow(clippy::let_underscore_future)]
-        let _ = Self::spawn_reader(readable, tx, reader_token);
+        let _ = Self::spawn_reader(readable, tx, max_line_length, reader_token);
 
         let sender = MessageDispatcher::new_with_acknowledgement(
             pending_requests,
@@ -104,6 +99,7 @@ impl MCPStream {
     fn spawn_reader<X>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         tx: tokio::sync::mpsc::Sender<X>,
+        max_line_length: usize,
         cancellation_token: CancellationToken,
     ) -> JoinHandle<Result<(), TransportError>>
     where
@@ -118,7 +114,7 @@ impl MCPStream {
                         break;
                     },
 
-                    result = read_capped_line(&mut reader, MAX_LINE_LENGTH) => {
+                    result = read_capped_line(&mut reader, max_line_length) => {
                         match result {
                             Ok(LineRead::Eof) => {
                                 // EOF reached, exit loop
@@ -126,8 +122,8 @@ impl MCPStream {
                             }
                             Ok(LineRead::TooLong) => {
                                 // Drop the oversized message and keep the stream alive.
-                                tracing::warn!(
-                                    "dropping incoming message exceeding {MAX_LINE_LENGTH} bytes"
+                                tracing::error!(
+                                    "dropping incoming message exceeding {max_line_length} bytes"
                                 );
                                 continue;
                             }
