@@ -1,7 +1,7 @@
 mod bridge;
 mod error;
 mod factory;
-mod mount;
+pub mod mount;
 mod options;
 pub mod routes;
 mod runtime;
@@ -12,4 +12,5 @@ pub use factory::*;
 pub use mount::*;
 pub use options::*;
 pub use runtime::*;
+pub use rust_mcp_sdk::mcp_http::McpMountOptions;
 pub use server::*;
