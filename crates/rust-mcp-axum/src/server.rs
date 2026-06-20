@@ -130,14 +130,6 @@ pub struct AxumServerOptions {
     /// Pass your own [`SessionStore`] implementation to use Redis, custom
     /// limits, or any other session backend.
     pub session_store: Option<Arc<dyn SessionStore>>,
-    /// Maximum number of concurrent sessions retained by the default in-memory
-    /// session store. New sessions past this limit are rejected with
-    /// `503 Service Unavailable`. `None` uses the store default.
-    pub max_sessions: Option<usize>,
-
-    /// Evict sessions that have been idle for longer than this duration.
-    /// `None` disables idle expiry.
-    pub session_idle_ttl: Option<Duration>,
 
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
