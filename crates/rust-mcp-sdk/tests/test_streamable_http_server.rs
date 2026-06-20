@@ -1918,6 +1918,28 @@ async fn should_reject_new_session_when_at_capacity() {
     server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
     server.axum_runtime.await_server().await.unwrap()
 }
+// should reject an oversized / malformed Mcp-Session-Id header
+#[tokio::test]
+async fn should_reject_malformed_session_id_header() {
+    let (server, _session_id) = initialize_server(None, None).await.unwrap();
+
+    let oversized = "a".repeat(200);
+    let mut headers = HashMap::new();
+    headers.insert("Accept", "text/event-stream");
+    headers.insert("mcp-protocol-version", "2025-03-26");
+    headers.insert("mcp-session-id", oversized.as_str());
+
+    let response = send_get_request(&server.streamable_url, Some(headers))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let error_data: SdkError = response.json().await.unwrap();
+    assert!(error_data.message.contains("Invalid Mcp-Session-Id header"));
+
+    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.hyper_runtime.await_server().await.unwrap()
+}
 
 // should return 400 error for invalid JSON-RPC messages
 // should keep stream open after sending server notifications
