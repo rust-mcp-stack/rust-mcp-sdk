@@ -1818,7 +1818,7 @@ async fn should_handle_elicitation() {
 // should reject request bodies that exceed the configured size limit
 #[tokio::test]
 async fn should_reject_oversized_request_body() {
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
@@ -1837,8 +1837,8 @@ async fn should_reject_oversized_request_body() {
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
-    server.hyper_runtime.graceful_shutdown(ONE_MILLISECOND);
-    server.hyper_runtime.await_server().await.unwrap()
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
 }
 
 // should return 400 error for invalid JSON-RPC messages

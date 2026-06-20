@@ -37,8 +37,6 @@ use tokio::signal;
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
 const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
-// Default maximum size (in bytes) of an incoming HTTP request body (4 MiB)
-const DEFAULT_MAX_REQUEST_BODY_SIZE: usize = 4 * 1024 * 1024;
 
 /// Lightweight mount configuration for BYO-server scenarios.
 ///
@@ -49,36 +47,21 @@ const DEFAULT_MAX_REQUEST_BODY_SIZE: usize = 4 * 1024 * 1024;
 /// # Example
 ///
 /// ```ignore
-/// use rust_mcp_axum::{mcp_routes, AxumMountOptions};
+/// use rust_mcp_axum::{mcp_routes, McpMountOptions};
 ///
-/// let mount = AxumMountOptions {
+/// let mount = McpMountOptions {
 ///     streamable_http_endpoint: "/mcp".into(),
 ///     sse_endpoint: "/sse".into(),
 ///     sse_messages_endpoint: "/messages".into(),
 ///     health_endpoint: Some("/health".into()),
+///     ..Default::default()
 /// };
 ///
 /// let app = axum::Router::new()
 ///     .route("/api/custom", get(my_handler))
 ///     .merge(mcp_routes(state, http_handler, &mount));
 /// ```
-pub struct AxumMountOptions {
-    pub streamable_http_endpoint: String,
-    pub sse_endpoint: String,
-    pub sse_messages_endpoint: String,
-    pub health_endpoint: Option<String>,
-}
-
-impl Default for AxumMountOptions {
-    fn default() -> Self {
-        Self {
-            streamable_http_endpoint: DEFAULT_STREAMABLE_HTTP_ENDPOINT.to_string(),
-            sse_endpoint: DEFAULT_SSE_ENDPOINT.to_string(),
-            sse_messages_endpoint: DEFAULT_MESSAGES_ENDPOINT.to_string(),
-            health_endpoint: None,
-        }
-    }
-}
+pub use rust_mcp_sdk::mcp_http::McpMountOptions;
 
 /// Configuration struct for the Axum server
 /// Used to configure the AxumServer instance.
@@ -301,7 +284,7 @@ impl AxumServerOptions {
     /// default (4 MiB) when not configured.
     pub fn max_request_body_size(&self) -> usize {
         self.max_request_body_size
-            .unwrap_or(DEFAULT_MAX_REQUEST_BODY_SIZE)
+            .unwrap_or(rust_mcp_sdk::mcp_http::DEFAULT_MAX_REQUEST_BODY_SIZE)
     }
 
     pub fn needs_dns_protection(&self) -> bool {
@@ -311,14 +294,15 @@ impl AxumServerOptions {
 
     /// Resolves the mount options from this server configuration.
     ///
-    /// Prepares [`AxumMountOptions`] by resolving custom endpoints to their
+    /// Prepares [`McpMountOptions`] by resolving custom endpoints to their
     /// default values when they are `None`.
-    pub fn resolve_mount_options(&self) -> AxumMountOptions {
-        AxumMountOptions {
+    pub fn resolve_mount_options(&self) -> McpMountOptions {
+        McpMountOptions {
             streamable_http_endpoint: self.streamable_http_endpoint().to_string(),
             sse_endpoint: self.sse_endpoint().to_string(),
             sse_messages_endpoint: self.sse_messages_endpoint().to_string(),
             health_endpoint: self.health_endpoint.clone(),
+            max_request_body_size: self.max_request_body_size(),
         }
     }
 }
