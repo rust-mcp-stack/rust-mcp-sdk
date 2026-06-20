@@ -712,6 +712,36 @@ async fn should_reject_unsupported_content_type() {
     server.axum_runtime.await_server().await.unwrap()
 }
 
+// should reject non-UTF-8 POST body with 400
+#[tokio::test]
+async fn should_reject_non_utf8_post_body() {
+    let server_options = AxumServerOptions {
+        port: random_port(),
+        session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
+            "AAA-BBB-CCC".to_string()
+        ]))),
+        ..Default::default()
+    };
+
+    let server = create_start_server(server_options).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let client = reqwest::Client::new();
+    let non_utf8 = vec![0xFFu8, 0xFE, 0xFD];
+    let response = client
+        .post(&server.streamable_url)
+        .header("Content-Type", "application/json")
+        .body(non_utf8)
+        .send()
+        .await
+        .expect("Request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    server.axum_runtime.graceful_shutdown(ONE_MILLISECOND);
+    server.axum_runtime.await_server().await.unwrap()
+}
+
 // should handle JSON-RPC batch notification messages with 202 response
 #[tokio::test]
 async fn should_handle_batch_notification_messages_with_202_response() {
