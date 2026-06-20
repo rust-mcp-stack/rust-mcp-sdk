@@ -21,9 +21,15 @@ pub async fn handle_streamable_http_post(
     req: HttpRequest,
     state: web::Data<Arc<McpAppState>>,
     handler: web::Data<McpHttpHandler>,
-    payload: String,
+    payload: web::Bytes,
 ) -> HttpResponse {
-    let request = crate::bridge::from_actix_request(&req, Some(&payload));
+    let payload = match std::str::from_utf8(&payload) {
+        Ok(payload) => payload,
+        Err(_) => {
+            return HttpResponse::BadRequest().body("Request body must be valid UTF-8");
+        }
+    };
+    let request = crate::bridge::from_actix_request(&req, Some(payload));
     match handler
         .handle_streamable_http(request, state.get_ref().clone())
         .await
