@@ -3,8 +3,7 @@ use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
     error::SdkResult,
     event_store::InMemoryEventStore,
-    macros,
-    mcp_icon,
+    macros, mcp_icon,
     mcp_server::{ServerHandler, ToMcpServerHandler},
     schema::*,
     McpServer,
@@ -86,7 +85,7 @@ async fn main() -> SdkResult<()> {
     //   • SSE (backward compat): http://127.0.0.1:8080/sse
     let server = create_axum_server(
         server_details,
-        HelloHandler::default().to_mcp_server_handler(),
+        HelloHandler.to_mcp_server_handler(),
         AxumServerOptions {
             host: "127.0.0.1".into(),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability

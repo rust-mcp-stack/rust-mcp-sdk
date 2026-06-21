@@ -53,7 +53,7 @@ fn test_create_actix_server_returns_server() {
         protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
-    let handler = DummyHandler::default().to_mcp_server_handler();
+    let handler = DummyHandler.to_mcp_server_handler();
     let options = rust_mcp_actix::ActixServerOptions::default();
 
     let server = rust_mcp_actix::create_actix_server(details, handler, options);
