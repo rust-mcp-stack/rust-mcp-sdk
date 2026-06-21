@@ -40,7 +40,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
-rust-mcp-sdk = "0.9"
+rust-mcp-sdk = "0.10"
 serde = "1.0"
 serde_json = "1.0"
 tokio = "1.4"
@@ -330,7 +330,7 @@ Add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) to your dependenci
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.9"
+rust-mcp-sdk = "0.10"
 rust-mcp-axum = "0.1"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
@@ -365,7 +365,7 @@ Add [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) instead:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.9"
+rust-mcp-sdk = "0.10"
 rust-mcp-actix = "0.1"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"

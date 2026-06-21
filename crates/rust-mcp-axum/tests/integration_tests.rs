@@ -40,7 +40,7 @@ fn make_app(http_handler: McpHttpHandler, mount: &McpMountOptions) -> Router {
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
         server_details: Arc::new(test_server_details()),
-        handler: DummyHandler::default().to_mcp_server_handler(),
+        handler: DummyHandler.to_mcp_server_handler(),
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
@@ -406,7 +406,7 @@ async fn test_error_bridge_session_id_missing() {
 #[tokio::test]
 async fn test_create_axum_server_factory() {
     let server_details = test_server_details();
-    let handler = DummyHandler::default().to_mcp_server_handler();
+    let handler = DummyHandler.to_mcp_server_handler();
     let options = AxumServerOptions::default();
 
     let server = rust_mcp_axum::create_axum_server(server_details, handler, options);

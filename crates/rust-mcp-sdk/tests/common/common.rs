@@ -37,7 +37,10 @@ pub fn init_tracing() {
             .or_else(|_| EnvFilter::try_new("tracing"))
             .unwrap();
 
-        tracing_subscriber::fmt().with_env_filter(filter).try_init().ok();
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .try_init()
+            .ok();
     });
 }
 #[mcp_tool(
@@ -311,8 +314,20 @@ impl Xorshift {
 }
 
 pub fn random_port() -> u16 {
-    static NEXT_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(10000);
-    NEXT_PORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    use std::time::SystemTime;
+    let min: u16 = 10000;
+    let max: u16 = 40000;
+    let range = (max - min + 1) as u64;
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("systime error!");
+
+    let nanos = now.subsec_nanos() as u64;
+    let secs = now.as_secs();
+    let mixed = (nanos ^ (secs << 16)) ^ (nanos.rotate_left(13));
+    let pid_mix = mixed.wrapping_mul(std::process::id() as u64);
+    min + (pid_mix % range) as u16
 }
 
 pub fn random_port_old() -> u16 {

@@ -35,7 +35,7 @@ fn make_state() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
         server_details: Arc::new(test_server_details()),
-        handler: DummyHandler::default().to_mcp_server_handler(),
+        handler: DummyHandler.to_mcp_server_handler(),
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,

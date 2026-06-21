@@ -71,7 +71,7 @@ async fn main() -> SdkResult<()> {
     };
 
     let transport = StdioTransport::new(TransportOptions::default())?;
-    let handler = HelloHandler::default().to_mcp_server_handler();
+    let handler = HelloHandler {}.to_mcp_server_handler();
     let server = server_runtime::create_server(McpServerOptions {
         transport,
         handler,
