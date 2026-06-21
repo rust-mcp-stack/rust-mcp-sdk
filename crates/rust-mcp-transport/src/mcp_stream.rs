@@ -27,6 +27,7 @@ impl MCPStream {
     /// - A `Pin<Box<dyn Stream<Item = R> + Send>>`: A stream that yields items of type `R`.
     /// - A `MessageDispatcher<R>`: A sender that can be used to send messages of type `R`.
     /// - An `IoStream`: An error handling stream for managing error I/O (stderr).
+    #[allow(clippy::too_many_arguments)]
     pub fn create<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
@@ -58,6 +59,7 @@ impl MCPStream {
         (stream, sender, error_io)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_with_ack<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: tokio::sync::mpsc::Sender<(

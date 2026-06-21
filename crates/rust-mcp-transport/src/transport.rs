@@ -48,8 +48,7 @@ pub struct TransportOptions {
     /// Capacity of the incoming-message channel buffer.
     ///
     /// A larger value smooths out head-of-line jitter under bursty traffic at
-    /// the cost of more buffered memory. Defaults to
-    /// [`DEFAULT_MESSAGE_CHANNEL_CAPACITY`](crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY).
+    /// the cost of more buffered memory. Defaults to 36.
     pub channel_capacity: usize,
 }
 impl Default for TransportOptions {
