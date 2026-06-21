@@ -190,6 +190,7 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
             self.options.timeout,
             self.options.max_line_length,
             cancellation_token,
+            self.options.channel_capacity,
         );
 
         if let (Some(session_id), Some(stream_id), Some(event_store)) = (

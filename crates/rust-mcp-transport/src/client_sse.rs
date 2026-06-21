@@ -330,6 +330,7 @@ where
             self.request_timeout,
             self.max_line_length,
             cancellation_token,
+            crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
         );
 
         self.set_message_sender(sender).await;
