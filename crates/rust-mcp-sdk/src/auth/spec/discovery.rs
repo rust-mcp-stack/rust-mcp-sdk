@@ -3,7 +3,6 @@ use crate::{
     error::McpSdkError,
     mcp_http::url_base,
 };
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
@@ -151,7 +150,7 @@ impl AuthorizationServerMetadata {
     /// to RFC 8414 (OAuth 2.0 Authorization Server Metadata) or OpenID Connect Discovery 1.0.
     ///
     pub async fn from_discovery_url(discovery_url: &str) -> Result<Self, McpSdkError> {
-        let client = Client::new();
+        let client = crate::auth::shared_http_client();
         let metadata = client
             .get(discovery_url)
             .send()

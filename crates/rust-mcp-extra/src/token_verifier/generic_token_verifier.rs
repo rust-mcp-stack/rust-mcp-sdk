@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use reqwest::{header::AUTHORIZATION, StatusCode};
 use rust_mcp_sdk::{
     auth::{
-        decode_token_header, default_jwks_algorithms, Algorithm, Audience, AuthInfo,
-        AuthenticationError, IntrospectionResponse, JsonWebKeySet, OauthTokenVerifier,
+        decode_token_header, default_jwks_algorithms, shared_http_client, Algorithm, Audience,
+        AuthInfo, AuthenticationError, IntrospectionResponse, JsonWebKeySet, OauthTokenVerifier,
     },
     mcp_http::error_message_from_response,
 };
@@ -224,7 +224,7 @@ impl GenericOauthTokenVerifier {
             }
         };
 
-        let client = reqwest::Client::new();
+        let client = shared_http_client();
 
         let response = client
             .get(user_info_endpoint.to_owned())
@@ -267,7 +267,7 @@ impl GenericOauthTokenVerifier {
         token: &str,
         introspection_endpoint: &Url,
     ) -> Result<AuthInfo, AuthenticationError> {
-        let client = reqwest::Client::new();
+        let client = shared_http_client();
 
         // Form data body
         let mut form = HashMap::new();
@@ -355,7 +355,9 @@ impl GenericOauthTokenVerifier {
     }
 
     async fn populate_jwks(&self, jwks_uri: &Url) -> Result<(), AuthenticationError> {
-        let response = reqwest::get(jwks_uri.to_owned())
+        let response = shared_http_client()
+            .get(jwks_uri.to_owned())
+            .send()
             .await
             .map_err(|err| AuthenticationError::Jwks(err.to_string()))?;
         let jwks: JsonWebKeySet = response

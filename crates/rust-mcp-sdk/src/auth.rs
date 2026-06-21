@@ -22,3 +22,22 @@ pub use spec::Audience;
 pub use spec::*;
 #[cfg(feature = "auth")]
 pub use token_verifier::*;
+
+#[cfg(feature = "auth")]
+use std::sync::LazyLock;
+
+/// Process-wide shared `reqwest::Client` used for OAuth discovery, metadata, and
+/// JWKS fetches.
+///
+/// Constructing a new `Client` per call creates a fresh connection pool and TLS
+/// configuration on every request. Cloning this shared client (cheap; it is
+/// `Arc`-backed) reuses the same pool, which matters during key-rotation events
+/// where many verifications fetch JWKS concurrently.
+#[cfg(feature = "auth")]
+static SHARED_HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+
+/// Returns a clone of the process-wide shared [`reqwest::Client`].
+#[cfg(feature = "auth")]
+pub fn shared_http_client() -> reqwest::Client {
+    SHARED_HTTP_CLIENT.clone()
+}
