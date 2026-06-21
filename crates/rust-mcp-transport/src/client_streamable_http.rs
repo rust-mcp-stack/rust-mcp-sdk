@@ -54,6 +54,7 @@ impl StreamableTransportOptions {
 pub struct RequestOptions {
     pub request_timeout: Duration,
     pub max_line_length: usize,
+    pub channel_capacity: usize,
     pub retry_delay: Option<Duration>,
     pub max_retries: Option<usize>,
     pub custom_headers: Option<HashMap<String, String>>,
@@ -64,6 +65,7 @@ impl Default for RequestOptions {
         Self {
             request_timeout: TransportOptions::default().timeout,
             max_line_length: TransportOptions::default().max_line_length,
+            channel_capacity: TransportOptions::default().channel_capacity,
             retry_delay: None,
             max_retries: None,
             custom_headers: None,
@@ -83,6 +85,8 @@ where
     request_timeout: Duration,
     /// Maximum line length for incoming messages
     max_line_length: usize,
+    /// Capacity of the incoming-message channel buffer
+    channel_capacity: usize,
     /// HTTP client for making requests
     client: Client,
     /// URL for the SSE endpoint
@@ -124,6 +128,7 @@ where
             is_shut_down: Mutex::new(false),
             request_timeout: options.request_options.request_timeout,
             max_line_length: options.request_options.max_line_length,
+            channel_capacity: options.request_options.channel_capacity,
             client,
             mcp_server_url,
             retry_delay: options
@@ -294,7 +299,7 @@ where
                 self.request_timeout,
                 self.max_line_length,
                 cancellation_token,
-                crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
+                self.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
@@ -381,7 +386,7 @@ where
                 self.request_timeout,
                 self.max_line_length,
                 cancellation_token,
-                crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
+                self.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
