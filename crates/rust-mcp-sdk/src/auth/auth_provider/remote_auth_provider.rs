@@ -13,7 +13,6 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::{BodyExt, Full};
-use reqwest::Client;
 use std::{collections::HashMap, sync::Arc};
 
 /// Represents a **Remote OAuth authentication provider** integrated with the MCP server.
@@ -68,7 +67,7 @@ impl RemoteAuthProvider {
         token_verifier: Box<dyn OauthTokenVerifier>,
         required_scopes: Option<Vec<String>>,
     ) -> Result<Self, reqwest::Error> {
-        let client = Client::new();
+        let client = crate::auth::shared_http_client();
 
         let auth_server_meta = client
             .get(authorization_server_metadata_url)

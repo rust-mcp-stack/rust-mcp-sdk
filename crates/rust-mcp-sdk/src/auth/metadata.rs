@@ -5,7 +5,6 @@ use crate::{
     error::McpSdkError,
     utils::join_url,
 };
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -139,7 +138,7 @@ impl<'a> AuthMetadataBuilder<'a> {
     where
         S: Into<Cow<'a, str>>,
     {
-        let client = Client::new();
+        let client = crate::auth::shared_http_client();
         let json: Value = client
             .get(discovery_url)
             .send()
