@@ -232,4 +232,4 @@ Also see the more complete examples in [`crates/rust-mcp-sdk/examples/`](../rust
 
 ---
 
-<img align="top" src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — a high-performance, asynchronous toolkit for building MCP servers and clients in Rust.
+<img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — a high-performance, asynchronous toolkit for building MCP servers and clients in Rust.
