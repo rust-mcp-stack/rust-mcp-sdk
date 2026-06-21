@@ -506,6 +506,8 @@ impl AxumServer {
     /// * `TransportServerResult<()>` - Ok if the server starts successfully, Err otherwise
     #[cfg(feature = "ssl")]
     pub(crate) async fn start_ssl(self, addr: SocketAddr) -> TransportServerResult<()> {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
         let config = RustlsConfig::from_pem_file(
             self.options.ssl_cert_path.as_deref().unwrap_or_default(),
             self.options.ssl_key_path.as_deref().unwrap_or_default(),
@@ -746,5 +748,12 @@ mod tests {
             ..Default::default()
         };
         assert!(options.resolve_server_address().await.is_err());
+    }
+
+    #[cfg(feature = "ssl")]
+    #[test]
+    fn install_crypto_provider_idempotent() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     }
 }

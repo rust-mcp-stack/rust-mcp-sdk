@@ -64,6 +64,7 @@ impl ActixRuntime {
 
         #[cfg(feature = "ssl")]
         let srv = if server.options().enable_ssl {
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
             let config = load_rustls_config(
                 server
                     .options()
@@ -574,4 +575,13 @@ fn load_rustls_config(cert_path: &str, key_path: &str) -> std::io::Result<rustls
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
     Ok(config)
+}
+
+#[cfg(all(test, feature = "ssl"))]
+mod ssl_tests {
+    #[test]
+    fn install_crypto_provider_idempotent() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
 }

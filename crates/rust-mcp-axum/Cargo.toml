@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-server = { workspace = true, features = [] }
+rustls = { workspace = true, optional = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
@@ -29,7 +30,7 @@ serde_json = { workspace = true }
 http-body-util = { workspace = true }
 
 [features]
-ssl = ["axum-server/tls-rustls"]
+ssl = ["axum-server/tls-rustls", "dep:rustls"]
 tls-no-provider = ["axum-server/tls-rustls-no-provider"]
 
 [lints]
