@@ -557,6 +557,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "conformance-server"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "axum-server",
+ "base64",
+ "rust-mcp-axum",
+ "rust-mcp-macros",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

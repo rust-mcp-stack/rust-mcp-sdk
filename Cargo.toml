@@ -7,6 +7,7 @@ members = [
     "crates/rust-mcp-extra",
     "crates/rust-mcp-axum",
     "crates/rust-mcp-actix",
+    "crates/conformance-server",
 ]
 
 [workspace.package]
