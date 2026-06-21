@@ -34,7 +34,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.9"
+rust-mcp-sdk = "0.10"
 rust-mcp-axum = "0.1"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
