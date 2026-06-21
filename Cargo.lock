@@ -2312,14 +2312,17 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "http-body-util",
+ "rust-mcp-macros",
  "rust-mcp-sdk",
  "rustls",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

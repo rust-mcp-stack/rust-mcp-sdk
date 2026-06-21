@@ -27,7 +27,12 @@ http = { workspace = true }
 tempfile = "3.23.0"
 tower = "0.5"
 serde_json = { workspace = true }
+serde = { workspace = true }
 http-body-util = { workspace = true }
+async-trait = { workspace = true }
+tracing-subscriber = { workspace = true }
+rust-mcp-sdk = { workspace = true, features = ["server", "streamable-http", "sse", "macros"] }
+axum-server = { workspace = true }
 
 [features]
 ssl = ["axum-server/tls-rustls", "dep:rustls"]

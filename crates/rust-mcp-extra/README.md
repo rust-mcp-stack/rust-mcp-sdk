@@ -116,7 +116,7 @@ cargo run -p rust-mcp-extra --example scalekit-auth
 ## 🔢 ID Generators
 Various implementations of the IdGenerator trait (from [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk)) for generating unique identifiers.
 
-| **🧩 All ID generators in this crate can be used as `SessionId` generators in [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk)).**
+> 🧩 All ID generators in this crate can be used as `SessionId` generators in both [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) and [`ActixServerOptions`](https://docs.rs/rust-mcp-actix/latest/rust_mcp_actix/struct.ActixServerOptions.html).
 
 
 | Generator |  Description|
@@ -135,11 +135,22 @@ For example to use **SnowflakeIdGenerator** :
 ```rs
 use rust_mcp_extra::id_generator::SnowflakeIdGenerator;
 
-
+// With Axum:
 let server = rust_mcp_axum::create_axum_server(
     server_details,
     handler,
     AxumServerOptions {
+        host: "127.0.0.1".to_string(),
+        session_id_generator: Some(Arc::new(SnowflakeIdGenerator::new(1015))), // use SnowflakeIdGenerator
+        ..Default::default()
+    },
+);
+
+// With Actix:
+let server = rust_mcp_actix::create_actix_server(
+    server_details,
+    handler,
+    ActixServerOptions {
         host: "127.0.0.1".to_string(),
         session_id_generator: Some(Arc::new(SnowflakeIdGenerator::new(1015))), // use SnowflakeIdGenerator
         ..Default::default()
@@ -162,3 +173,13 @@ let server = rust_mcp_axum::create_axum_server(
 `EventStore` implementations to enable resumability on MCP servers by reliably storing and replaying event histories.
 
 🔜 Coming Soon
+
+---
+
+## License
+
+MIT
+
+---
+
+<img align="top" src="assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — a high-performance, asynchronous toolkit for building MCP servers and clients in Rust.

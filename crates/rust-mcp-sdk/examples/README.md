@@ -203,7 +203,7 @@ It displays the server name and version, outlines the server's capabilities, and
 
 These examples demonstrate an MCP client using the *SSE* transport, highlighting basic MCP client operations such as retrieving the MCP server's capabilities and making a tool call.
 
-These examples connect to a running instance of the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, which has already been started with the `streamableHttp` argument.
+These examples connect to a running instance of the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, which has been started with the `sse` argument.
 
 It displays the server name and version, outlines the server's capabilities, and provides a list of available tools, prompts, templates, resources, and more offered by the server. Additionally, it will execute a tool call by utilizing the add tool from the server-everything package to sum two numbers and output the result.
 
@@ -214,4 +214,35 @@ npx @modelcontextprotocol/server-everything sse
 2- start the example client, for instance start the `simple-mcp-client-sse`:
 ```bash
 cargo run --example simple-mcp-client-sse
+```
+
+---
+
+## Actix-web Examples
+
+Examples for the `rust-mcp-actix` crate (Actix-web HTTP backend) live in a separate location:
+
+```
+crates/rust-mcp-actix/examples/
+```
+
+- [`hello-world-server.rs`](../../../crates/rust-mcp-actix/examples/hello-world-server.rs) — Minimal Actix MCP server (Streamable HTTP + SSE)
+- [`byo-server.rs`](../../../crates/rust-mcp-actix/examples/byo-server.rs) — Mount MCP on an existing Actix-web app using `mcp_scope()`
+
+To run them:
+```bash
+cargo run -p rust-mcp-actix --example hello-world-server
+cargo run -p rust-mcp-actix --example byo-server
+```
+
+Similarly, Axum BYO-server examples live in:
+```
+crates/rust-mcp-axum/examples/
+```
+- [`hello-world-server.rs`](../../../crates/rust-mcp-axum/examples/hello-world-server.rs) — Minimal Axum MCP server
+- [`byo-server.rs`](../../../crates/rust-mcp-axum/examples/byo-server.rs) — Mount MCP on an existing Axum router using `mcp_routes()`
+
+```bash
+cargo run -p rust-mcp-axum --example hello-world-server
+cargo run -p rust-mcp-axum --example byo-server
 ```

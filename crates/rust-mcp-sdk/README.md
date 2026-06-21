@@ -25,7 +25,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
 - ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
-- ✅ Lightweight Axum-based server for Streamable HTTP and SSE
+- ✅ Framework Agnostic: Seamless **Axum**, **Actix**, and **BYO Server** integrations
 - ✅ Multi-client concurrency
 - ✅ DNS Rebinding Protection
 - ✅ Resumability
@@ -45,7 +45,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 
 ## Table of Contents
 - [Quick Start](#quick-start)
-  - [Minimal MCP Server (Stdio)]([#minimal-mcp-server-stdio](#minimal-mcp-server-stdio))
+  - [Minimal MCP Server (Stdio)](#minimal-mcp-server-stdio)
   - [Minimal MCP Server (Streamable HTTP)](#minimal-mcp-server-streamable-http)
   - [Minimal MCP Client (Stdio)](#minimal-mcp-client-stdio)
 - [Usage Examples](#usage-examples)
@@ -59,8 +59,13 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - [Authentication](#authentication)
   - [RemoteAuthProvider](#remoteauthprovider)
   - [OAuthProxy](#oauthproxy)
-- [AxumServerOptions](#axumserveroptions)
-- [Security Considerations](#security-considerations)
+- [HTTP Server Backends (Axum & Actix)](#http-server-backends-axum--actix)
+  - [Axum Backend (rust-mcp-axum)](#axum-backend-rust-mcp-axum)
+  - [Actix-web Backend (rust-mcp-actix)](#actix-web-backend-rust-mcp-actix)
+  - [BYO-server: Embed MCP in your existing app](#byo-server-embed-mcp-in-your-existing-app)
+  - [AxumServerOptions](#axumserveroptions)
+  - [ActixServerOptions](#actixserveroptions)
+  - [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
   -  [Default Features](#default-features)
@@ -162,11 +167,15 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
-## Minimal MCP Server (Streamable HTTP)
-Creating an MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup.
-The setup is nearly identical to the stdio example shown above. You only need to install the `rust-mcp-axum` crate and use `create_axum_server()` with `AxumServerOptions`.
+## HTTP Server Backends (Axum & Actix)
 
-💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `AxumServerOptions`.
+Creating a Streamable HTTP MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup. The setup is nearly identical to the stdio example — the only difference is which HTTP backend crate you install and which function you call to create the server.
+
+💡 If backward compatibility with older SSE-only clients is required, both backends support enabling SSE transport by setting `sse_support` to true in their respective options (it defaults to `true`).
+
+### Axum Backend (`rust-mcp-axum`)
+
+Add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) to your dependencies and use `create_axum_server()` with `AxumServerOptions`.
 
 ```rust
 use async_trait::async_trait;
@@ -175,62 +184,11 @@ use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,macros,
     mcp_server::ServerHandler,schema::*,
 };
 
-// Define a mcp tool
-#[macros::mcp_tool(
-    name = "say_hello",
-    description = "returns \"Hello from Rust MCP SDK!\" message "
-)]
-#[derive(Debug, ::serde::Deserialize, ::serde::Serialize, macros::JsonSchema)]
-pub struct SayHelloTool {}
-
-// define a custom handler
-#[derive(Default)]
-struct HelloHandler;
-
-// implement ServerHandler
-#[async_trait]
-impl ServerHandler for HelloHandler {
-    // Handles requests to list available tools.
-    async fn handle_list_tools_request(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _runtime: std::sync::Arc<dyn McpServer>,
-    ) -> std::result::Result<ListToolsResult, RpcError> {
-        Ok(ListToolsResult {tools: vec![SayHelloTool::tool()],meta: None,next_cursor: None})
-    }
-    // Handles requests to call a specific tool.
-    async fn handle_call_tool_request(
-        &self,
-        params: CallToolRequestParams,
-        _runtime: std::sync::Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
-        if params.name == "say_hello" {Ok(CallToolResult::text_content(vec!["Hello from Rust MCP SDK!".into()]))
-        } else {
-            Err(CallToolError::unknown_tool(params.name))
-        }
-    }
-}
+// ... (define SayHelloTool and HelloHandler as shown above)
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    // Define server details and capabilities
-    let server_info = InitializeResult {
-        server_info: Implementation {
-            name: "hello-rust-mcp".into(),
-            version: "0.1.0".into(),
-            title: Some("Hello World MCP Server".into()),
-            description: Some("A minimal Rust MCP server".into()),
-            icons: vec![mcp_icon!(src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
-                mime_type = "image/png",
-                sizes = ["128x128"],
-                theme = "light")],
-            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
-        },
-        capabilities: ServerCapabilities { tools: Some(ServerCapabilitiesTools { list_changed: None }), ..Default::default() },
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
-        instructions: None,
-        meta:None
-    };
+    let server_info = InitializeResult { /* ... */ };
 
     let handler = HelloHandler::default().to_mcp_server_handler();
     let server = create_axum_server(
@@ -247,8 +205,104 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
+### Actix-web Backend (`rust-mcp-actix`)
 
-## Minimal MCP Client (Stdio)
+Add [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) to your dependencies and use `create_actix_server()` with `ActixServerOptions`.
+
+```rust
+use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,
+    mcp_server::ServerHandler,schema::*,
+};
+
+// ... (define SayHelloTool and HelloHandler as shown above)
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    let server_info = InitializeResult { /* ... */ };
+
+    let handler = HelloHandler::default().to_mcp_server_handler();
+    let server = create_actix_server(
+        server_info,
+        handler,
+        ActixServerOptions {
+            host: "127.0.0.1".to_string(),
+            event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+            ..Default::default()
+        },
+    );
+    server.start().await?;
+    Ok(())
+}
+```
+
+### BYO-server: Embed MCP in your Existing App
+
+Both backends support a **BYO-server** (Bring Your Own Server) mode, letting you mount MCP endpoints onto a router or app you already control — no need to hand over the server lifecycle.
+
+| Backend | Function | Docs |
+|---|---|---|
+| Axum | `mcp_routes(state, &mount_opts, http_handler)` | [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) |
+| Actix-web | `mcp_scope(state, http_handler, &mount_opts)` | [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) |
+
+Both functions take a pre-built `McpAppState` and `McpMountOptions`, and produce routes/scopes you can merge directly into your existing router.
+
+👉 See [`examples/byo-server.rs`](crates/rust-mcp-axum/examples/byo-server.rs) (Axum) and [`examples/byo-server.rs`](crates/rust-mcp-actix/examples/byo-server.rs) (Actix) for working examples.
+
+### Custom HTTP Framework Integrations
+
+While we provide native Axum and Actix integrations, the SDK is completely framework-agnostic. If you are using a different HTTP framework (like Rocket, Salvo, or Warp), you can build a custom integration by adapting your framework's native Request/Response types to the SDK's core HTTP handling logic.
+
+👉 See the [Custom HTTP Framework Integration Guide](../../doc/custom-http-framework-integration.md) for architectural details and implementation steps.
+
+### AxumServerOptions
+
+Axum server is highly customizable through `AxumServerOptions`:
+
+```rs
+let server = create_axum_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),   // server MCP tasks
+        auth: Some(Arc::new(auth_provider)),                        // enable authentication
+        health_endpoint: Some("/health".into()),                    // health check
+        sse_support: true,                                          // backward-compat SSE
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+📝 Refer to [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) or the [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) for a complete field reference.
+
+### ActixServerOptions
+
+`ActixServerOptions` mirrors `AxumServerOptions` field-for-field:
+
+```rs
+let server = create_actix_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    ActixServerOptions {
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),   // server MCP tasks
+        auth: Some(Arc::new(auth_provider)),                        // enable authentication
+        health_endpoint: Some("/health".into()),                    // health check
+        sse_support: true,                                          // backward-compat SSE
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+📝 Refer to [`ActixServerOptions`](https://docs.rs/rust-mcp-actix/latest/rust_mcp_actix/struct.ActixServerOptions.html) or the [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) for a complete field reference.
+
 Following is implementation of an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools provided by the server.
 
 
@@ -493,7 +547,8 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
 - `stdio`: Enables support for the `standard input/output (stdio)` transport.
-- `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
+- `auth`: Enables OAuth authentication support for MCP servers.
+- `tls-no-provider`: Enables TLS without a crypto provider. Useful if you already use a different crypto provider than the aws-lc default.
 
 
 ### Default Features
@@ -517,7 +572,7 @@ If you only need the MCP Server functionality, you can disable the default featu
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros","stdio"] }
+rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["server","macros","stdio"] }
 ```
 Optionally add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) and the `streamable-http` feature for **Streamable HTTP** transport, and use `rust-mcp-axum`'s `ssl` feature for TLS/SSL support.
 
@@ -532,7 +587,7 @@ Add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client","2024_11_05","stdio"] }
+rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["client","stdio"] }
 ```
 
 <!-- x-release-please-end -->
@@ -635,12 +690,21 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 | <a href="https://rust-mcp-stack.github.io/mcp-discovery"><img src="https://raw.githubusercontent.com/rust-mcp-stack/mcp-discovery/refs/heads/main/docs/_media/mcp-discovery-logo.png" width="64"/></a> | [MCP Discovery](https://rust-mcp-stack.github.io/mcp-discovery) | A lightweight command-line tool for discovering and documenting MCP Server capabilities. | [GitHub](https://github.com/rust-mcp-stack/mcp-discovery) |
 | <a href="https://github.com/EricLBuehler/mistral.rs"><img src="https://avatars.githubusercontent.com/u/65165915?s=64" width="64"/></a> | [mistral.rs](https://github.com/EricLBuehler/mistral.rs) | Blazingly fast LLM inference. | [GitHub](https://github.com/EricLBuehler/mistral.rs) |
 | <a href="https://github.com/moonrepo/moon"><img src="https://avatars.githubusercontent.com/u/102833400?s=64" width="64"/></a> | [moon](https://github.com/moonrepo/moon) | moon is a repository management, organization, orchestration, and notification tool for the web ecosystem, written in Rust. | [GitHub](https://github.com/moonrepo/moon) |
-| <a href="https://github.com/angreal/angreal"><img src="https://avatars.githubusercontent.com/u/45580675?s=64" width="64"/></a> | [angreal](https://github.com/angreal/angreal) | Angreal provides a way to template the structure of projects and a way of executing methods for interacting with that project in a consistent manner. | [GitHub](https://github.com/angreal/angreal) |
-| <a href="https://github.com/FalkorDB/text-to-cypher"><img src="https://avatars.githubusercontent.com/u/140048192?s=64" width="64"/></a> | [text-to-cypher](https://github.com/FalkorDB/text-to-cypher) | A high-performance Rust-based API service that translates natural language text to Cypher queries for graph databases. | [GitHub](https://github.com/FalkorDB/text-to-cypher) |
-| <a href="https://github.com/Tuurlijk/notify-mcp"><img src="https://avatars.githubusercontent.com/u/790979?s=64" width="64"/></a> | [notify-mcp](https://github.com/Tuurlijk/notify-mcp) | A Model Context Protocol (MCP) server that provides desktop notification functionality. | [GitHub](https://github.com/Tuurlijk/notify-mcp) |
-| <a href="https://github.com/WismutHansen/lst"><img src="https://avatars.githubusercontent.com/u/86825018?s=64" width="64"/></a> | [lst](https://github.com/WismutHansen/lst) | `lst` is a personal lists, notes, and blog posts management application with a focus on plain-text storage, offline-first functionality, and multi-device synchronization. | [GitHub](https://github.com/WismutHansen/lst) |
+| <a href="https://github.com/Dicklesworthstone/destructive_command_guard"><img src="https://github.com/Dicklesworthstone.png?size=64" width="64"/></a> | [destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard) | The Destructive Command Guard (dcg) is for blocking dangerous git and shell commands from being executed by agents. - Dicklesworthstone/destructive_command_guard | [GitHub](https://github.com/Dicklesworthstone/destructive_command_guard) |
+| <a href="https://github.com/KingOfBugbounty/enumrust"><img src="https://github.com/KingOfBugbounty.png?size=64" width="64"/></a> | [enumrust](https://github.com/KingOfBugbounty/enumrust) | Subdomain Enumerator and Simple Crawler. Contribute to KingOfBugbounty/enumrust development by creating an account on GitHub. | [GitHub](https://github.com/KingOfBugbounty/enumrust) |
+| <a href="https://github.com/bearcove/tracey"><img src="https://github.com/bearcove.png?size=64" width="64"/></a> | [tracey](https://github.com/bearcove/tracey) | CLI, Web, LSP, and MCP toolkit to measure spec coverage in Rust codebases - bearcove/tracey | [GitHub](https://github.com/bearcove/tracey) |
+| <a href="https://github.com/azw413/Glass"><img src="https://github.com/azw413.png?size=64" width="64"/></a> | [Glass](https://github.com/azw413/Glass) | Glass - a fast and free IDA Pro alternative. Contribute to azw413/Glass development by creating an account on GitHub. | [GitHub](https://github.com/azw413/Glass) |
+| <a href="https://github.com/skanehira/ghost"><img src="https://github.com/skanehira.png?size=64" width="64"/></a> | [ghost](https://github.com/skanehira/ghost) | Simple background process manager for Unix systems - skanehira/ghost | [GitHub](https://github.com/skanehira/ghost) |
+| <a href="https://github.com/paiml/aprender"><img src="https://github.com/paiml.png?size=64" width="64"/></a> | [aprender](https://github.com/paiml/aprender) | Next Generation Machine Learning, Statistics and Deep Learning in PURE Rust - paiml/aprender | [GitHub](https://github.com/paiml/aprender) |
+| <a href="https://github.com/mpsm/mcp-cpp"><img src="https://github.com/mpsm.png?size=64" width="64"/></a> | [mcp-cpp](https://github.com/mpsm/mcp-cpp) | MCP server tailored to work with large C/C++ codebases - mpsm/mcp-cpp | [GitHub](https://github.com/mpsm/mcp-cpp) |
+| <a href="https://github.com/ProjectViVy/agent-diva"><img src="https://github.com/ProjectViVy.png?size=64" width="64"/></a> | [agent-diva](https://github.com/ProjectViVy/agent-diva) | Next Generation AI Agent(AKA:nanobot-rs-pro). Contribute to ProjectViVy/agent-diva development by creating an account on GitHub. | [GitHub](https://github.com/ProjectViVy/agent-diva) |
 | <a href="https://github.com/Vaiz/rust-mcp-server"><img src="https://avatars.githubusercontent.com/u/4908982?s=64" width="64"/></a> | [rust-mcp-server](https://github.com/Vaiz/rust-mcp-server) | `rust-mcp-server` allows the model to perform actions on your behalf, such as building, testing, and analyzing your Rust code. | [GitHub](https://github.com/Vaiz/rust-mcp-server) |
-
+| <a href="https://github.com/cortesi/ruskel"><img src="https://github.com/cortesi.png?size=64" width="64"/></a> | [ruskel](https://github.com/cortesi/ruskel) | Ruskel generates skeletonized outlines of Rust crates. - cortesi/ruskel | [GitHub](https://github.com/cortesi/ruskel) |
+| <a href="https://github.com/snailwei/ai-agent"><img src="https://github.com/snailwei.png?size=64" width="64"/></a> | [ai-agent](https://github.com/snailwei/ai-agent) | Idiomatic agent sdk inspired by the claude code source leak. - snailwei/ai-agent | [GitHub](https://github.com/snailwei/ai-agent) |
+| <a href="https://github.com/LepistaBioinformatics/mycelium"><img src="https://github.com/LepistaBioinformatics.png?size=64" width="64"/></a> | [mycelium](https://github.com/LepistaBioinformatics/mycelium) | Mycelium API Gateway, the ultimate solution for secure, flexible, and multi-tenant API management - LepistaBioinformatics/mycelium | [GitHub](https://github.com/LepistaBioinformatics/mycelium) |
+| <a href="https://github.com/FalkorDB/text-to-cypher"><img src="https://avatars.githubusercontent.com/u/140048192?s=64" width="64"/></a> | [text-to-cypher](https://github.com/FalkorDB/text-to-cypher) | A high-performance Rust-based API service that translates natural language text to Cypher queries for graph databases. | [GitHub](https://github.com/FalkorDB/text-to-cypher) |
+| <a href="https://github.com/zen8labs/lunex"><img src="https://github.com/zen8labs.png?size=64" width="64"/></a> | [lunex](https://github.com/zen8labs/lunex) | All-in-One Workspace AI. Contribute to zen8labs/lunex development by creating an account on GitHub. | [GitHub](https://github.com/zen8labs/lunex) |
+| <a href="https://github.com/angreal/angreal"><img src="https://avatars.githubusercontent.com/u/45580675?s=64" width="64"/></a> | [angreal](https://github.com/angreal/angreal) | Angreal provides a way to template the structure of projects and a way of executing methods for interacting with that project in a consistent manner. | [GitHub](https://github.com/angreal/angreal) |
 
 
 

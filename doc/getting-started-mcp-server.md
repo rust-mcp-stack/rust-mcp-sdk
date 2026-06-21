@@ -40,7 +40,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
-rust-mcp-sdk = "0.8"
+rust-mcp-sdk = "0.9"
 serde = "1.0"
 serde_json = "1.0"
 tokio = "1.4"
@@ -217,7 +217,7 @@ mod handler;
 mod tools;
 use handler::MyServerHandler;
 use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, LATEST_PROTOCOL_VERSION, ServerCapabilities,
+    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
     ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
@@ -252,7 +252,7 @@ async fn main() -> SdkResult<()> {
         },
         meta: None,
         instructions: None,
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
     // create a std transport with default options
@@ -315,3 +315,70 @@ Open the address in a web browser:
 4- Select one the tools, and run it py passing a `name` argument and pressing the **Run Tool** button:
 
 ![hello-world-mcp-server-tools](./mcp-server-hello-world-03.jpg)
+
+---
+
+## Next Steps
+
+You now have a working MCP server using the **stdio** transport. This is ideal for local tools launched by MCP clients (e.g. Claude Desktop, Cursor, MCP Inspector).
+
+To expose your server over HTTP — for example to support multiple simultaneous clients or to deploy it remotely — you can add one of the HTTP backend crates:
+
+### Using Axum (recommended)
+
+Add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) to your dependencies:
+
+```toml
+[dependencies]
+rust-mcp-sdk = "0.9"
+rust-mcp-axum = "0.1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+```
+
+Then replace the stdio server with:
+
+```rust
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
+use rust_mcp_sdk::event_store::InMemoryEventStore;
+use std::sync::Arc;
+
+let server = create_axum_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        host: "127.0.0.1".to_string(),
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+### Using Actix-web
+
+Add [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) instead:
+
+```toml
+[dependencies]
+rust-mcp-sdk = "0.9"
+rust-mcp-actix = "0.1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+```
+
+```rust
+use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+
+let server = create_actix_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    ActixServerOptions {
+        host: "127.0.0.1".to_string(),
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+Both crates support **Streamable HTTP** and **SSE** transports, authentication, resumability, health checks, TLS, and more. See their respective READMEs for full documentation.

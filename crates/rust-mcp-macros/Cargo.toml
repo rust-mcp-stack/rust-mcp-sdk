@@ -23,7 +23,7 @@ quote = "1.0"
 proc-macro2 = "1.0"
 
 [dev-dependencies]
-rust-mcp-schema = { workspace = true , features=["latest","schema_utils"]}
+rust-mcp-schema = { workspace = true, features=["latest", "schema_utils"] }
 
 [lints]
 workspace = true

@@ -1,20 +1,20 @@
-# rust-mcp-actix
+# rust-mcp-axum
 
-[![crates.io](https://img.shields.io/crates/v/rust-mcp-actix?style=for-the-badge&logo=rust&color=FE965D)](https://crates.io/crates/rust-mcp-actix)
-[![docs.rs](https://img.shields.io/badge/docs.rs-rust_mcp_actix-0ECDAB?style=for-the-badge&logo=docs.rs)](https://docs.rs/rust-mcp-actix)
+[![crates.io](https://img.shields.io/crates/v/rust-mcp-axum?style=for-the-badge&logo=rust&color=FE965D)](https://crates.io/crates/rust-mcp-axum)
+[![docs.rs](https://img.shields.io/badge/docs.rs-rust_mcp_axum-0ECDAB?style=for-the-badge&logo=docs.rs)](https://docs.rs/rust-mcp-axum)
 
-Actix-web HTTP server integration for [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk).
+Axum HTTP server integration for [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk).
 
-Provides a production-ready Actix-web layer for MCP servers supporting **Streamable HTTP** and **SSE** transports. Choose this crate when you want to build on Actix-web or add MCP to an existing Actix application.
+Provides a lightweight, production-ready Axum-based HTTP layer for MCP servers supporting **Streamable HTTP** and **SSE** transports. It is the recommended choice when you want to build a new Axum-only service or embed MCP into an existing Axum application.
 
-> **Prefer Axum?** See [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) for an equivalent integration built on Axum. Both crates expose the same feature set and follow the same usage patterns.
+> **Prefer Actix-web?** See [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) for an equivalent integration built on Actix-web. Both crates expose the same feature set and follow the same usage patterns.
 
 ---
 
 ## Features
 
-- **Turnkey server** — `create_actix_server().start().await`
-- **BYO-server** — `mcp_scope()` + `McpMountOptions` to mount MCP endpoints on any existing Actix-web app
+- **Turnkey server** — `create_axum_server().start().await`
+- **BYO-server** — `mcp_routes()` + `McpMountOptions` to mount MCP endpoints on any existing Axum router
 - **Streamable HTTP** + **SSE** transports (SSE enabled by default for backward compatibility)
 - **Multi-client concurrency** with internal session management
 - **Resumability** via pluggable `EventStore` (built-in `InMemoryEventStore`)
@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 rust-mcp-sdk = "0.9"
-rust-mcp-actix = "0.1"
+rust-mcp-axum = "0.1"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 ```
@@ -43,7 +43,7 @@ async-trait = "0.1"
 ### Turnkey Server
 
 ```rust
-use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
     error::SdkResult,
     event_store::InMemoryEventStore,
@@ -61,10 +61,10 @@ impl ServerHandler for MyHandler {}
 async fn main() -> SdkResult<()> {
     let server_details = InitializeResult { /* ... */ };
 
-    let server = create_actix_server(
+    let server = create_axum_server(
         server_details,
         MyHandler.to_mcp_server_handler(),
-        ActixServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".to_string(),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             ..Default::default()
@@ -87,13 +87,13 @@ npx -y @modelcontextprotocol/inspector@latest
 
 ---
 
-## BYO-server (Mount on an Existing Actix App)
+## BYO-server (Mount on an Existing Axum Router)
 
-Use `mcp_scope()` with `McpMountOptions` to integrate MCP into any existing Actix-web application:
+Use `mcp_routes()` with `McpMountOptions` to add MCP endpoints to any existing Axum application without giving up control of the server lifecycle:
 
 ```rust
-use actix_web::{web, App, HttpServer};
-use rust_mcp_actix::{mcp_scope, McpMountOptions};
+use axum::{Router, routing::get};
+use rust_mcp_axum::{mcp_routes, McpMountOptions};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::session_store::InMemorySessionStore;
 use rust_mcp_sdk::id_generator::UuidGenerator;
@@ -105,10 +105,10 @@ let state = Arc::new(McpAppState {
     id_generator: Arc::new(UuidGenerator {}),
     server_details: Arc::new(server_details),
     handler: my_handler.to_mcp_server_handler(),
-    // ... other fields
+    // ... other fields with defaults
 });
 
-let http_handler = Arc::new(McpHttpHandler::new(None, vec![], None));
+let http_handler = McpHttpHandler::new(None, vec![], None);
 
 let mount = McpMountOptions {
     streamable_http_endpoint: "/mcp".into(),
@@ -118,23 +118,22 @@ let mount = McpMountOptions {
     ..Default::default()
 };
 
-HttpServer::new(move || {
-    App::new()
-        // Your own routes
-        .service(web::scope("/api").route("", web::get().to(my_handler_fn)))
-        // MCP routes mounted under the same server
-        .service(mcp_scope(state.clone(), http_handler.clone(), &mount))
-})
-.bind("127.0.0.1:8080")?
-.run()
-.await?;
+// Merge MCP routes into your existing Axum router
+let app = Router::new()
+    .route("/api/custom", get(my_custom_handler))
+    .merge(mcp_routes(state, &mount, http_handler));
+
+// Bind and serve as usual
+axum_server::bind("127.0.0.1:8080".parse()?)
+    .serve(app.into_make_service())
+    .await?;
 ```
 
 👉 See the full working example: [`examples/byo-server.rs`](examples/byo-server.rs)
 
 ---
 
-## `ActixServerOptions` Reference
+## `AxumServerOptions` Reference
 
 All fields are optional except `host` and `port` (which have defaults). Use `..Default::default()` for any fields you don't need.
 
@@ -167,17 +166,17 @@ All fields are optional except `host` and `port` (which have defaults). Use `..D
 ### Full Example with Common Options
 
 ```rust
-use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
     event_store::InMemoryEventStore,
     task_store::InMemoryTaskStore,
 };
 use std::sync::Arc;
 
-let server = create_actix_server(
+let server = create_axum_server(
     server_details,
     handler.to_mcp_server_handler(),
-    ActixServerOptions {
+    AxumServerOptions {
         host: "127.0.0.1".to_string(),
         port: 8080,
         event_store: Some(Arc::new(InMemoryEventStore::default())), // resumability
@@ -198,13 +197,12 @@ server.start().await?;
 
 | Feature | Description |
 |---|---|
-| `ssl` | Enables TLS/SSL via Actix-web + `rustls`. Requires `ssl_cert_path` and `ssl_key_path` in options. |
-
-> **Note:** Unlike `rust-mcp-axum`, Actix-web has no optional crypto provider split, so there is no `tls-no-provider` variant.
+| `ssl` | Enables TLS/SSL via `axum-server` + `rustls`. Requires `ssl_cert_path` and `ssl_key_path` in options. |
+| `tls-no-provider` | TLS support without installing a crypto provider (use if you already have one). |
 
 ```toml
 # With TLS/SSL
-rust-mcp-actix = { version = "0.1", features = ["ssl"] }
+rust-mcp-axum = { version = "0.1", features = ["ssl"] }
 ```
 
 ---
@@ -223,20 +221,14 @@ When using Streamable HTTP transport, follow these best practices:
 
 | Example | Description |
 |---|---|
-| [`hello-world-server.rs`](examples/hello-world-server.rs) | Minimal turnkey Actix MCP server |
-| [`byo-server.rs`](examples/byo-server.rs) | Mount MCP on an existing Actix-web app via `mcp_scope()` |
+| [`hello-world-server.rs`](examples/hello-world-server.rs) | Minimal turnkey Axum MCP server |
+| [`byo-server.rs`](examples/byo-server.rs) | Mount MCP on an existing Axum router via `mcp_routes()` |
 
-Run them with:
-```bash
-cargo run -p rust-mcp-actix --example hello-world-server
-cargo run -p rust-mcp-actix --example byo-server
-```
-
----
-
-## License
-
-MIT
+Also see the more complete examples in [`crates/rust-mcp-sdk/examples/`](../rust-mcp-sdk/examples/):
+- `quick-start-streamable-http.rs` — minimal turnkey Streamable HTTP server
+- `hello-world-server-streamable-http.rs` — full hello-world with resources and observers
+- `hello-world-server-streamable-http-core.rs` — same using `ServerHandlerCore`
+- `streamable_http_healthcheck.rs` — custom health check handler
 
 ---
 
