@@ -173,3 +173,13 @@ let server = rust_mcp_actix::create_actix_server(
 `EventStore` implementations to enable resumability on MCP servers by reliably storing and replaying event histories.
 
 🔜 Coming Soon
+
+---
+
+## License
+
+MIT
+
+---
+
+<img align="top" src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-stack-icon.png" width="24" style="border-radius:0.2rem;"> Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — a high-performance, asynchronous toolkit for building MCP servers and clients in Rust.
