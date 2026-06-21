@@ -3,9 +3,11 @@
 settings.json
 /.vscode
 /docs
+/.opencode
 
 # test artifacts
 /coverage
 *.lcov
 # *.profraw
 target/**
+
