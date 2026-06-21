@@ -75,7 +75,7 @@ async fn main() -> SdkResult<()> {
         meta:None
     };
 
-    let handler = HelloHandler::default().to_mcp_server_handler();
+    let handler = HelloHandler {}.to_mcp_server_handler();
     let server = create_axum_server(
         server_info,
         handler,
