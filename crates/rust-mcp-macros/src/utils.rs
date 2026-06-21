@@ -6,11 +6,28 @@ use syn::{
 };
 
 pub fn base_crate() -> TokenStream {
-    // Conditionally select the path for Tool
-    if cfg!(feature = "sdk") {
-        quote! { rust_mcp_sdk::schema }
-    } else {
+    // At proc-macro *expansion* time, Cargo sets env vars for the **calling crate** (not for
+    // the proc-macro binary itself). We use CARGO_PKG_NAME to identify the package that is
+    // expanding this macro and pick the correct schema path:
+    //
+    //  • When expanded inside `rust-mcp-sdk` itself → `rust_mcp_sdk::schema`
+    //  • When expanded in `rust-mcp-macros` test/doc binaries (which only depend on
+    //    `rust-mcp-schema`) → `rust_mcp_schema`
+    //  • When expanded in any other crate that depends on `rust-mcp-sdk` (e.g. rust-mcp-extra,
+    //    rust-mcp-axum, rust-mcp-actix, user code) → `rust_mcp_sdk::schema`
+    //
+    // Note: We assume the only consumers of these macros are the macro crate's own tests
+    // or crates going through the full SDK. Standalone usage is not supported.
+    //
+    // We identify "macros-only" usage by checking if the calling package
+    // is `rust-mcp-macros` itself (during its own test compilation).
+    let pkg_name = std::env::var("CARGO_PKG_NAME").unwrap_or_default();
+    if pkg_name == "rust-mcp-macros" {
+        // The macros crate's own tests: only rust-mcp-schema is available as a dev-dep.
         quote! { rust_mcp_schema }
+    } else {
+        // All other consumers go through rust-mcp-sdk, which re-exports schema.
+        quote! { rust_mcp_sdk::schema }
     }
 }
 
