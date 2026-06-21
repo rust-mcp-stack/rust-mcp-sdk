@@ -44,8 +44,32 @@ pub type TaskStatusPoller = Box<
 ///
 type ScheduledPoll = (Instant, TaskId, Option<SessionId>);
 
-const DEFAULT_PAGE_SIZE: usize = 50;
-const DEFAULT_POLL_INTERVAL: i64 = 1250;
+/// Configuration for the in-memory task store.
+///
+/// All fields have sensible defaults; use [`Default`] or construct
+/// with `..Default::default()`.
+pub struct InMemoryTaskStoreOptions {
+    /// Page size for task listing (default: `50`).
+    pub page_size: usize,
+    /// Capacity of the status-change broadcast channel. Slow subscribers
+    /// that fall behind by more than this many events receive a `Lagged`
+    /// error (default: `64`).
+    pub broadcast_capacity: usize,
+    /// Default poll interval for tasks that do not specify one
+    /// (default: `1250` ms). The receiver can override this per-task
+    /// via its status response.
+    pub default_poll_interval: Duration,
+}
+
+impl Default for InMemoryTaskStoreOptions {
+    fn default() -> Self {
+        Self {
+            page_size: 50,
+            broadcast_capacity: 64,
+            default_poll_interval: Duration::from_millis(1250),
+        }
+    }
+}
 
 pub struct InMemoryTaskStore<Req, Res>
 where
@@ -53,9 +77,9 @@ where
     Res: Clone + Send + Sync + 'static,
 {
     id_gen: Arc<FastIdGenerator>,
-    // Inner state protected by RwLock for concurrent access
     inner: Arc<tokio::sync::RwLock<InMemoryTaskStoreInner<Req, Res>>>,
     page_size: usize,
+    default_poll_interval: Duration,
     broadcast: tokio::sync::broadcast::Sender<(TaskStatusNotificationParams, Option<String>)>,
     polling_task_handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -148,7 +172,7 @@ impl<Req, Res> InMemoryTaskStoreInner<Req, Res> {
             }
         };
 
-        Duration::from_millis(DEFAULT_POLL_INTERVAL as u64)
+        Duration::from_millis(1_250)
     }
 
     pub(crate) fn tasks_to_poll(&mut self) -> Vec<(TaskId, Option<SessionId>)> {
@@ -199,14 +223,53 @@ where
     Res: Debug + Clone + Send + Sync + serde::Deserialize<'static> + serde::Serialize + 'static,
 {
     pub fn new(page_size: Option<usize>) -> Self {
+        Self::with_options(InMemoryTaskStoreOptions {
+            page_size: page_size.unwrap_or(50),
+            ..Default::default()
+        })
+    }
+
+    /// Creates a store with explicit status-change broadcast capacity.
+    ///
+    /// * `page_size` - page size for task listing; `None` uses the default.
+    /// * `broadcast_capacity` - capacity of the status-change broadcast channel;
+    ///   `None` uses the default.
+    #[deprecated(note = "use `with_options` instead")]
+    pub fn with_capacity(page_size: Option<usize>, broadcast_capacity: Option<usize>) -> Self {
+        let mut opts = InMemoryTaskStoreOptions::default();
+        if let Some(p) = page_size {
+            opts.page_size = p;
+        }
+        if let Some(c) = broadcast_capacity {
+            opts.broadcast_capacity = c;
+        }
+        Self::with_options(opts)
+    }
+
+    /// Creates a store with the given options.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let store = InMemoryTaskStore::with_options(
+    ///     InMemoryTaskStoreOptions {
+    ///         page_size: 100,
+    ///         broadcast_capacity: 128,
+    ///         default_poll_interval: Duration::from_secs(2),
+    ///         ..Default::default()
+    ///     }
+    /// );
+    /// ```
+    pub fn with_options(opts: InMemoryTaskStoreOptions) -> Self {
         Self {
             inner: Arc::new(RwLock::new(InMemoryTaskStoreInner {
                 tasks: HashMap::new(),
                 ordered_task_ids: HashMap::new(),
                 poll_schedule: Some(BinaryHeap::new()),
             })),
-            broadcast: tokio::sync::broadcast::channel(64).0,
-            page_size: page_size.unwrap_or(DEFAULT_PAGE_SIZE),
+            broadcast: tokio::sync::broadcast::channel(opts.broadcast_capacity).0,
+            page_size: opts.page_size,
+            default_poll_interval: opts.default_poll_interval,
             id_gen: Arc::new(FastIdGenerator::new(Some("tsk"))),
             polling_task_handle: Mutex::new(None),
         }
@@ -316,7 +379,9 @@ where
 
         // schedule the tasl for polling
         if let Some(schedule) = inner.poll_schedule.as_mut() {
-            let poll_interval: i64 = task_params.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL);
+            let poll_interval: i64 = task_params
+                .poll_interval
+                .unwrap_or(self.default_poll_interval.as_millis() as i64);
             let next_poll = Instant::now()
                 .checked_add(Duration::from_millis(poll_interval as u64))
                 .unwrap_or(Instant::now());
@@ -397,6 +462,7 @@ where
         }
 
         let inner = self.inner.clone();
+        let default_poll_interval = self.default_poll_interval;
         let handle = tokio::spawn(async move {
             loop {
                 let mut to_reschedule: Vec<(TaskId, Option<SessionId>, i64)> = Vec::new();
@@ -404,17 +470,16 @@ where
                     let mut guard = inner.write().await;
                     guard.tasks_to_poll()
                 };
+                tracing::debug!(count = tasks_to_poll.len(), "polling tasks");
+
                 for (task_id, session_id) in tasks_to_poll {
-                    // TODO: avoid cloning
                     match get_task_callback(task_id.clone(), session_id.clone()).await {
                         Ok((task_status, poll_interval)) => {
                             if task_status.is_terminal() {
-                                // remove the task and resolve awaiting task if in terminal state
                                 let mut guard = inner.write().await;
                                 let entry = guard.remove_task(&task_id, &session_id);
                                 if let Some(task_entry) = entry {
                                     if let Some(result_tx) = task_entry.result_tx {
-                                        // if fails, then listener is gone, no need to retry
                                         let _ = result_tx.send((task_status, task_entry.result));
                                     }
                                 }
@@ -422,18 +487,26 @@ where
                                 to_reschedule.push((
                                     task_id.clone(),
                                     session_id,
-                                    poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                    poll_interval
+                                        .unwrap_or(default_poll_interval.as_millis() as i64),
                                 ));
                             }
                         }
-                        Err(_err) => {
+                        Err(err) => {
+                            tracing::error!(
+                                task_id = %task_id,
+                                error = %err,
+                                "task poll callback failed, re-scheduling"
+                            );
                             let guard = inner.read().await;
-                            // re-schedule if task still exists and not expired
                             if let Some(get_task) = guard.get_task(&task_id, &session_id) {
                                 to_reschedule.push((
                                     task_id,
                                     session_id,
-                                    get_task.task.poll_interval.unwrap_or(DEFAULT_POLL_INTERVAL),
+                                    get_task
+                                        .task
+                                        .poll_interval
+                                        .unwrap_or(default_poll_interval.as_millis() as i64),
                                 ));
                             }
                         }
@@ -445,8 +518,10 @@ where
                     guard.re_schedule(&mut to_reschedule)
                 }
 
-                let guard = inner.read().await;
-                let sleep_duration = guard.next_sleep_duration();
+                let sleep_duration = {
+                    let guard = inner.read().await;
+                    guard.next_sleep_duration()
+                };
 
                 tokio::time::sleep(sleep_duration).await;
             }
@@ -929,6 +1004,26 @@ mod tests {
         assert_eq!(ids[1], task2.task_id);
         assert_eq!(ids[2], task1.task_id);
     }
+
+    #[test]
+    fn options_default_values() {
+        let opts = InMemoryTaskStoreOptions::default();
+        assert_eq!(opts.page_size, 50);
+        assert_eq!(opts.broadcast_capacity, 64);
+        assert_eq!(opts.default_poll_interval, Duration::from_millis(1250));
+    }
+
+    #[test]
+    fn with_options_applies_custom_values() {
+        let store: InMemoryTaskStore<serde_json::Value, serde_json::Value> =
+            InMemoryTaskStore::with_options(InMemoryTaskStoreOptions {
+                page_size: 100,
+                broadcast_capacity: 128,
+                default_poll_interval: Duration::from_secs(2),
+            });
+        assert_eq!(store.page_size, 100);
+        assert_eq!(store.default_poll_interval, Duration::from_secs(2));
+    }
 }
 
 #[cfg(test)]
@@ -1352,5 +1447,41 @@ mod polling_tests {
 
         assert_eq!(result.0, TaskStatus::Completed);
         assert_eq!(result.1, Some(Value::from("task result")));
+    }
+
+    #[tokio::test]
+    async fn uses_default_poll_interval_when_task_has_none() {
+        let store = InMemoryTaskStore::<serde_json::Value, serde_json::Value>::with_options(
+            InMemoryTaskStoreOptions {
+                default_poll_interval: Duration::from_millis(100),
+                ..Default::default()
+            },
+        );
+        let polled_task_id = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let captured = polled_task_id.clone();
+        let callback: TaskStatusPoller = Box::new(move |task_id, _session_id| {
+            let captured = captured.clone();
+            Box::pin(async move {
+                *captured.lock().await = task_id.to_string();
+                Ok((TaskStatus::Working, None))
+            })
+        });
+
+        let task = store
+            .create_task(
+                CreateTaskOptions {
+                    poll_interval: None,
+                    ttl: None,
+                    meta: None,
+                },
+                1.into(),
+                serde_json::Value::Null,
+                None,
+            )
+            .await;
+        store.start_task_polling(callback).unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        assert_eq!(*polled_task_id.lock().await, task.task_id);
     }
 }
