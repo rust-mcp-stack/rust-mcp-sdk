@@ -12,7 +12,9 @@ use tokio::{
     sync::Mutex,
 };
 
-const CHANNEL_CAPACITY: usize = 36;
+/// Default capacity of the incoming-message channel. Used when callers do not
+/// override it (see [`crate::TransportOptions::channel_capacity`]).
+pub(crate) const DEFAULT_MESSAGE_CHANNEL_CAPACITY: usize = 36;
 
 pub struct MCPStream {}
 
@@ -25,6 +27,7 @@ impl MCPStream {
     /// - A `Pin<Box<dyn Stream<Item = R> + Send>>`: A stream that yields items of type `R`.
     /// - A `MessageDispatcher<R>`: A sender that can be used to send messages of type `R`.
     /// - An `IoStream`: An error handling stream for managing error I/O (stderr).
+    #[allow(clippy::too_many_arguments)]
     pub fn create<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>>,
@@ -33,6 +36,7 @@ impl MCPStream {
         request_timeout: Duration,
         max_line_length: usize,
         cancellation_token: CancellationToken,
+        channel_capacity: usize,
     ) -> (
         tokio_stream::wrappers::ReceiverStream<X>,
         MessageDispatcher<R>,
@@ -42,7 +46,7 @@ impl MCPStream {
         R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
         X: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
-        let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
+        let (tx, rx) = tokio::sync::mpsc::channel::<X>(channel_capacity);
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
         let reader_token = cancellation_token.clone();
@@ -55,6 +59,7 @@ impl MCPStream {
         (stream, sender, error_io)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_with_ack<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: tokio::sync::mpsc::Sender<(
@@ -66,6 +71,7 @@ impl MCPStream {
         request_timeout: Duration,
         max_line_length: usize,
         cancellation_token: CancellationToken,
+        channel_capacity: usize,
     ) -> (
         tokio_stream::wrappers::ReceiverStream<X>,
         MessageDispatcher<R>,
@@ -75,7 +81,7 @@ impl MCPStream {
         R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
         X: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
     {
-        let (tx, rx) = tokio::sync::mpsc::channel::<X>(CHANNEL_CAPACITY);
+        let (tx, rx) = tokio::sync::mpsc::channel::<X>(channel_capacity);
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
         let reader_token = cancellation_token.clone();

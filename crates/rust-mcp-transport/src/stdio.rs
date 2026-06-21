@@ -224,6 +224,7 @@ where
                 self.options.timeout,
                 self.options.max_line_length,
                 cancellation_token,
+                self.options.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
@@ -239,6 +240,7 @@ where
                 self.options.timeout,
                 self.options.max_line_length,
                 cancellation_token,
+                self.options.channel_capacity,
             );
 
             self.set_message_sender(sender).await;
