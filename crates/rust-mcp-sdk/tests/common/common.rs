@@ -37,7 +37,7 @@ pub fn init_tracing() {
             .or_else(|_| EnvFilter::try_new("tracing"))
             .unwrap();
 
-        tracing_subscriber::fmt().with_env_filter(filter).init();
+        tracing_subscriber::fmt().with_env_filter(filter).try_init().ok();
     });
 }
 #[mcp_tool(
@@ -310,13 +310,9 @@ impl Xorshift {
     }
 }
 
-// Generate a random port number in the range [8081, 15000]
 pub fn random_port() -> u16 {
-    const MIN_PORT: u16 = 8081;
-    const MAX_PORT: u16 = 15000;
-
-    let mut rng = Xorshift::new();
-    rng.next_u16_range(MIN_PORT, MAX_PORT)
+    static NEXT_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(10000);
+    NEXT_PORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn random_port_old() -> u16 {

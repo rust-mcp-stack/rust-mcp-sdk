@@ -45,7 +45,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 
 ## Table of Contents
 - [Quick Start](#quick-start)
-  - [Minimal MCP Server (Stdio)]([#minimal-mcp-server-stdio](#minimal-mcp-server-stdio))
+  - [Minimal MCP Server (Stdio)](#minimal-mcp-server-stdio)
   - [Minimal MCP Server (Streamable HTTP)](#minimal-mcp-server-streamable-http)
   - [Minimal MCP Client (Stdio)](#minimal-mcp-client-stdio)
 - [Usage Examples](#usage-examples)
@@ -59,8 +59,13 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 - [Authentication](#authentication)
   - [RemoteAuthProvider](#remoteauthprovider)
   - [OAuthProxy](#oauthproxy)
-- [AxumServerOptions](#axumserveroptions)
-- [Security Considerations](#security-considerations)
+- [HTTP Server Backends (Axum & Actix)](#http-server-backends-axum--actix)
+  - [Axum Backend (rust-mcp-axum)](#axum-backend-rust-mcp-axum)
+  - [Actix-web Backend (rust-mcp-actix)](#actix-web-backend-rust-mcp-actix)
+  - [BYO-server: Embed MCP in your existing app](#byo-server-embed-mcp-in-your-existing-app)
+  - [AxumServerOptions](#axumserveroptions)
+  - [ActixServerOptions](#actixserveroptions)
+  - [Security Considerations](#security-considerations)
 - [Cargo features](#cargo-features)
   -  [Available Features](#available-features)
   -  [Default Features](#default-features)
@@ -162,11 +167,15 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
-## Minimal MCP Server (Streamable HTTP)
-Creating an MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup.
-The setup is nearly identical to the stdio example shown above. You only need to install the `rust-mcp-axum` crate and use `create_axum_server()` with `AxumServerOptions`.
+## HTTP Server Backends (Axum & Actix)
 
-💡 If backward compatibility is required, you can enable **SSE** transport by setting `sse_support` to true in `AxumServerOptions`.
+Creating a Streamable HTTP MCP server in `rust-mcp-sdk` allows multiple clients to connect simultaneously with no additional setup. The setup is nearly identical to the stdio example — the only difference is which HTTP backend crate you install and which function you call to create the server.
+
+💡 If backward compatibility with older SSE-only clients is required, both backends support enabling SSE transport by setting `sse_support` to true in their respective options (it defaults to `true`).
+
+### Axum Backend (`rust-mcp-axum`)
+
+Add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) to your dependencies and use `create_axum_server()` with `AxumServerOptions`.
 
 ```rust
 use async_trait::async_trait;
@@ -175,62 +184,11 @@ use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,macros,
     mcp_server::ServerHandler,schema::*,
 };
 
-// Define a mcp tool
-#[macros::mcp_tool(
-    name = "say_hello",
-    description = "returns \"Hello from Rust MCP SDK!\" message "
-)]
-#[derive(Debug, ::serde::Deserialize, ::serde::Serialize, macros::JsonSchema)]
-pub struct SayHelloTool {}
-
-// define a custom handler
-#[derive(Default)]
-struct HelloHandler;
-
-// implement ServerHandler
-#[async_trait]
-impl ServerHandler for HelloHandler {
-    // Handles requests to list available tools.
-    async fn handle_list_tools_request(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _runtime: std::sync::Arc<dyn McpServer>,
-    ) -> std::result::Result<ListToolsResult, RpcError> {
-        Ok(ListToolsResult {tools: vec![SayHelloTool::tool()],meta: None,next_cursor: None})
-    }
-    // Handles requests to call a specific tool.
-    async fn handle_call_tool_request(
-        &self,
-        params: CallToolRequestParams,
-        _runtime: std::sync::Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
-        if params.name == "say_hello" {Ok(CallToolResult::text_content(vec!["Hello from Rust MCP SDK!".into()]))
-        } else {
-            Err(CallToolError::unknown_tool(params.name))
-        }
-    }
-}
+// ... (define SayHelloTool and HelloHandler as shown above)
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    // Define server details and capabilities
-    let server_info = InitializeResult {
-        server_info: Implementation {
-            name: "hello-rust-mcp".into(),
-            version: "0.1.0".into(),
-            title: Some("Hello World MCP Server".into()),
-            description: Some("A minimal Rust MCP server".into()),
-            icons: vec![mcp_icon!(src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
-                mime_type = "image/png",
-                sizes = ["128x128"],
-                theme = "light")],
-            website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
-        },
-        capabilities: ServerCapabilities { tools: Some(ServerCapabilitiesTools { list_changed: None }), ..Default::default() },
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
-        instructions: None,
-        meta:None
-    };
+    let server_info = InitializeResult { /* ... */ };
 
     let handler = HelloHandler::default().to_mcp_server_handler();
     let server = create_axum_server(
@@ -247,8 +205,98 @@ async fn main() -> SdkResult<()> {
 }
 ```
 
+### Actix-web Backend (`rust-mcp-actix`)
 
-## Minimal MCP Client (Stdio)
+Add [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) to your dependencies and use `create_actix_server()` with `ActixServerOptions`.
+
+```rust
+use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+use rust_mcp_sdk::{*,error::SdkResult,event_store::InMemoryEventStore,
+    mcp_server::ServerHandler,schema::*,
+};
+
+// ... (define SayHelloTool and HelloHandler as shown above)
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    let server_info = InitializeResult { /* ... */ };
+
+    let handler = HelloHandler::default().to_mcp_server_handler();
+    let server = create_actix_server(
+        server_info,
+        handler,
+        ActixServerOptions {
+            host: "127.0.0.1".to_string(),
+            event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+            ..Default::default()
+        },
+    );
+    server.start().await?;
+    Ok(())
+}
+```
+
+### BYO-server: Embed MCP in your Existing App
+
+Both backends support a **BYO-server** (Bring Your Own Server) mode, letting you mount MCP endpoints onto a router or app you already control — no need to hand over the server lifecycle.
+
+| Backend | Function | Docs |
+|---|---|---|
+| Axum | `mcp_routes(state, &mount_opts, http_handler)` | [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) |
+| Actix-web | `mcp_scope(state, http_handler, &mount_opts)` | [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) |
+
+Both functions take a pre-built `McpAppState` and `McpMountOptions`, and produce routes/scopes you can merge directly into your existing router.
+
+👉 See [`examples/byo-server.rs`](crates/rust-mcp-axum/examples/byo-server.rs) (Axum) and [`examples/byo-server.rs`](crates/rust-mcp-actix/examples/byo-server.rs) (Actix) for working examples.
+
+### AxumServerOptions
+
+Axum server is highly customizable through `AxumServerOptions`:
+
+```rs
+let server = create_axum_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),   // server MCP tasks
+        auth: Some(Arc::new(auth_provider)),                        // enable authentication
+        health_endpoint: Some("/health".into()),                    // health check
+        sse_support: true,                                          // backward-compat SSE
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+📝 Refer to [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) or the [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) for a complete field reference.
+
+### ActixServerOptions
+
+`ActixServerOptions` mirrors `AxumServerOptions` field-for-field:
+
+```rs
+let server = create_actix_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    ActixServerOptions {
+        host: "127.0.0.1".to_string(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),   // server MCP tasks
+        auth: Some(Arc::new(auth_provider)),                        // enable authentication
+        health_endpoint: Some("/health".into()),                    // health check
+        sse_support: true,                                          // backward-compat SSE
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+📝 Refer to [`ActixServerOptions`](https://docs.rs/rust-mcp-actix/latest/rust_mcp_actix/struct.ActixServerOptions.html) or the [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) for a complete field reference.
+
 Following is implementation of an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools provided by the server.
 
 
@@ -493,7 +541,8 @@ The `rust-mcp-sdk` crate provides several features that can be enabled or disabl
 - `sse`: Enables support for the `Server-Sent Events (SSE)` transport.
 - `streamable-http`: Enables support for the `Streamable HTTP` transport.
 - `stdio`: Enables support for the `standard input/output (stdio)` transport.
-- `tls-no-provider`: Enables TLS without a crypto provider. This is useful if you are already using a different crypto provider than the aws-lc default.
+- `auth`: Enables OAuth authentication support for MCP servers.
+- `tls-no-provider`: Enables TLS without a crypto provider. Useful if you already use a different crypto provider than the aws-lc default.
 
 
 ### Default Features
@@ -517,7 +566,7 @@ If you only need the MCP Server functionality, you can disable the default featu
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["server","macros","stdio"] }
+rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["server","macros","stdio"] }
 ```
 Optionally add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) and the `streamable-http` feature for **Streamable HTTP** transport, and use `rust-mcp-axum`'s `ssl` feature for TLS/SSL support.
 
@@ -532,7 +581,7 @@ Add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.2.0", default-features = false, features = ["client","2024_11_05","stdio"] }
+rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["client","stdio"] }
 ```
 
 <!-- x-release-please-end -->

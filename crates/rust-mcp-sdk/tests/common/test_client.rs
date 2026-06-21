@@ -93,7 +93,8 @@ pub mod test_client_common {
                     .unwrap_or_else(|_| "info".into()),
             )
             .with(tracing_subscriber::fmt::layer())
-            .init();
+            .try_init()
+            .ok();
 
         let client_details: InitializeRequestParams = test_client_details();
 

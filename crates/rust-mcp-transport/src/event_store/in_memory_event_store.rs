@@ -49,8 +49,8 @@ impl InMemoryEventStore {
     ///
     /// # Example
     /// ```
+    /// use rust_mcp_transport::event_store::InMemoryEventStore;
     /// let store = InMemoryEventStore::new(Some(10));
-    /// assert_eq!(store.max_events_per_session, 10);
     /// ```
     pub fn new(max_events_per_session: Option<usize>) -> Self {
         Self {
@@ -93,13 +93,14 @@ impl InMemoryEventStore {
     ///
     /// # Example
     /// ```
+    /// use rust_mcp_transport::event_store::InMemoryEventStore;
     /// let store = InMemoryEventStore::new(None);
     /// let event_id = "session1-.-stream1-.-12345";
     /// assert_eq!(
-    ///     store.parse_event_id(event_id),
-    ///     Some(("session1", "stream1", "12345"))
+    ///     store.parse_event_id(event_id).unwrap(),
+    ///     ("session1", "stream1", 12345)
     /// );
-    /// assert_eq!(store.parse_event_id("invalid"), None);
+    /// assert!(store.parse_event_id("invalid").is_err());
     /// ```
     pub fn parse_event_id<'a>(
         &self,

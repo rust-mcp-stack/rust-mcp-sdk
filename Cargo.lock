@@ -2314,12 +2314,14 @@ dependencies = [
  "http-body-util",
  "rust-mcp-sdk",
  "rustls",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2356,6 +2358,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rust-mcp-schema",
+ "rust-mcp-sdk",
  "serde",
  "serde_json",
  "syn",
