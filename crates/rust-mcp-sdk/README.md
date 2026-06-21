@@ -249,6 +249,12 @@ Both functions take a pre-built `McpAppState` and `McpMountOptions`, and produce
 
 👉 See [`examples/byo-server.rs`](crates/rust-mcp-axum/examples/byo-server.rs) (Axum) and [`examples/byo-server.rs`](crates/rust-mcp-actix/examples/byo-server.rs) (Actix) for working examples.
 
+### Custom HTTP Framework Integrations
+
+While we provide native Axum and Actix integrations, the SDK is completely framework-agnostic. If you are using a different HTTP framework (like Rocket, Salvo, or Warp), you can build a custom integration by adapting your framework's native Request/Response types to the SDK's core HTTP handling logic.
+
+👉 See the [Custom HTTP Framework Integration Guide](../../doc/custom-http-framework-integration.md) for architectural details and implementation steps.
+
 ### AxumServerOptions
 
 Axum server is highly customizable through `AxumServerOptions`:
