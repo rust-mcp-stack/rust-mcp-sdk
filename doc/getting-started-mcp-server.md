@@ -255,11 +255,11 @@ async fn main() -> SdkResult<()> {
         protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
-    // create a std transport with default options
-    let transport = StdioTransport::new(TransportOptions::default())?;
-
     //instantiate our custom handler for handling MCP messages
     let handler = MyServerHandler {};
+
+    // create a std transport with default options
+    let transport = StdioTransport::new(TransportOptions::default())?;
 
     //create the MCP server
     let server = server_runtime::create_server(McpServerOptions {
@@ -268,8 +268,8 @@ async fn main() -> SdkResult<()> {
         handler: handler.to_mcp_server_handler(),
         task_store: None,
         client_task_store: None,
-        message_observer: None,        
-    });
+        message_observer: None,
+    });   
 
     // Start the server
     server.start().await
@@ -306,15 +306,15 @@ Open the address in a web browser:
 
 2- Select STDIO as the transport, enter your binary path in the Command section, and click the Connect button. You should see a message confirming that your server started successfully.
 
-![hello-world-mcp-server-running](./mcp-server-hello-world-01.jpg)
+<img src="./mcp-server-hello-world-01.jpg" width="800" alt="hello-world-mcp-server-running"/>
 
 3- Click **List Tools** button, to retrieve list of tools that your server provides:
 
-![hello-world-mcp-server-tools](./mcp-server-hello-world-02.jpg)
+<img src="./mcp-server-hello-world-02.jpg" width="800" alt="hello-world-mcp-server-tools"/>
 
 4- Select one the tools, and run it py passing a `name` argument and pressing the **Run Tool** button:
 
-![hello-world-mcp-server-tools](./mcp-server-hello-world-03.jpg)
+<img src="./mcp-server-hello-world-03.jpg" width="800" alt="hello-world-mcp-server-tools"/>
 
 ---
 
@@ -336,7 +336,8 @@ tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 ```
 
-Then replace the stdio server with:
+Then remove the `StdioTransport` and replace the stdio server with:
+
 
 ```rust
 use rust_mcp_axum::{create_axum_server, AxumServerOptions};
@@ -352,8 +353,11 @@ let server = create_axum_server(
         ..Default::default()
     },
 );
-server.start().await?;
+
+server.start().await
 ```
+
+Mcp server will be available at `http://127.0.0.1:8080/mcp`
 
 ### Using Actix-web
 
@@ -378,7 +382,9 @@ let server = create_actix_server(
         ..Default::default()
     },
 );
-server.start().await?;
+server.start().await
 ```
+
+Mcp server will be available at `http://127.0.0.1:8080/mcp`
 
 Both crates support **Streamable HTTP** and **SSE** transports, authentication, resumability, health checks, TLS, and more. See their respective READMEs for full documentation.
