@@ -31,7 +31,10 @@ impl ActixServer {
         mut server_options: ActixServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
-            session_store: Arc::new(InMemorySessionStore::new()),
+            session_store: server_options
+                .session_store
+                .take()
+                .unwrap_or_else(|| Arc::new(InMemorySessionStore::default())),
             id_generator: server_options
                 .session_id_generator
                 .take()

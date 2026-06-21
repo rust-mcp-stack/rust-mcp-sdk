@@ -1,4 +1,5 @@
 use crate::error::TransportServerResult;
+use axum::body::Bytes;
 use axum::routing::get;
 use axum::Extension;
 use axum::{
@@ -7,7 +8,7 @@ use axum::{
     routing::{delete, post},
     Router,
 };
-use http::{HeaderMap, Method, Uri};
+use http::{HeaderMap, Method, StatusCode, Uri};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::{collections::HashMap, sync::Arc};
 
@@ -40,10 +41,22 @@ pub async fn handle_streamable_http_post(
     State(state): State<Arc<McpAppState>>,
     Extension(http_handler): Extension<Arc<McpHttpHandler>>,
     Query(_params): Query<HashMap<String, String>>,
-    payload: String,
+    payload: Bytes,
 ) -> TransportServerResult<impl IntoResponse> {
-    let request =
-        McpHttpHandler::create_request(Method::POST, uri, headers, Some(payload.as_str()));
+    // Borrow the raw body as UTF-8 instead of extracting an owned `String`,
+    // avoiding an allocation and copy per request. JSON-RPC payloads are UTF-8;
+    // anything else is rejected up front.
+    let payload = match std::str::from_utf8(&payload) {
+        Ok(payload) => payload,
+        Err(_) => {
+            return Ok(axum::response::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(axum::body::Body::from("Request body must be valid UTF-8"))
+                .expect("static 400 response is always valid"));
+        }
+    };
+
+    let request = McpHttpHandler::create_request(Method::POST, uri, headers, Some(payload));
     let generic_res = http_handler.handle_streamable_http(request, state).await?;
     let (parts, body) = generic_res.into_parts();
     let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));

@@ -16,7 +16,7 @@ use rust_mcp_sdk::{
     mcp_http::{
         resolve_dns_middleware, DnsRebindingOptions, HealthHandler, McpAppState, McpHttpHandler,
     },
-    session_store::InMemorySessionStore,
+    session_store::{InMemorySessionStore, SessionStore},
     task_store::{ClientTaskStore, ServerTaskStore},
     IdGenerator, McpObserver, McpServerHandler,
 };
@@ -125,6 +125,11 @@ pub struct AxumServerOptions {
     /// than this are rejected with `413 Payload Too Large`.
     /// Defaults to 4 MiB when `None`.
     pub max_request_body_size: Option<usize>,
+    /// Optional session store implementation. Defaults to a bounded
+    /// [`InMemorySessionStore`] (10k max sessions, no idle TTL) when `None`.
+    /// Pass your own [`SessionStore`] implementation to use Redis, custom
+    /// limits, or any other session backend.
+    pub session_store: Option<Arc<dyn SessionStore>>,
 
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
@@ -313,6 +318,7 @@ impl Default for AxumServerOptions {
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             max_request_body_size: None,
+            session_store: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
@@ -358,7 +364,10 @@ impl AxumServer {
         mut server_options: AxumServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
-            session_store: Arc::new(InMemorySessionStore::new()),
+            session_store: server_options
+                .session_store
+                .take()
+                .unwrap_or_else(|| Arc::new(InMemorySessionStore::default())),
             id_generator: server_options
                 .session_id_generator
                 .take()

@@ -225,6 +225,29 @@ async fn test_streamable_http_post_invalid_body() {
 }
 
 #[tokio::test]
+async fn test_streamable_http_post_non_utf8_body_rejected() {
+    let handler = McpHttpHandler::new(None, vec![], None);
+    let mount = default_mount();
+    let app = make_app(handler, &mount);
+
+    // Raw bytes with an invalid UTF-8 sequence (0xFF 0xFE 0xFD)
+    let non_utf8 = vec![0xFF, 0xFE, 0xFD];
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .body(Body::from(non_utf8))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_streamable_http_delete_without_session_id() {
     let handler = McpHttpHandler::new(None, vec![], None);
     let mount = default_mount();

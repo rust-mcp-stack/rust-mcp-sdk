@@ -183,6 +183,24 @@ async fn test_streamable_http_post_invalid_body() {
 }
 
 #[actix_web::test]
+async fn test_streamable_http_post_non_utf8_body_rejected() {
+    let (state, handler) = make_state();
+    let opts = default_mount();
+    let scope = mcp_scope(state, handler, &opts);
+    let app = test::init_service(App::new().service(scope)).await;
+
+    let non_utf8 = vec![0xFFu8, 0xFE, 0xFD];
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .set_payload(non_utf8)
+        .insert_header(("Content-Type", "application/json"))
+        .insert_header(("Accept", "application/json, text/event-stream"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
 async fn test_streamable_http_delete_returns_error_without_session() {
     let (state, handler) = make_state();
     let opts = default_mount();
