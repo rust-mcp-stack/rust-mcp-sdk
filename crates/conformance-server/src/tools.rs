@@ -265,10 +265,13 @@ impl TestToolWithProgress {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
+        progress_token: Option<rust_mcp_sdk::schema::ProgressToken>,
     ) -> Result<CallToolResult, CallToolError> {
         use rust_mcp_sdk::schema::{ProgressNotificationParams, ProgressToken};
 
-        let token = ProgressToken::String("progress-test-1".into());
+        let token = progress_token.unwrap_or(ProgressToken::String(
+            "progress-test-1".into(),
+        ));
 
         runtime
             .notify_progress(ProgressNotificationParams {

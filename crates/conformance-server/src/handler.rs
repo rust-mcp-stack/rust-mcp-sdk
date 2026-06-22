@@ -41,6 +41,10 @@ impl ServerHandler for ConformanceHandler {
         params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
+        let progress_token = params
+            .meta
+            .as_ref()
+            .and_then(|m| m.progress_token.clone());
         let tool_params: ConformanceTools =
             ConformanceTools::try_from(params).map_err(CallToolError::new)?;
 
@@ -52,7 +56,7 @@ impl ServerHandler for ConformanceHandler {
             ConformanceTools::TestMultipleContentTypes(t) => t.call_tool(),
             ConformanceTools::TestErrorHandling(t) => t.call_tool(),
             ConformanceTools::TestToolWithLogging(t) => t.call_tool(&runtime).await,
-            ConformanceTools::TestToolWithProgress(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestToolWithProgress(t) => t.call_tool(&runtime, progress_token).await,
             ConformanceTools::TestSampling(t) => t.call_tool(&runtime).await,
             ConformanceTools::TestElicitation(t) => t.call_tool(&runtime).await,
             ConformanceTools::TestElicitationDefaults(t) => t.call_tool(&runtime).await,
