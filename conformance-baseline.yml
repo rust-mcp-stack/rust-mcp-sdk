@@ -1,2 +1,4 @@
-server:
-  - tools-call-with-progress
+# No known failures — 40/40 server conformance scenarios passing.
+# This file is kept for CI integration with the conformance GitHub Action.
+# If a scenario regresses, add it here to prevent CI failure while fixing.
+server: []

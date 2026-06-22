@@ -461,49 +461,79 @@ impl TestElicitationDefaults {
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        use rust_mcp_sdk::schema::schema_utils::{CustomRequest, RequestFromServer};
+        use rust_mcp_sdk::schema::{
+            BooleanSchema, ElicitFormSchema, ElicitRequestFormParams, ElicitRequestParams,
+            NumberSchema, NumberSchemaType, PrimitiveSchemaDefinition, StringSchema,
+            UntitledSingleSelectEnumSchema,
+        };
+        use std::collections::BTreeMap;
 
-        let params = serde_json::json!({
-            "message": "Please provide your information",
-            "requestedSchema": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "User's full name",
-                        "default": "John Doe"
-                    },
-                    "age": {
-                        "type": "integer",
-                        "description": "User's age",
-                        "default": 30
-                    },
-                    "score": {
-                        "type": "number",
-                        "description": "User's score",
-                        "default": 95.5
-                    },
-                    "status": {
-                        "type": "string",
-                        "description": "Account status",
-                        "enum": ["active", "inactive", "pending"],
-                        "default": "active"
-                    },
-                    "verified": {
-                        "type": "boolean",
-                        "description": "Verification status",
-                        "default": true
-                    }
-                },
-                "required": []
-            }
-        });
+        let mut properties = BTreeMap::new();
+
+        properties.insert(
+            "name".into(),
+            PrimitiveSchemaDefinition::StringSchema(StringSchema::new(
+                Some("John Doe".into()),
+                Some("User's full name".into()),
+                None,
+                None,
+                None,
+                None,
+            )),
+        );
+
+        properties.insert(
+            "age".into(),
+            PrimitiveSchemaDefinition::NumberSchema(NumberSchema {
+                default: Some(30.0),
+                description: Some("User's age".into()),
+                title: None,
+                type_: NumberSchemaType::Integer,
+                maximum: None,
+                minimum: None,
+            }),
+        );
+
+        properties.insert(
+            "score".into(),
+            PrimitiveSchemaDefinition::NumberSchema(NumberSchema {
+                default: Some(95.5),
+                description: Some("User's score".into()),
+                title: None,
+                type_: NumberSchemaType::Number,
+                maximum: None,
+                minimum: None,
+            }),
+        );
+
+        properties.insert(
+            "status".into(),
+            PrimitiveSchemaDefinition::UntitledSingleSelectEnumSchema(
+                UntitledSingleSelectEnumSchema::new(
+                    vec!["active".into(), "inactive".into(), "pending".into()],
+                    Some("active".into()),
+                    Some("Account status".into()),
+                    None,
+                ),
+            ),
+        );
+
+        properties.insert(
+            "verified".into(),
+            PrimitiveSchemaDefinition::BooleanSchema(BooleanSchema::new(
+                Some(true),
+                Some("Verification status".into()),
+                None,
+            )),
+        );
+
+        let schema = ElicitFormSchema::new(properties, vec![], None);
+
+        let params: ElicitRequestParams =
+            ElicitRequestFormParams::new("Please provide your information".into(), schema, None, None).into();
 
         let response = runtime
-            .request(RequestFromServer::CustomRequest(CustomRequest {
-                method: "elicitation/create".to_string(),
-                params: Some(params.as_object().cloned().unwrap_or_default()),
-            }), None)
+            .request_elicitation(params)
             .await
             .map_err(|e| CallToolError::from_message(format!("Elicitation failed: {e}")))?;
 
