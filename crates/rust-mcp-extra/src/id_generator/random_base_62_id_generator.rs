@@ -1,8 +1,8 @@
 //! Short, URL-safe, No collisions if length is sufficient
 //! Needs collision handling if critical
 
-use rand::Rng;
-use rand_distr::Alphanumeric;
+use rand::distr::Alphanumeric;
+use rand::RngExt;
 use rust_mcp_sdk::id_generator::IdGenerator;
 
 /// A random Base62 ID generator.

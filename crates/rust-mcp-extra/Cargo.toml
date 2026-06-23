@@ -18,8 +18,7 @@ base64 = {workspace = true, optional=true}
 url= {workspace = true, optional=true}
 nanoid = {version="0.5", optional=true}
 once_cell = {version="1.2", optional=true}
-rand = {version="0.9.2", features = ["std", "alloc"] , optional=true}
-rand_distr = {version="0.5.1", optional=true}
+rand = {version="0.10.1", features = ["std", "alloc"] , optional=true}
 reqwest = { workspace = true, default-features = false, features = [
     "rustls-tls",
     "json",
@@ -47,7 +46,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 default = ["auth","nano_id","snowflake_id","random_62_id","time_64_id"]
 nano_id = ["nanoid"]
 snowflake_id = ["once_cell"]
-random_62_id = ["rand","rand_distr"]
+random_62_id = ["rand"]
 time_64_id = ["base64"]
 auth=["url","reqwest","async-lock","async-trait","rust-mcp-sdk/auth"
 ,"rust-mcp-sdk/sse", "serde","serde_json","http","bytes","http-body","http-body-util"]
