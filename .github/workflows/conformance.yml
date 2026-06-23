@@ -1,4 +1,4 @@
-name: MCP Conformance
+name: 🧪 MCP Conformance
 on:
   push:
     branches:
@@ -34,8 +34,8 @@ jobs:
           cargo run -p conformance-server --release &
           timeout 30 bash -c 'until curl -sf http://localhost:3000/health; do sleep 0.5; done'
 
-      - uses: modelcontextprotocol/conformance@v0.1.11
+      - uses: modelcontextprotocol/conformance@v0.1.16
         with:
           mode: server
           url: http://localhost:3000/mcp
-          baseline-path: conformance-baseline.yml
+
