@@ -3,6 +3,8 @@ mod auth_info;
 #[cfg(feature = "auth")]
 mod auth_provider;
 #[cfg(feature = "auth")]
+mod client_auth;
+#[cfg(feature = "auth")]
 mod error;
 #[cfg(feature = "auth")]
 mod metadata;
@@ -13,6 +15,11 @@ mod token_verifier;
 pub use auth_info::AuthInfo;
 #[cfg(feature = "auth")]
 pub use auth_provider::*;
+#[cfg(feature = "auth")]
+pub use client_auth::{
+    generate_pkce_params, ClientError, ClientResult, GrantType, InMemoryTokenStore, McpAuthClient,
+    McpAuthConfig, PkceParams, RegistrationResponse, TokenResponse, TokenStore, TokenStoreError,
+};
 #[cfg(feature = "auth")]
 pub use error::*;
 #[cfg(feature = "auth")]

@@ -26,6 +26,8 @@ This folder contains a variety of example programs demonstrating how to use the 
     - **[sse Examples](#%EF%B8%8F-mcp-client-examples-sse)**
         - simple-mcp-client-sse
         - simple-mcp-client-sse-core 
+    - **[Oauth Example](#%EF%B8%8F-mcp-client---oauth-example)**
+        - mcp-client-with-oauth
 
 -----
 
@@ -214,6 +216,48 @@ npx @modelcontextprotocol/server-everything sse
 2- start the example client, for instance start the `simple-mcp-client-sse`:
 ```bash
 cargo run --example simple-mcp-client-sse
+```
+
+---
+
+### ➡️ MCP Client - Oauth Example
+
+- [mcp-client-with-oauth.rs](mcp-client-with-oauth.rs)
+
+A minimal MCP client example demonstrating **OAuth 2.0 client credentials flow** using the `McpAuthClient` from [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk).
+
+It features:
+- Automatic OAuth metadata discovery from the server's well-known endpoint
+- Dynamic Client Registration (DCR) — registers the client if no pre-registered credentials are provided
+- Token exchange via `client_credentials` grant
+- Automatic token refresh before expiry
+- Transport integration — injects `Authorization: Bearer <token>` into request headers
+
+**Start the client:**
+
+```bash
+cargo run --example mcp-client-with-oauth
+```
+
+> 💡 Requires an MCP server with OAuth enabled running at `http://127.0.0.1:3001/mcp`. The server must support the `client_credentials` grant type.
+
+To use pre-registered credentials instead of DCR, pass them in the builder:
+
+```rust
+McpAuthConfig::builder()
+    .server_url(MCP_SERVER_URL)
+    .client_id("my-client-id")
+    .client_secret("my-client-secret")
+    .build()?;
+```
+
+To use a custom token store backend (e.g., SQLite, Redis), pass an `Arc<dyn TokenStore>`:
+
+```rust
+McpAuthConfig::builder()
+    .server_url(MCP_SERVER_URL)
+    .token_store(Arc::new(MyCustomStore::new()))
+    .build()?;
 ```
 
 ---

@@ -35,6 +35,7 @@ http-body-util = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 url = {workspace = true, optional=true, features=["serde"]}
 jsonwebtoken = {version="10.1", optional=true, features=["aws_lc_rs"]}
+sha2 = { version = "0.10", optional = true }
 reqwest = { workspace = true, default-features = false, features = [
     "stream",
     "rustls-tls",
@@ -72,7 +73,7 @@ default = [
 sse = ["rust-mcp-transport/sse","http","http-body","http-body-util","tokio-stream"]
 streamable-http = ["rust-mcp-transport/streamable-http","http","http-body","http-body-util","tokio-stream"]
 stdio = ["rust-mcp-transport/stdio"]
-auth=["url","jsonwebtoken/aws_lc_rs","reqwest"]
+auth=["url","jsonwebtoken/aws_lc_rs","reqwest","sha2"]
 
 server = []
 client = []
