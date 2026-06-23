@@ -1,0 +1,41 @@
+name: MCP Conformance
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "**"
+
+concurrency:
+  group: conformance-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  server-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: conformance-server
+
+      - name: Build conformance server
+        run: cargo build -p conformance-server --release
+
+      - name: Start server
+        run: |
+          cargo run -p conformance-server --release &
+          timeout 30 bash -c 'until curl -sf http://localhost:3000/health; do sleep 0.5; done'
+
+      - uses: modelcontextprotocol/conformance@v0.1.11
+        with:
+          mode: server
+          url: http://localhost:3000/mcp
+          baseline-path: conformance-baseline.yml
