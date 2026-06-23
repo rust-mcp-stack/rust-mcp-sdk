@@ -215,6 +215,27 @@ async fn run_sse_retry(server_url: &str) {
         return;
     };
 
+    // SEP-1699 sse-retry scenario:
+    //   1. List tools to discover the `test_reconnection` tool
+    //   2. Invoke it. The server starts an SSE response, sends a priming event
+    //      with `id` + `retry: 500`, then closes the stream without a result.
+    //   3. The SDK should treat the priming as a resumability checkpoint:
+    //      wait `retry` ms, reconnect via GET with `Last-Event-ID`, and read
+    //      the pending response on the standalone stream.
+    if let Ok(tools) = client.request_tool_list(None).await {
+        if let Some(tool) = tools.tools.first() {
+            let _ = client
+                .request_tool_call(rust_mcp_sdk::schema::CallToolRequestParams {
+                    name: tool.name.clone(),
+                    arguments: Some(serde_json::Map::new()),
+                    meta: None,
+                    task: None,
+                })
+                .await;
+        }
+    }
+
+    // Wait long enough for the reconnect to be observed by the test framework
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     client.shut_down().await.ok();
@@ -373,44 +394,91 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         Err(e) => { eprintln!("Auth client build failed: {e}"); return; }
     };
 
-    let auth_headers = match auth_client.get_auth_headers().await {
-        Ok(h) => h,
-        Err(e) => { eprintln!("Auth failed: {e}"); return; }
+    // Discover metadata to choose the right grant flow.
+    // Prefer authorization_code (with PKCE) when supported, so the issued token
+    // is bound to the scopes from the /authorize request (SEP-835). Otherwise
+    // fall back to client_credentials.
+    let metadata = match auth_client.discover_metadata().await {
+        Ok(m) => Some(m),
+        Err(e) => { eprintln!("Metadata discovery failed: {e}"); None }
     };
 
-    // If the server supports authorization_code, make the authorization request too
-    if let Ok(metadata) = auth_client.discover_metadata().await {
-        if let Some(grant_types) = &metadata.grant_types_supported {
-            if grant_types.iter().any(|g| g == "authorization_code") {
-                let auth_endpoint = metadata.authorization_endpoint.as_str();
-                // SEP-991: prefer CIMD URL when supported
-                let client_id = if use_cimd {
-                    cimd_client_id
-                } else {
-                    context.get("client_id").and_then(|v| v.as_str())
-                        .unwrap_or("conformance-client")
-                };
-                let pkce = rust_mcp_sdk::auth::generate_pkce_params();
-                // SEP-835: use selected scope (may be omitted if undefined)
-                let mut query: Vec<(&str, &str)> = vec![
-                    ("response_type", "code"),
-                    ("client_id", client_id),
-                    ("redirect_uri", "http://localhost/callback"),
-                    ("resource", server_url),
-                    ("code_challenge", &pkce.code_challenge),
-                    ("code_challenge_method", "S256"),
-                ];
-                if let Some(s) = &selected_scope {
-                    query.push(("scope", s));
-                }
-                let _ = http_client
-                    .get(auth_endpoint)
-                    .query(&query)
-                    .send()
-                    .await;
-            }
+    let supports_auth_code = metadata
+        .as_ref()
+        .and_then(|m| m.grant_types_supported.as_ref())
+        .map(|g| g.iter().any(|x| x == "authorization_code"))
+        .unwrap_or(false);
+
+    let auth_headers = if supports_auth_code {
+        // authorization_code (PKCE) flow
+        let Some(metadata) = metadata.as_ref() else {
+            eprintln!("Auth metadata required for authorization_code flow");
+            return;
+        };
+        let auth_endpoint = metadata.authorization_endpoint.as_str();
+        let client_id = if use_cimd {
+            cimd_client_id.to_string()
+        } else {
+            context.get("client_id").and_then(|v| v.as_str())
+                .unwrap_or("conformance-client").to_string()
+        };
+        let pkce = rust_mcp_sdk::auth::generate_pkce_params();
+        let redirect_uri = "http://localhost/callback";
+        let mut query: Vec<(&str, &str)> = vec![
+            ("response_type", "code"),
+            ("client_id", &client_id),
+            ("redirect_uri", redirect_uri),
+            ("resource", server_url),
+            ("code_challenge", &pkce.code_challenge),
+            ("code_challenge_method", "S256"),
+        ];
+        if let Some(s) = &selected_scope {
+            query.push(("scope", s));
         }
-    }
+
+        // Send /authorize and capture the redirect Location to extract the auth code
+        let auth_resp = http_client
+            .get(auth_endpoint)
+            .query(&query)
+            .send()
+            .await;
+
+        let code = auth_resp
+            .ok()
+            .and_then(|r| {
+                r.headers().get("location")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|loc| {
+                        // Extract `code` query param from Location header
+                        reqwest::Url::parse(loc).ok()
+                            .and_then(|u| u.query_pairs()
+                                .find(|(k, _)| k == "code")
+                                .map(|(_, v)| v.to_string()))
+                    })
+            })
+            .unwrap_or_else(|| "test-auth-code".to_string());
+
+        // Exchange auth code for token
+        let grant = rust_mcp_sdk::auth::GrantType::AuthorizationCodePkce {
+            code,
+            redirect_uri: redirect_uri.to_string(),
+            code_verifier: pkce.code_verifier.clone(),
+        };
+        match auth_client.exchange_token(&grant).await {
+            Ok(token) => {
+                let mut h = std::collections::HashMap::new();
+                h.insert("Authorization".to_string(), format!("Bearer {}", token.access_token));
+                h
+            }
+            Err(e) => { eprintln!("Token exchange failed: {e}"); return; }
+        }
+    } else {
+        // client_credentials flow (default)
+        match auth_client.get_auth_headers().await {
+            Ok(h) => h,
+            Err(e) => { eprintln!("Auth failed: {e}"); return; }
+        }
+    };
 
     // Step 3: Connect to MCP server with Bearer token
     let client_details = InitializeRequestParams {
@@ -433,7 +501,7 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
     let transport_options = StreamableTransportOptions {
         mcp_url: server_url.to_string(),
         request_options: RequestOptions {
-            custom_headers: Some(auth_headers),
+            custom_headers: Some(auth_headers.clone()),
             retry_delay: Some(std::time::Duration::from_secs(1)),
             max_retries: Some(5),
             ..RequestOptions::default()
@@ -452,21 +520,60 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         return;
     }
 
-    // Scope escalation: try a tool call, re-authenticate with elevated scope if needed
-    let tools = client.request_tool_list(None).await;
-    if let Err(_e) = tools {
-        // Re-probe to capture the 403 WWW-Authenticate scope challenge (insufficient_scope)
-        // SDK call doesn't expose response headers on error, so make a direct request.
+    // Scope escalation: try a tool call, re-authenticate with elevated scope if needed.
+    // First try tools/list (typically needs basic scope) then tools/call (may need
+    // additional scopes via step-up).
+    let tools_result = client.request_tool_list(None).await;
+    let call_result = match &tools_result {
+        Ok(list) if !list.tools.is_empty() => {
+            // Try to invoke the first tool to trigger any 403 scope-step-up
+            client
+                .request_tool_call(rust_mcp_sdk::schema::CallToolRequestParams {
+                    name: list.tools[0].name.clone(),
+                    arguments: Some(serde_json::Map::new()),
+                    meta: None,
+                    task: None,
+                })
+                .await
+                .map(|_| ())
+                .map_err(|e| format!("{e}"))
+        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("{e}")),
+    };
+
+    if tools_result.is_err() || call_result.is_err() {
+        // Re-probe to capture the 403 WWW-Authenticate scope challenge (insufficient_scope).
+        // Probe with the method that triggered the failure (tools/call when tools/list
+        // succeeded but the tool invocation needs elevated scope).
+        let probe_method = if tools_result.is_ok() { "tools/call" } else { "tools/list" };
+        let probe_params = if probe_method == "tools/call" {
+            serde_json::json!({
+                "name": tools_result.as_ref().ok()
+                    .and_then(|l| l.tools.first())
+                    .map(|t| t.name.clone())
+                    .unwrap_or_default(),
+                "arguments": {}
+            })
+        } else {
+            serde_json::json!({})
+        };
         let probe_body = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 99,
-            "method": "tools/list",
-            "params": {}
+            "method": probe_method,
+            "params": probe_params
         });
-        let challenge_scope: Option<String> = http_client
+        let mut probe_req = http_client
             .post(server_url)
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json, text/event-stream")
+            .header("Accept", "application/json, text/event-stream");
+        // Include current Bearer token so the server returns the *insufficient_scope*
+        // 403 challenge (not a 401 for missing credentials).
+        if let Some(auth_val) = auth_headers.get("Authorization") {
+            probe_req = probe_req.header("Authorization", auth_val);
+        }
+        let challenge_scope: Option<String> = probe_req
             .json(&probe_body)
             .send()
             .await
@@ -502,22 +609,73 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         b2 = b2.scope(&escalated_scope);
 
         if let Ok(a2) = b2.build() {
-            if let Ok(meta2) = a2.discover_metadata().await {
-                if meta2.grant_types_supported.as_ref().is_some_and(|g| g.iter().any(|x| x == "authorization_code")) {
-                    let pkce2 = rust_mcp_sdk::auth::generate_pkce_params();
-                    let _ = http_client
-                        .get(meta2.authorization_endpoint.as_str())
-                        .query(&[("response_type", "code"), ("client_id", context.get("client_id").and_then(|v| v.as_str()).unwrap_or("c")), ("redirect_uri", "http://localhost/callback"), ("scope", &escalated_scope), ("resource", server_url), ("code_challenge", &pkce2.code_challenge), ("code_challenge_method", "S256")])
-                        .send().await;
+            // Acquire fresh token bound to the escalated scope. Prefer
+            // authorization_code (PKCE) when supported so the issued token
+            // carries the requested scopes.
+            let h2_opt: Option<std::collections::HashMap<String, String>> = match a2.discover_metadata().await {
+                Ok(meta2) => {
+                    let supports_ac = meta2.grant_types_supported.as_ref()
+                        .is_some_and(|g| g.iter().any(|x| x == "authorization_code"));
+                    if supports_ac {
+                        let client_id_b = context.get("client_id").and_then(|v| v.as_str())
+                            .unwrap_or("conformance-client").to_string();
+                        let pkce2 = rust_mcp_sdk::auth::generate_pkce_params();
+                        let redirect_uri = "http://localhost/callback";
+                        let auth_resp = http_client
+                            .get(meta2.authorization_endpoint.as_str())
+                            .query(&[
+                                ("response_type", "code"),
+                                ("client_id", &client_id_b),
+                                ("redirect_uri", redirect_uri),
+                                ("scope", &escalated_scope),
+                                ("resource", server_url),
+                                ("code_challenge", &pkce2.code_challenge),
+                                ("code_challenge_method", "S256"),
+                            ])
+                            .send()
+                            .await;
+                        let code = auth_resp.ok().and_then(|r| {
+                            r.headers().get("location")
+                                .and_then(|v| v.to_str().ok())
+                                .and_then(|loc| reqwest::Url::parse(loc).ok())
+                                .and_then(|u| u.query_pairs()
+                                    .find(|(k, _)| k == "code")
+                                    .map(|(_, v)| v.to_string()))
+                        }).unwrap_or_else(|| "test-auth-code".to_string());
+                        let grant = rust_mcp_sdk::auth::GrantType::AuthorizationCodePkce {
+                            code,
+                            redirect_uri: redirect_uri.to_string(),
+                            code_verifier: pkce2.code_verifier.clone(),
+                        };
+                        a2.exchange_token(&grant).await.ok().map(|t| {
+                            let mut h = std::collections::HashMap::new();
+                            h.insert("Authorization".to_string(), format!("Bearer {}", t.access_token));
+                            h
+                        })
+                    } else {
+                        a2.get_auth_headers().await.ok()
+                    }
                 }
-            }
-            if let Ok(h2) = a2.get_auth_headers().await {
+                Err(_) => a2.get_auth_headers().await.ok(),
+            };
+
+            if let Some(h2) = h2_opt {
                 client.shut_down().await.ok();
                 let td2 = InitializeRequestParams { capabilities: ClientCapabilities { sampling: Some(ClientSampling { context: None, tools: None }), elicitation: Some(ClientElicitation { form: Some(serde_json::Map::new()), url: None }), roots: Some(ClientRoots { list_changed: Some(true) }), ..ClientCapabilities::default() }, client_info: Implementation { name: "conformance-client".into(), version: "0.1.0".into(), title: Some("MCP Conformance Test Client".into()), description: None, icons: vec![], website_url: None }, protocol_version: LATEST_PROTOCOL_VERSION.into(), meta: None };
                 let to2 = StreamableTransportOptions { mcp_url: server_url.to_string(), request_options: RequestOptions { custom_headers: Some(h2), retry_delay: Some(std::time::Duration::from_secs(1)), max_retries: Some(5), ..RequestOptions::default() } };
                 let c2 = client_runtime::with_transport_options(td2, to2, ConformanceClientHandler, None, None, None);
                 let _ = c2.clone().start().await;
-                let _ = c2.request_tool_list(None).await;
+                // Retry the operations after escalation
+                if let Ok(list) = c2.request_tool_list(None).await {
+                    if let Some(t) = list.tools.first() {
+                        let _ = c2.request_tool_call(rust_mcp_sdk::schema::CallToolRequestParams {
+                            name: t.name.clone(),
+                            arguments: Some(serde_json::Map::new()),
+                            meta: None,
+                            task: None,
+                        }).await;
+                    }
+                }
                 c2.shut_down().await.ok();
                 return;
             }
@@ -528,12 +686,17 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
 }
 
 fn parse_auth_param(www_auth: &str, param_name: &str) -> Option<String> {
-    for part in www_auth.split(',') {
+    // WWW-Authenticate format: `Bearer key1="val1", key2="val2"`.
+    // Strip the auth scheme prefix (e.g. "Bearer "), then split by `,` and look
+    // for the parameter by name.
+    let body = www_auth.trim_start();
+    let body = body.strip_prefix("Bearer").or_else(|| body.strip_prefix("bearer")).unwrap_or(body);
+    for part in body.split(',') {
         let trimmed = part.trim();
         if let Some(rest) = trimmed.strip_prefix(&format!("{}=", param_name)) {
-            let url = rest.trim().trim_matches('"');
-            if !url.is_empty() {
-                return Some(url.to_string());
+            let value = rest.trim().trim_matches('"');
+            if !value.is_empty() {
+                return Some(value.to_string());
             }
         }
     }
