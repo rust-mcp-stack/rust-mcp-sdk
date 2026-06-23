@@ -30,6 +30,19 @@ jobs:
           wip: false # needs write access if enabled
           requireScope: false
           subjectPattern: ^(?![A-Z]).+$
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            deps
           subjectPatternError: |
             The subject "{subject}" found in the pull request title "{title}"
             didn't match the configured pattern. Please ensure that the subject
