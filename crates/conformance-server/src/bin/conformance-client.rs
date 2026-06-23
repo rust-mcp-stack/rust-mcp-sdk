@@ -216,10 +216,6 @@ async fn run_sse_retry(server_url: &str) {
 
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-    if let Err(e) = client.ping(None, None).await {
-        eprintln!("Ping failed after SSE retry delay: {e}");
-    }
-
     client.shut_down().await.ok();
 }
 
