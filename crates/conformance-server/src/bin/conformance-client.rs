@@ -250,89 +250,121 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         .send()
         .await;
 
-    let auth_server_url = match probe_resp {
-        Ok(resp) => {
-            let www_auth = resp.headers()
-                .get("www-authenticate")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("")
-                .to_string();
+    // Discovery results we capture from probe + PRM
+    let mut auth_server_url: Option<String> = None;
+    let mut www_auth_scope: Option<String> = None;
+    let mut prm_scopes_supported: Option<Vec<String>> = None;
 
-            let resource_metadata_url = parse_auth_param(&www_auth, "resource_metadata");
+    if let Ok(resp) = probe_resp {
+        let www_auth = resp.headers()
+            .get("www-authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
 
-            // Build list of PRM URLs to try in priority order
-            let mcp_host = reqwest::Url::parse(server_url)
-                .map(|u| format!("{}://{}", u.scheme(), u.authority()))
-                .unwrap_or_else(|_| server_url.to_string());
-            let mcp_path = reqwest::Url::parse(server_url)
-                .map(|u| u.path().to_string())
-                .unwrap_or_default();
-            let path_trimmed = mcp_path.trim_end_matches('/');
+        // Scope from WWW-Authenticate (SEP-835 priority 1)
+        www_auth_scope = parse_auth_param(&www_auth, "scope");
+        let resource_metadata_url = parse_auth_param(&www_auth, "resource_metadata");
 
-            let mut prm_candidates: Vec<String> = Vec::new();
-            // 1. resource_metadata URL from WWW-Authenticate (if any)
-            if let Some(url) = resource_metadata_url {
-                prm_candidates.push(url);
-            }
-            // 2. Path-based PRM: /.well-known/oauth-protected-resource{path}
-            if !path_trimmed.is_empty() {
-                prm_candidates.push(format!("{}/.well-known/oauth-protected-resource{}", mcp_host, path_trimmed));
-            }
-            // 3. Root PRM: /.well-known/oauth-protected-resource
-            prm_candidates.push(format!("{}/.well-known/oauth-protected-resource", mcp_host));
+        // Build list of PRM URLs to try in priority order
+        let mcp_host = reqwest::Url::parse(server_url)
+            .map(|u| format!("{}://{}", u.scheme(), u.authority()))
+            .unwrap_or_else(|_| server_url.to_string());
+        let mcp_path = reqwest::Url::parse(server_url)
+            .map(|u| u.path().to_string())
+            .unwrap_or_default();
+        let path_trimmed = mcp_path.trim_end_matches('/');
 
-            // Try each PRM URL until one returns valid metadata
-            let mut found_auth_server: Option<String> = None;
-            for prm_url in &prm_candidates {
-                if let Ok(rm_resp) = http_client.get(prm_url).send().await {
-                    if rm_resp.status().is_success() {
-                        if let Ok(rm) = rm_resp.json::<serde_json::Value>().await {
-                            if let Some(server) = rm.get("authorization_servers")
-                                .and_then(|v| v.as_array())
-                                .and_then(|a| a.first())
-                                .and_then(|v| v.as_str())
-                            {
-                                found_auth_server = Some(server.to_string());
-                                break;
+        let mut prm_candidates: Vec<String> = Vec::new();
+        // 1. resource_metadata URL from WWW-Authenticate (if any)
+        if let Some(url) = resource_metadata_url {
+            prm_candidates.push(url);
+        }
+        // 2. Path-based PRM: /.well-known/oauth-protected-resource{path}
+        if !path_trimmed.is_empty() {
+            prm_candidates.push(format!("{}/.well-known/oauth-protected-resource{}", mcp_host, path_trimmed));
+        }
+        // 3. Root PRM: /.well-known/oauth-protected-resource
+        prm_candidates.push(format!("{}/.well-known/oauth-protected-resource", mcp_host));
+
+        // Try each PRM URL until one returns valid metadata
+        for prm_url in &prm_candidates {
+            if let Ok(rm_resp) = http_client.get(prm_url).send().await {
+                if rm_resp.status().is_success() {
+                    if let Ok(rm) = rm_resp.json::<serde_json::Value>().await {
+                        // Capture scopes_supported (SEP-835 priority 2)
+                        if let Some(scopes) = rm.get("scopes_supported").and_then(|v| v.as_array()) {
+                            let list: Vec<String> = scopes.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect();
+                            if !list.is_empty() {
+                                prm_scopes_supported = Some(list);
                             }
+                        }
+                        if let Some(server) = rm.get("authorization_servers")
+                            .and_then(|v| v.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|v| v.as_str())
+                        {
+                            auth_server_url = Some(server.to_string());
+                            break;
                         }
                     }
                 }
             }
+        }
+    }
 
-            found_auth_server.or_else(|| {
-                // Fallback: treat MCP server as auth server
-                Some(format!("{}/.well-known/oauth-authorization-server",
-                    server_url.trim_end_matches('/')))
-            })
-        }
-        Err(_) => {
-            // Can't reach server, try well-known
-            Some(format!("{}/.well-known/oauth-authorization-server",
-                server_url.trim_end_matches('/')))
-        }
-    };
+    // Fallback: treat MCP server as auth server when PRM gives nothing
+    let auth_server_url = auth_server_url.unwrap_or_else(|| {
+        format!("{}/.well-known/oauth-authorization-server",
+            server_url.trim_end_matches('/'))
+    });
 
-    let auth_server_url = match auth_server_url {
-        Some(url) => url,
-        None => {
-            eprintln!("Could not determine auth server URL");
-            return;
-        }
-    };
+    // SEP-835 scope selection: WWW-Auth > PRM scopes_supported > context scope
+    let context_scope = context.get("scope").and_then(|v| v.as_str()).map(String::from);
+    let selected_scope: Option<String> = www_auth_scope.clone()
+        .or_else(|| prm_scopes_supported.as_ref().map(|s| s.join(" ")))
+        .or(context_scope);
 
     // Build McpAuthClient with auth server URL discovered from PRM.
     // The SDK handles metadata discovery with prepend/append paths and OIDC variants.
     let mut builder = McpAuthConfig::builder().server_url(&auth_server_url);
 
-    if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) {
+    // SEP-991 / CIMD: detect client_id_metadata_document_supported and use URL as client_id.
+    // Probe common discovery URLs to check the metadata.
+    let cimd_client_id = "https://conformance-test.local/client-metadata.json";
+    let mut use_cimd = false;
+    for url in &[
+        format!("{}/.well-known/oauth-authorization-server", auth_server_url.trim_end_matches('/')),
+        format!("{}/.well-known/openid-configuration", auth_server_url.trim_end_matches('/')),
+    ] {
+        if let Ok(resp) = http_client.get(url).send().await {
+            if resp.status().is_success() {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if json.get("client_id_metadata_document_supported")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
+                        use_cimd = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if use_cimd {
+        builder = builder.client_id(cimd_client_id);
+    } else if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) {
         builder = builder.client_id(id);
     }
     if let Some(secret) = context.get("client_secret").and_then(|v| v.as_str()) {
         builder = builder.client_secret(secret);
     }
-    if let Some(scope) = context.get("scope").and_then(|v| v.as_str()) {
-        builder = builder.scope(scope);
+    // SEP-835: apply selected scope (WWW-Auth > PRM > context). May be None.
+    if let Some(s) = &selected_scope {
+        builder = builder.scope(s);
     }
     builder = builder.resource(server_url);
 
@@ -351,22 +383,29 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         if let Some(grant_types) = &metadata.grant_types_supported {
             if grant_types.iter().any(|g| g == "authorization_code") {
                 let auth_endpoint = metadata.authorization_endpoint.as_str();
-                let client_id = context.get("client_id").and_then(|v| v.as_str())
-                    .unwrap_or("conformance-client");
-                let scope = context.get("scope").and_then(|v| v.as_str())
-                    .unwrap_or("mcp");
+                // SEP-991: prefer CIMD URL when supported
+                let client_id = if use_cimd {
+                    cimd_client_id
+                } else {
+                    context.get("client_id").and_then(|v| v.as_str())
+                        .unwrap_or("conformance-client")
+                };
                 let pkce = rust_mcp_sdk::auth::generate_pkce_params();
+                // SEP-835: use selected scope (may be omitted if undefined)
+                let mut query: Vec<(&str, &str)> = vec![
+                    ("response_type", "code"),
+                    ("client_id", client_id),
+                    ("redirect_uri", "http://localhost/callback"),
+                    ("resource", server_url),
+                    ("code_challenge", &pkce.code_challenge),
+                    ("code_challenge_method", "S256"),
+                ];
+                if let Some(s) = &selected_scope {
+                    query.push(("scope", s));
+                }
                 let _ = http_client
                     .get(auth_endpoint)
-                    .query(&[
-                        ("response_type", "code"),
-                        ("client_id", client_id),
-                        ("redirect_uri", "http://localhost/callback"),
-                        ("scope", scope),
-                        ("resource", server_url),
-                        ("code_challenge", &pkce.code_challenge),
-                        ("code_challenge_method", "S256"),
-                    ])
+                    .query(&query)
                     .send()
                     .await;
             }
@@ -416,7 +455,43 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
     // Scope escalation: try a tool call, re-authenticate with elevated scope if needed
     let tools = client.request_tool_list(None).await;
     if let Err(_e) = tools {
-        // Attempt scope escalation
+        // Re-probe to capture the 403 WWW-Authenticate scope challenge (insufficient_scope)
+        // SDK call doesn't expose response headers on error, so make a direct request.
+        let probe_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/list",
+            "params": {}
+        });
+        let challenge_scope: Option<String> = http_client
+            .post(server_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .json(&probe_body)
+            .send()
+            .await
+            .ok()
+            .and_then(|r| {
+                r.headers()
+                    .get("www-authenticate")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| parse_auth_param(s, "scope"))
+            });
+
+        // SEP-2350: union prior scope with challenged scope to preserve permissions
+        let union_scope = |prior: Option<&str>, challenged: Option<&str>| -> Option<String> {
+            let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            if let Some(p) = prior {
+                for s in p.split_whitespace() { set.insert(s.to_string()); }
+            }
+            if let Some(c) = challenged {
+                for s in c.split_whitespace() { set.insert(s.to_string()); }
+            }
+            if set.is_empty() { None } else { Some(set.into_iter().collect::<Vec<_>>().join(" ")) }
+        };
+        let escalated_scope = union_scope(selected_scope.as_deref(), challenge_scope.as_deref())
+            .unwrap_or_else(|| "mcp elevated".to_string());
+
         let mut b2 = McpAuthConfig::builder().server_url(&auth_server_url).resource(server_url);
         if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) {
             b2 = b2.client_id(id);
@@ -424,15 +499,15 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         if let Some(sec) = context.get("client_secret").and_then(|v| v.as_str()) {
             b2 = b2.client_secret(sec);
         }
-        b2 = b2.scope("mcp elevated");
+        b2 = b2.scope(&escalated_scope);
 
         if let Ok(a2) = b2.build() {
             if let Ok(meta2) = a2.discover_metadata().await {
-                if meta2.grant_types_supported.as_ref().map_or(false, |g| g.iter().any(|x| x == "authorization_code")) {
+                if meta2.grant_types_supported.as_ref().is_some_and(|g| g.iter().any(|x| x == "authorization_code")) {
                     let pkce2 = rust_mcp_sdk::auth::generate_pkce_params();
                     let _ = http_client
                         .get(meta2.authorization_endpoint.as_str())
-                        .query(&[("response_type", "code"), ("client_id", context.get("client_id").and_then(|v| v.as_str()).unwrap_or("c")), ("redirect_uri", "http://localhost/callback"), ("scope", "mcp elevated"), ("resource", server_url), ("code_challenge", &pkce2.code_challenge), ("code_challenge_method", "S256")])
+                        .query(&[("response_type", "code"), ("client_id", context.get("client_id").and_then(|v| v.as_str()).unwrap_or("c")), ("redirect_uri", "http://localhost/callback"), ("scope", &escalated_scope), ("resource", server_url), ("code_challenge", &pkce2.code_challenge), ("code_challenge_method", "S256")])
                         .send().await;
                 }
             }
