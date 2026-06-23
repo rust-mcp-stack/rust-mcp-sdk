@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Lint PR
         uses: amannn/action-semantic-pull-request@v6
         env:
@@ -30,6 +30,19 @@ jobs:
           wip: false # needs write access if enabled
           requireScope: false
           subjectPattern: ^(?![A-Z]).+$
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            deps
           subjectPatternError: |
             The subject "{subject}" found in the pull request title "{title}"
             didn't match the configured pattern. Please ensure that the subject

@@ -39,7 +39,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
     - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
     - ✅ **WorkOS** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#workos-authkit))
     - ✅ **Scalekit** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#scalekit))
-- ⬜ OAuth Authentication for MCP Clients
+- ✅ OAuth Authentication for MCP Clients (metadata discovery, DCR, PKCE, token refresh, pluggable storage)
 
 **⚠️** Project is currently under development and should be used at your own risk.
 
