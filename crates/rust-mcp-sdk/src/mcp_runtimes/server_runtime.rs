@@ -151,8 +151,7 @@ impl McpServer for ServerRuntime {
         // active POST response stream so the client receives them during
         // `request()`. Fall back to the GET standalone stream if there is no
         // active POST stream.
-        let is_notification =
-            matches!(&message, MessageFromServer::NotificationFromServer(_));
+        let is_notification = matches!(&message, MessageFromServer::NotificationFromServer(_));
 
         if is_notification {
             if let Ok(req_transport) = ACTIVE_REQUEST_TRANSPORT.try_with(|t| t.clone()) {
