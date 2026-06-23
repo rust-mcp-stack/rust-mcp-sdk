@@ -29,6 +29,13 @@ use tokio::sync::{mpsc, oneshot, watch, RwLock, RwLockReadGuard};
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 const TASK_CHANNEL_CAPACITY: usize = 500;
 
+tokio::task_local! {
+    /// Per-request transport for sending notifications on the POST response SSE stream.
+    /// Set via `scope()` in spawned handler tasks. Read by `send()` for notification routing.
+    /// Falls back to the GET standalone stream when not set (background tasks, on_initialized, etc.).
+    pub(crate) static ACTIVE_REQUEST_TRANSPORT: TransportType;
+}
+
 // Define a type alias for the TransportDispatcher trait object
 type TransportType = Arc<
     dyn TransportDispatcher<
@@ -136,22 +143,40 @@ impl McpServer for ServerRuntime {
         request_id: Option<RequestId>,
         request_timeout: Option<Duration>,
     ) -> SdkResult<Option<ClientMessage>> {
+        let outgoing_request_id = self
+            .request_id_gen
+            .request_id_for_message(&message, request_id);
+
+        // For notifications during a request (tool call), route through the
+        // active POST response stream so the client receives them during
+        // `request()`. Fall back to the GET standalone stream if there is no
+        // active POST stream.
+        let is_notification = matches!(&message, MessageFromServer::NotificationFromServer(_));
+
+        if is_notification {
+            if let Ok(req_transport) = ACTIVE_REQUEST_TRANSPORT.try_with(|t| t.clone()) {
+                let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
+                if let Some(observer) = self.message_observer.as_ref() {
+                    observer.on_send(&mcp_message);
+                }
+                return Ok(req_transport
+                    .send_message(ServerMessages::Single(mcp_message), request_timeout)
+                    .await?
+                    .map(|res| res.as_single())
+                    .transpose()?);
+            }
+        }
+
+        let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_send(&mcp_message);
+        }
+
         let transport_map = self.transport_map.read().await;
         let transport = transport_map.as_ref().ok_or(
             RpcError::internal_error()
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
-
-        let outgoing_request_id = self
-            .request_id_gen
-            .request_id_for_message(&message, request_id);
-
-        let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
-
-        // telemetry
-        if let Some(observer) = self.message_observer.as_ref() {
-            observer.on_send(&mcp_message);
-        }
 
         let response = transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
@@ -525,7 +550,7 @@ impl ServerRuntime {
                             let transport = transport.clone();
                             let self_clone = self.clone();
                             let tx = tx.clone();
-                            tokio::spawn(async move {
+                            tokio::spawn(ACTIVE_REQUEST_TRANSPORT.scope(transport.clone(), async move {
 
                                 let result = self_clone.handle_message(client_message, &transport).await;
 
@@ -548,7 +573,7 @@ impl ServerRuntime {
                                 if let Err(error) = tx.send(send_result).await {
                                     tracing::error!("Failed to send batch result to channel: {}", error);
                                 }
-                            });
+                            }));
                         }
                         ClientMessages::Batch(client_messages) => {
 
@@ -556,7 +581,7 @@ impl ServerRuntime {
                             let self_clone = self_clone.clone();
                             let tx = tx.clone();
 
-                            tokio::spawn(async move {
+                            tokio::spawn(ACTIVE_REQUEST_TRANSPORT.scope(transport.clone(), async move {
                                 let handling_tasks: Vec<_> = client_messages
                                     .into_iter()
                                     .map(|client_message| self_clone.handle_message(client_message, &transport))
@@ -578,7 +603,7 @@ impl ServerRuntime {
                                     if let Err(error) = tx.send(send_result).await {
                                         tracing::error!("Failed to send batch result to channel: {}", error);
                                     }
-                            });
+                            }));
                         }
                     }
 
@@ -589,7 +614,6 @@ impl ServerRuntime {
 
                     // close the stream after all messages are sent, unless it is a standalone stream
                     if !stream_id.eq(DEFAULT_STREAM_ID){
-                        // Drop tx to close the channel and collect remaining results
                         drop(tx);
                         while let Some(result) = rx.recv().await {
                             result?; // Propagate errors
