@@ -2311,7 +2311,7 @@ dependencies = [
  "nanoid",
  "oauth2-test-server",
  "once_cell",
- "rand 0.9.4",
+ "rand 0.10.1",
  "rand_distr",
  "reqwest",
  "rust-mcp-axum",
