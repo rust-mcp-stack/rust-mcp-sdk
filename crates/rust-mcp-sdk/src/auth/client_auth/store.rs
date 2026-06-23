@@ -2,6 +2,7 @@ use crate::auth::client_auth::token::TokenResponse;
 use async_trait::async_trait;
 use thiserror::Error;
 
+/// Errors from token store backends.
 #[derive(Debug, Error)]
 pub enum TokenStoreError {
     #[error("storage backend error: {0}")]
@@ -11,6 +12,12 @@ pub enum TokenStoreError {
     Serialization(#[from] serde_json::Error),
 }
 
+/// Pluggable token storage backend.
+///
+/// Implement this trait for custom storage backends (SQLite, Redis, filesystem, etc.).
+/// The default implementation is [`InMemoryTokenStore`](crate::auth::InMemoryTokenStore).
+///
+/// All methods are async to accommodate I/O-bound backends.
 #[async_trait]
 pub trait TokenStore: Send + Sync {
     async fn get_access_token(&self) -> Option<String>;

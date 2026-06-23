@@ -17,8 +17,8 @@ pub use auth_info::AuthInfo;
 pub use auth_provider::*;
 #[cfg(feature = "auth")]
 pub use client_auth::{
-    ClientError, ClientResult, GrantType, InMemoryTokenStore, McpAuthClient, McpAuthConfig,
-    RegistrationResponse, TokenResponse, TokenStore, TokenStoreError,
+    generate_pkce_params, ClientError, ClientResult, GrantType, InMemoryTokenStore, McpAuthClient,
+    McpAuthConfig, PkceParams, RegistrationResponse, TokenResponse, TokenStore, TokenStoreError,
 };
 #[cfg(feature = "auth")]
 pub use error::*;

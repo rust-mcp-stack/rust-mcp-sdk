@@ -4,12 +4,38 @@ use crate::auth::client_auth::in_memory_store::InMemoryTokenStore;
 use crate::auth::client_auth::registration::RegistrationResponse;
 use crate::auth::client_auth::store::TokenStore;
 use crate::auth::client_auth::token::{GrantType, TokenResponse};
-use crate::auth::AuthorizationServerMetadata;
 use crate::auth::shared_http_client;
+use crate::auth::AuthorizationServerMetadata;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Configuration for an MCP OAuth client.
+///
+/// Used with [`McpAuthConfig::builder()`] to construct an [`McpAuthClient`].
+///
+/// # Fields
+///
+/// | Field | Required | Purpose |
+/// |-------|----------|---------|
+/// | `server_url` | Yes | Base URL of the MCP server |
+/// | `client_id` | No | Pre-registered client ID (skips DCR if set) |
+/// | `client_secret` | No | Pre-registered client secret |
+/// | `scope` | No | OAuth scopes to request (e.g. `"mcp tools"`) |
+/// | `redirect_uri` | No | Redirect URI for authorization_code grant |
+/// | `metadata` | No | Pre-discovered `AuthorizationServerMetadata` (skips discovery) |
+///
+/// # Example
+///
+/// ```no_run
+/// use rust_mcp_sdk::auth::McpAuthConfig;
+///
+/// let client = McpAuthConfig::builder()
+///     .server_url("https://mcp.example.com/mcp")
+///     .scope("mcp tools")
+///     .build()
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone)]
 pub struct McpAuthConfig {
     pub server_url: String,
@@ -26,6 +52,10 @@ impl McpAuthConfig {
     }
 }
 
+/// Builder for [`McpAuthConfig`]. Created via [`McpAuthConfig::builder()`].
+///
+/// At minimum, `server_url` is required. All other fields are optional.
+/// Call [`build()`](Self::build) to get an [`McpAuthClient`].
 #[derive(Default)]
 pub struct McpAuthConfigBuilder {
     server_url: Option<String>,
@@ -38,41 +68,55 @@ pub struct McpAuthConfigBuilder {
 }
 
 impl McpAuthConfigBuilder {
+    /// Set the MCP server base URL (required).
+    ///
+    /// The client discovers OAuth metadata at `{server_url}/.well-known/oauth-authorization-server`.
     pub fn server_url(mut self, url: impl Into<String>) -> Self {
         self.server_url = Some(url.into());
         self
     }
 
+    /// Set a pre-registered client ID. When set, DCR is skipped.
     pub fn client_id(mut self, id: impl Into<String>) -> Self {
         self.client_id = Some(id.into());
         self
     }
 
+    /// Set a pre-registered client secret. Used for `client_secret_basic` auth at the token endpoint.
     pub fn client_secret(mut self, secret: impl Into<String>) -> Self {
         self.client_secret = Some(secret.into());
         self
     }
 
+    /// OAuth scopes to request, e.g. `"mcp tools resources"`. Used in both DCR and token requests.
     pub fn scope(mut self, scope: impl Into<String>) -> Self {
         self.scope = Some(scope.into());
         self
     }
 
+    /// Redirect URI for the `authorization_code` grant type.
     pub fn redirect_uri(mut self, uri: impl Into<String>) -> Self {
         self.redirect_uri = Some(uri.into());
         self
     }
 
+    /// Provide pre-discovered metadata to skip the discovery step.
     pub fn metadata(mut self, metadata: AuthorizationServerMetadata) -> Self {
         self.metadata = Some(metadata);
         self
     }
 
+    /// Provide a custom [`TokenStore`] backend.
+    ///
+    /// Defaults to [`InMemoryTokenStore`](crate::auth::InMemoryTokenStore) if not set.
     pub fn token_store(mut self, store: Arc<dyn TokenStore>) -> Self {
         self.token_store = Some(store);
         self
     }
 
+    /// Build the [`McpAuthClient`].
+    ///
+    /// Returns an error if `server_url` is not set.
     pub fn build(self) -> ClientResult<McpAuthClient> {
         let server_url = self
             .server_url
@@ -97,6 +141,35 @@ impl McpAuthConfigBuilder {
     }
 }
 
+/// Client-side OAuth orchestrator for MCP.
+///
+/// Handles the full client-side OAuth flow:
+///
+/// 1. **Metadata discovery** — fetch `/.well-known/oauth-authorization-server`
+/// 2. **Dynamic Client Registration (DCR)** — register this client (skipped if pre-registered credentials are set)
+/// 3. **Token exchange** — exchange credentials for an `access_token` (supports `client_credentials`,
+///    `authorization_code`, `authorization_code` + PKCE, and `refresh_token` grants)
+/// 4. **Auto-refresh** — `get_token()` automatically refreshes before expiry
+///
+/// # Example
+///
+/// ```no_run
+/// use rust_mcp_sdk::auth::McpAuthConfig;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let client = McpAuthConfig::builder()
+///     .server_url("https://mcp.example.com/mcp")
+///     .client_id("my-client")
+///     .client_secret("my-secret")
+///     .scope("mcp")
+///     .build()?;
+///
+/// client.authenticate().await?;
+/// let headers = client.get_auth_headers().await?;
+/// // -> {"Authorization": "Bearer <token>"}
+/// # Ok(())
+/// # }
+/// ```
 pub struct McpAuthClient {
     config: Arc<McpAuthConfig>,
     http_client: reqwest::Client,
@@ -106,10 +179,16 @@ pub struct McpAuthClient {
 }
 
 impl McpAuthClient {
+    /// Returns the server URL this client is configured for.
     pub fn server_url(&self) -> &str {
         &self.config.server_url
     }
 
+    /// Discover OAuth metadata from the server's well-known endpoint.
+    ///
+    /// Results are cached after the first successful call. Subsequent calls
+    /// return the cached value. If `metadata` was provided in the config,
+    /// that value is used instead of performing a network request.
     pub async fn discover_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
         if let Some(ref metadata) = self.config.metadata {
             let mut lock = self.discovered_metadata.write().await;
@@ -124,8 +203,8 @@ impl McpAuthClient {
             }
         }
 
-        let metadata = discovery::discover_metadata(&self.http_client, &self.config.server_url)
-            .await?;
+        let metadata =
+            discovery::discover_metadata(&self.http_client, &self.config.server_url).await?;
 
         let mut lock = self.discovered_metadata.write().await;
         *lock = Some(metadata.clone());
@@ -136,6 +215,11 @@ impl McpAuthClient {
         self.discover_metadata().await
     }
 
+    /// Register this client with the authorization server via DCR (RFC 7591).
+    ///
+    /// If `client_id` was provided in the config (pre-registered), this returns
+    /// immediately without making a network call. Otherwise, it performs DCR
+    /// at the server's `registration_endpoint`.
     pub async fn register(&self) -> ClientResult<RegistrationResponse> {
         if let Some(ref client_id) = self.config.client_id {
             let reg = RegistrationResponse {
@@ -195,12 +279,16 @@ impl McpAuthClient {
         Ok((reg.client_id, reg.client_secret))
     }
 
-    pub async fn exchange_token(
-        &self,
-        grant_type: GrantType,
-        code: Option<&str>,
-        refresh_token_val: Option<&str>,
-    ) -> ClientResult<TokenResponse> {
+    /// Exchange credentials for an access token at the token endpoint.
+    ///
+    /// The `grant_type` determines the OAuth flow:
+    /// - [`GrantType::ClientCredentials`] — machine-to-machine
+    /// - [`GrantType::AuthorizationCode`] — user authorization code
+    /// - [`GrantType::AuthorizationCodePkce`] — authorization code + PKCE
+    /// - [`GrantType::RefreshToken`] — refresh an existing token
+    ///
+    /// On success, the token is stored in the configured [`TokenStore`].
+    pub async fn exchange_token(&self, grant_type: &GrantType) -> ClientResult<TokenResponse> {
         let metadata = self.ensure_metadata().await?;
         let token_endpoint = &metadata.token_endpoint;
 
@@ -213,20 +301,21 @@ impl McpAuthClient {
 
         match grant_type {
             GrantType::ClientCredentials => {}
-            GrantType::AuthorizationCode => {
-                let code = code.ok_or_else(|| {
-                    ClientError::Other("authorization_code requires a code".into())
-                })?;
+            GrantType::AuthorizationCode { code, redirect_uri } => {
                 form.push(("code", code));
-                if let Some(ref redirect_uri) = self.config.redirect_uri {
-                    form.push(("redirect_uri", redirect_uri));
-                }
+                form.push(("redirect_uri", redirect_uri));
             }
-            GrantType::RefreshToken => {
-                let rt = refresh_token_val.ok_or_else(|| {
-                    ClientError::Other("refresh_token grant requires a refresh_token".into())
-                })?;
-                form.push(("refresh_token", rt));
+            GrantType::AuthorizationCodePkce {
+                code,
+                redirect_uri,
+                code_verifier,
+            } => {
+                form.push(("code", code));
+                form.push(("redirect_uri", redirect_uri));
+                form.push(("code_verifier", code_verifier));
+            }
+            GrantType::RefreshToken { refresh_token } => {
+                form.push(("refresh_token", refresh_token));
             }
         }
 
@@ -260,16 +349,27 @@ impl McpAuthClient {
         Ok(token)
     }
 
+    /// Authenticate using the `client_credentials` grant (machine-to-machine).
+    ///
+    /// Calls `exchange_token` with [`GrantType::ClientCredentials`].
     pub async fn authenticate(&self) -> ClientResult<TokenResponse> {
-        self.exchange_token(GrantType::ClientCredentials, None, None)
-            .await
+        self.exchange_token(&GrantType::ClientCredentials).await
     }
 
+    /// Refresh an access token using a refresh token.
+    ///
+    /// Calls `exchange_token` with [`GrantType::RefreshToken`].
     pub async fn refresh(&self, refresh_token: &str) -> ClientResult<TokenResponse> {
-        self.exchange_token(GrantType::RefreshToken, None, Some(refresh_token))
-            .await
+        self.exchange_token(&GrantType::RefreshToken {
+            refresh_token: refresh_token.to_string(),
+        })
+        .await
     }
 
+    /// Get a valid access token, auto-refreshing if needed.
+    ///
+    /// Returns the cached token if still valid. If expired, attempts a refresh.
+    /// Falls back to full re-authentication if refresh fails.
     pub async fn get_token(&self) -> ClientResult<String> {
         if let Some(token) = self.token_store.get_access_token().await {
             return Ok(token);
@@ -292,6 +392,26 @@ impl McpAuthClient {
         Ok(token.access_token)
     }
 
+    /// Get HTTP headers for authenticated transport integration.
+    ///
+    /// Returns `{"Authorization": "Bearer <token>"}`. The token is obtained
+    /// via [`get_token`](Self::get_token), which auto-refreshes if needed.
+    ///
+    /// Use with `RequestOptions::custom_headers`:
+    ///
+    /// ```no_run
+    /// # use rust_mcp_sdk::auth::McpAuthConfig;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let auth = McpAuthConfig::builder().server_url("http://localhost/mcp").build()?;
+    /// use rust_mcp_sdk::RequestOptions;
+    ///
+    /// let options = RequestOptions {
+    ///     custom_headers: Some(auth.get_auth_headers().await?),
+    ///     ..Default::default()
+    /// };
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn get_auth_headers(&self) -> ClientResult<HashMap<String, String>> {
         let token = self.get_token().await?;
         let mut headers = HashMap::new();

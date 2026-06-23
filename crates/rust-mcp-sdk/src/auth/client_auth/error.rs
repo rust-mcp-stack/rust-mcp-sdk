@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Errors that can occur during client-side OAuth flows.
 #[derive(Debug, Error)]
 pub enum ClientError {
     #[error("metadata discovery failed: {0}")]
