@@ -9,8 +9,12 @@ description = "MCP conformance test server — implements all scenarios from the
 name = "conformance-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "conformance-client"
+path = "src/bin/conformance-client.rs"
+
 [dependencies]
-rust-mcp-sdk = { workspace = true, features = ["macros"] }
+rust-mcp-sdk = { workspace = true, features = ["client", "streamable-http", "macros"] }
 rust-mcp-axum = { workspace = true }
 rust-mcp-macros = { workspace = true }
 serde = { workspace = true }

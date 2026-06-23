@@ -24,18 +24,41 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: conformance-server
+          shared-key: conformance
 
       - name: Build conformance server
         run: cargo build -p conformance-server --release
 
       - name: Start server
         run: |
-          cargo run -p conformance-server --release &
+          cargo run --bin conformance-server --release &
           timeout 30 bash -c 'until curl -sf http://localhost:3000/health; do sleep 0.5; done'
 
       - uses: modelcontextprotocol/conformance@v0.1.16
         with:
           mode: server
           url: http://localhost:3000/mcp
+
+  client-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: conformance
+
+      - name: Build conformance client
+        run: cargo build --bin conformance-client --release
+
+      - uses: modelcontextprotocol/conformance@v0.1.16
+        with:
+          mode: client
+          command: 'cargo run --bin conformance-client --release'
+          suite: core
 
