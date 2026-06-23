@@ -251,12 +251,6 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         .await;
 
     let auth_server_url = match probe_resp {
-        Ok(resp) if resp.status().is_success() => {
-            // No auth needed — connect without it
-            let client = create_client(server_url).await.ok();
-            if let Some(c) = client { c.shut_down().await.ok(); }
-            return;
-        }
         Ok(resp) => {
             let www_auth = resp.headers()
                 .get("www-authenticate")
@@ -336,6 +330,7 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
     if let Some(scope) = context.get("scope").and_then(|v| v.as_str()) {
         builder = builder.scope(scope);
     }
+    builder = builder.resource(server_url);
 
     let auth_client = match builder.build() {
         Ok(c) => c,
@@ -368,6 +363,7 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
                         ("client_id", client_id),
                         ("redirect_uri", "http://localhost/callback"),
                         ("scope", scope),
+                        ("resource", server_url),
                         ("code_challenge", &pkce.code_challenge),
                         ("code_challenge_method", "S256"),
                     ])
@@ -415,6 +411,42 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
     if let Err(e) = client.clone().start().await {
         eprintln!("Failed to start authenticated client: {e}");
         return;
+    }
+
+    // Scope escalation: try a tool call, re-authenticate with elevated scope if needed
+    let tools = client.request_tool_list(None).await;
+    if let Err(_e) = tools {
+        // Attempt scope escalation
+        let mut b2 = McpAuthConfig::builder().server_url(&auth_server_url).resource(server_url);
+        if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) {
+            b2 = b2.client_id(id);
+        }
+        if let Some(sec) = context.get("client_secret").and_then(|v| v.as_str()) {
+            b2 = b2.client_secret(sec);
+        }
+        b2 = b2.scope("mcp elevated");
+
+        if let Ok(a2) = b2.build() {
+            if let Ok(meta2) = a2.discover_metadata().await {
+                if meta2.grant_types_supported.as_ref().map_or(false, |g| g.iter().any(|x| x == "authorization_code")) {
+                    let pkce2 = rust_mcp_sdk::auth::generate_pkce_params();
+                    let _ = http_client
+                        .get(meta2.authorization_endpoint.as_str())
+                        .query(&[("response_type", "code"), ("client_id", context.get("client_id").and_then(|v| v.as_str()).unwrap_or("c")), ("redirect_uri", "http://localhost/callback"), ("scope", "mcp elevated"), ("resource", server_url), ("code_challenge", &pkce2.code_challenge), ("code_challenge_method", "S256")])
+                        .send().await;
+                }
+            }
+            if let Ok(h2) = a2.get_auth_headers().await {
+                client.shut_down().await.ok();
+                let td2 = InitializeRequestParams { capabilities: ClientCapabilities { sampling: Some(ClientSampling { context: None, tools: None }), elicitation: Some(ClientElicitation { form: Some(serde_json::Map::new()), url: None }), roots: Some(ClientRoots { list_changed: Some(true) }), ..ClientCapabilities::default() }, client_info: Implementation { name: "conformance-client".into(), version: "0.1.0".into(), title: Some("MCP Conformance Test Client".into()), description: None, icons: vec![], website_url: None }, protocol_version: LATEST_PROTOCOL_VERSION.into(), meta: None };
+                let to2 = StreamableTransportOptions { mcp_url: server_url.to_string(), request_options: RequestOptions { custom_headers: Some(h2), retry_delay: Some(std::time::Duration::from_secs(1)), max_retries: Some(5), ..RequestOptions::default() } };
+                let c2 = client_runtime::with_transport_options(td2, to2, ConformanceClientHandler, None, None, None);
+                let _ = c2.clone().start().await;
+                let _ = c2.request_tool_list(None).await;
+                c2.shut_down().await.ok();
+                return;
+            }
+        }
     }
 
     client.shut_down().await.ok();

@@ -44,6 +44,7 @@ pub struct McpAuthConfig {
     pub scope: Option<String>,
     pub redirect_uri: Option<String>,
     pub metadata: Option<AuthorizationServerMetadata>,
+    pub resource: Option<String>,
 }
 
 impl McpAuthConfig {
@@ -65,6 +66,7 @@ pub struct McpAuthConfigBuilder {
     redirect_uri: Option<String>,
     metadata: Option<AuthorizationServerMetadata>,
     token_store: Option<Arc<dyn TokenStore>>,
+    resource: Option<String>,
 }
 
 impl McpAuthConfigBuilder {
@@ -106,6 +108,13 @@ impl McpAuthConfigBuilder {
         self
     }
 
+    /// Resource indicator (RFC 8707). Typically the MCP server URL.
+    /// Included in authorization and token requests as the `resource` parameter.
+    pub fn resource(mut self, resource: impl Into<String>) -> Self {
+        self.resource = Some(resource.into());
+        self
+    }
+
     /// Provide a custom [`TokenStore`] backend.
     ///
     /// Defaults to [`InMemoryTokenStore`](crate::auth::InMemoryTokenStore) if not set.
@@ -130,6 +139,7 @@ impl McpAuthConfigBuilder {
                 scope: self.scope,
                 redirect_uri: self.redirect_uri,
                 metadata: self.metadata,
+                resource: self.resource,
             }),
             http_client: shared_http_client(),
             token_store: self
@@ -323,14 +333,28 @@ impl McpAuthClient {
             form.push(("scope", scope));
         }
 
+        if let Some(ref resource) = self.config.resource {
+            form.push(("resource", resource));
+        }
+
         let mut request = self.http_client.post(token_endpoint.clone()).form(&form);
 
         if let Some(ref secret) = client_secret {
-            let auth_header = format!(
-                "Basic {}",
-                base64_encode(&format!("{}:{}", client_id, secret))
-            );
-            request = request.header("Authorization", &auth_header);
+            let uses_post = metadata
+                .token_endpoint_auth_methods_supported
+                .as_ref()
+                .map(|methods| methods.iter().any(|m| m == "client_secret_post"))
+                .unwrap_or(false);
+
+            if uses_post {
+                form.push(("client_secret", secret));
+                request = self.http_client.post(token_endpoint.clone()).form(&form);
+            } else {
+                request = request.header("Authorization", &format!(
+                    "Basic {}",
+                    base64_encode(&format!("{}:{}", client_id, secret))
+                ));
+            }
         }
 
         let response = request.send().await?;
