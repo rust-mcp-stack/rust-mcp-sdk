@@ -22,7 +22,7 @@ jobs:
       fail-fast: false # Continue testing other OSes even if one fails
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cache Rust
         uses: actions/cache@v5
@@ -79,7 +79,7 @@ jobs:
 
       # install nodejs that is required for tests
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24" # Stable Node.js version
         # Verify npx is available
@@ -93,7 +93,7 @@ jobs:
 
       # install Python and uvx that is required for tests
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11" # Stable Python version
 
