@@ -46,18 +46,20 @@ impl ServerHandler for ConformanceHandler {
             ConformanceTools::try_from(params).map_err(CallToolError::new)?;
 
         match tool_params {
-            ConformanceTools::SimpleTextTool(t) => t.call_tool(),
-            ConformanceTools::ImageContentTool(t) => t.call_tool(),
-            ConformanceTools::AudioContentTool(t) => t.call_tool(),
-            ConformanceTools::EmbeddedResourceTool(t) => t.call_tool(),
-            ConformanceTools::MultipleContentTypesTool(t) => t.call_tool(),
-            ConformanceTools::ErrorHandlingTool(t) => t.call_tool(),
-            ConformanceTools::LoggingTool(t) => t.call_tool(&runtime).await,
-            ConformanceTools::ProgressTool(t) => t.call_tool(&runtime, progress_token).await,
-            ConformanceTools::SamplingTool(t) => t.call_tool(&runtime).await,
-            ConformanceTools::ElicitationTool(t) => t.call_tool(&runtime).await,
-            ConformanceTools::ElicitationDefaultsTool(t) => t.call_tool(&runtime).await,
-            ConformanceTools::ElicitationEnumsTool(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestSimpleText(t) => t.call_tool(),
+            ConformanceTools::TestImageContent(t) => t.call_tool(),
+            ConformanceTools::TestAudioContent(t) => t.call_tool(),
+            ConformanceTools::TestEmbeddedResource(t) => t.call_tool(),
+            ConformanceTools::TestMultipleContentTypes(t) => t.call_tool(),
+            ConformanceTools::TestErrorHandling(t) => t.call_tool(),
+            ConformanceTools::TestToolWithLogging(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestToolWithProgress(t) => {
+                t.call_tool(&runtime, progress_token).await
+            }
+            ConformanceTools::TestSampling(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestElicitation(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestElicitationDefaults(t) => t.call_tool(&runtime).await,
+            ConformanceTools::TestElicitationEnums(t) => t.call_tool(&runtime).await,
         }
     }
 

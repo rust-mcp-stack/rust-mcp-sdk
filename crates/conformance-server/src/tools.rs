@@ -39,12 +39,12 @@ fn content_embedded_resource(text: &str, uri: &str, mime: &str) -> ContentBlock 
     description = "Returns simple text content for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct SimpleTextTool {
+pub struct TestSimpleText {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl SimpleTextTool {
+impl TestSimpleText {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult::text_content(vec![TextContent::new(
             "This is a simple text response for testing.".into(),
@@ -62,12 +62,12 @@ impl SimpleTextTool {
     description = "Returns image content (base64 PNG) for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ImageContentTool {
+pub struct TestImageContent {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl ImageContentTool {
+impl TestImageContent {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult::image_content(vec![ImageContent::new(
             IMAGE_BASE64.to_string(),
@@ -86,12 +86,12 @@ impl ImageContentTool {
     description = "Returns audio content (base64 WAV) for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct AudioContentTool {
+pub struct TestAudioContent {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl AudioContentTool {
+impl TestAudioContent {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult::audio_content(vec![AudioContent::new(
             AUDIO_BASE64.to_string(),
@@ -110,12 +110,12 @@ impl AudioContentTool {
     description = "Returns embedded resource content for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct EmbeddedResourceTool {
+pub struct TestEmbeddedResource {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl EmbeddedResourceTool {
+impl TestEmbeddedResource {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         let block = content_embedded_resource(
             "This is an embedded resource content.",
@@ -139,12 +139,12 @@ impl EmbeddedResourceTool {
     description = "Returns multiple content types for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct MultipleContentTypesTool {
+pub struct TestMultipleContentTypes {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl MultipleContentTypesTool {
+impl TestMultipleContentTypes {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
             content: vec![
@@ -171,12 +171,12 @@ impl MultipleContentTypesTool {
     description = "Returns an error response for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ErrorHandlingTool {
+pub struct TestErrorHandling {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl ErrorHandlingTool {
+impl TestErrorHandling {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
             content: vec![content_text(
@@ -197,12 +197,12 @@ impl ErrorHandlingTool {
     description = "Sends log messages during execution for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct LoggingTool {
+pub struct TestToolWithLogging {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl LoggingTool {
+impl TestToolWithLogging {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -259,12 +259,12 @@ impl LoggingTool {
     description = "Reports progress notifications during execution for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ProgressTool {
+pub struct TestToolWithProgress {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl ProgressTool {
+impl TestToolWithProgress {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -327,11 +327,11 @@ impl ProgressTool {
     description = "Requests LLM sampling from the client for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct SamplingTool {
+pub struct TestSampling {
     pub prompt: String,
 }
 
-impl SamplingTool {
+impl TestSampling {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -388,11 +388,11 @@ impl SamplingTool {
     description = "Requests user input (elicitation) from the client for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ElicitationTool {
+pub struct TestElicitation {
     pub message: String,
 }
 
-impl ElicitationTool {
+impl TestElicitation {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -459,12 +459,12 @@ impl ElicitationTool {
     description = "Requests elicitation with default values for all primitive types (SEP-1034)."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ElicitationDefaultsTool {
+pub struct TestElicitationDefaults {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl ElicitationDefaultsTool {
+impl TestElicitationDefaults {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -569,12 +569,12 @@ impl ElicitationDefaultsTool {
     description = "Requests elicitation with all enum variants (SEP-1330)."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct ElicitationEnumsTool {
+pub struct TestElicitationEnums {
     #[serde(default, skip_serializing)]
     _dummy: Option<()>,
 }
 
-impl ElicitationEnumsTool {
+impl TestElicitationEnums {
     pub async fn call_tool(
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
@@ -718,17 +718,17 @@ impl ElicitationEnumsTool {
 tool_box!(
     ConformanceTools,
     [
-        SimpleTextTool,
-        ImageContentTool,
-        AudioContentTool,
-        EmbeddedResourceTool,
-        MultipleContentTypesTool,
-        ErrorHandlingTool,
-        LoggingTool,
-        ProgressTool,
-        SamplingTool,
-        ElicitationTool,
-        ElicitationDefaultsTool,
-        ElicitationEnumsTool,
+        TestSimpleText,
+        TestImageContent,
+        TestAudioContent,
+        TestEmbeddedResource,
+        TestMultipleContentTypes,
+        TestErrorHandling,
+        TestToolWithLogging,
+        TestToolWithProgress,
+        TestSampling,
+        TestElicitation,
+        TestElicitationDefaults,
+        TestElicitationEnums,
     ]
 );
