@@ -1,31 +1,65 @@
-use crate::auth::client_auth::error::{ClientError, ClientResult};
 use crate::auth::AuthorizationServerMetadata;
 
-const WELL_KNOWN_OAUTH_PATH: &str = "/.well-known/oauth-authorization-server";
-
-pub(crate) fn build_metadata_url(server_url: &str) -> ClientResult<String> {
-    let base = server_url.trim_end_matches('/');
-    Ok(format!("{}{}", base, WELL_KNOWN_OAUTH_PATH))
+/// Try to fetch metadata from a single URL
+pub(crate) async fn try_fetch_metadata(
+    http_client: &reqwest::Client,
+    url: &str,
+) -> Option<AuthorizationServerMetadata> {
+    let resp = http_client.get(url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    resp.json().await.ok()
 }
 
-pub(crate) async fn discover_metadata(
+/// Fetch PRM from a URL and extract authorization_servers
+pub(crate) async fn fetch_prm_auth_servers(
     http_client: &reqwest::Client,
-    server_url: &str,
-) -> ClientResult<AuthorizationServerMetadata> {
-    let metadata_url = build_metadata_url(server_url)?;
-    let response = http_client.get(metadata_url.as_str()).send().await?;
+    prm_url: &str,
+) -> Vec<String> {
+    let Ok(resp) = http_client.get(prm_url).send().await else {
+        return vec![];
+    };
+    if !resp.status().is_success() {
+        return vec![];
+    }
+    let Ok(json) = resp.json::<serde_json::Value>().await else {
+        return vec![];
+    };
+    json.get("authorization_servers")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ClientError::DiscoveryFailed(format!(
-            "HTTP {}: {}",
-            status, body
-        )));
+/// Generate fallback metadata URLs for a server URL.
+/// Returns: well-known path, direct URL, host-only well-known.
+pub(crate) fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let trimmed = server_url.trim_end_matches('/').to_string();
+    urls.push(format!("{}/.well-known/oauth-authorization-server", trimmed));
+
+    // Direct URL (only if different from the well-known)
+    if server_url != &urls[0] {
+        urls.push(server_url.to_string());
     }
 
-    let metadata: AuthorizationServerMetadata = response.json().await?;
-    Ok(metadata)
+    // Host-only well-known (strip the path, use just scheme://authority)
+    if let Ok(parsed) = url::Url::parse(server_url) {
+        let host_url = format!(
+            "{}://{}/.well-known/oauth-authorization-server",
+            parsed.scheme(),
+            parsed.authority()
+        );
+        if host_url != urls[0] {
+            urls.push(host_url);
+        }
+    }
+    urls
 }
 
 #[cfg(test)]
@@ -33,20 +67,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn metadata_url_strips_trailing_slash() {
-        let url = build_metadata_url("https://example.com/mcp/").unwrap();
+    fn fallback_well_known_no_trailing_slash() {
+        let urls = metadata_url_fallbacks("https://example.com/mcp");
         assert_eq!(
-            url,
+            urls[0],
             "https://example.com/mcp/.well-known/oauth-authorization-server"
         );
     }
 
     #[test]
-    fn metadata_url_no_trailing_slash() {
-        let url = build_metadata_url("https://example.com/mcp").unwrap();
+    fn fallback_well_known_trailing_slash() {
+        let urls = metadata_url_fallbacks("https://example.com/mcp/");
         assert_eq!(
-            url,
+            urls[0],
             "https://example.com/mcp/.well-known/oauth-authorization-server"
         );
+    }
+
+    #[test]
+    fn fallback_includes_host_only() {
+        let urls = metadata_url_fallbacks("https://example.com/mcp/tenant");
+        assert!(urls.iter().any(|u| u == "https://example.com/.well-known/oauth-authorization-server"));
+    }
+
+    #[test]
+    fn fallback_no_duplicates() {
+        let urls = metadata_url_fallbacks("https://example.com");
+        // First URL is host-only well-known, no duplicates added
+        assert_eq!(urls.len(), 2); // well-known + direct
     }
 }

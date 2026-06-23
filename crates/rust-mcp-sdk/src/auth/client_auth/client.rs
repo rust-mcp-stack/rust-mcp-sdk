@@ -194,11 +194,17 @@ impl McpAuthClient {
         &self.config.server_url
     }
 
-    /// Discover OAuth metadata from the server's well-known endpoint.
+    /// Discover OAuth metadata.
     ///
-    /// Results are cached after the first successful call. Subsequent calls
-    /// return the cached value. If `metadata` was provided in the config,
-    /// that value is used instead of performing a network request.
+    /// Tries multiple URL resolution strategies:
+    /// 1. Well-known path on the configured server URL
+    /// 2. Direct fetch from the server URL
+    /// 3. Host-only well-known path
+    /// 4. If the server returns 401, extracts resource_metadata from
+    ///    WWW-Authenticate, fetches PRM to find the authorization server,
+    ///    and retries with the auth server URL.
+    ///
+    /// Results are cached after the first successful call.
     pub async fn discover_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
         if let Some(ref metadata) = self.config.metadata {
             let mut lock = self.discovered_metadata.write().await;
@@ -213,12 +219,88 @@ impl McpAuthClient {
             }
         }
 
-        let metadata =
-            discovery::discover_metadata(&self.http_client, &self.config.server_url).await?;
+        // Phase 1: try well-known + direct + host-only on server URL
+        for url in discovery::metadata_url_fallbacks(&self.config.server_url) {
+            if let Some(meta) =
+                discovery::try_fetch_metadata(&self.http_client, &url).await
+            {
+                let mut lock = self.discovered_metadata.write().await;
+                *lock = Some(meta.clone());
+                return Ok(meta);
+            }
+        }
 
-        let mut lock = self.discovered_metadata.write().await;
-        *lock = Some(metadata.clone());
-        Ok(metadata)
+        // Phase 2: probe MCP server for 401, extract PRM, find auth server.
+        // Try resource_metadata from WWW-Authenticate header first, then
+        // fall back to the well-known protected-resource path.
+        let prm_urls: Vec<String> = {
+            let mut urls = Vec::new();
+            if let Some(rm) = self.probe_for_resource_metadata().await {
+                urls.push(rm);
+            }
+            // Also try well-known PRM path on the server host
+            if let Ok(parsed) = url::Url::parse(&self.config.server_url) {
+                urls.push(format!(
+                    "{}://{}/.well-known/oauth-protected-resource",
+                    parsed.scheme(),
+                    parsed.authority()
+                ));
+            }
+            urls
+        };
+
+        for prm_url in &prm_urls {
+            let auth_servers =
+                discovery::fetch_prm_auth_servers(&self.http_client, prm_url).await;
+            for auth_url in auth_servers {
+                for url in discovery::metadata_url_fallbacks(&auth_url) {
+                    if let Some(meta) =
+                        discovery::try_fetch_metadata(&self.http_client, &url).await
+                    {
+                        let mut lock = self.discovered_metadata.write().await;
+                        *lock = Some(meta.clone());
+                        return Ok(meta);
+                    }
+                }
+            }
+        }
+
+        Err(ClientError::DiscoveryFailed(
+            "metadata not found at any tried URL".into(),
+        ))
+    }
+
+    /// Probe the MCP server for a 401 response and extract the
+    /// `resource_metadata` URL from the WWW-Authenticate header.
+    async fn probe_for_resource_metadata(&self) -> Option<String> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": { "name": "mcp-auth-client", "version": "1.0.0" }
+            }
+        });
+
+        let resp = self
+            .http_client
+            .post(&self.config.server_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .json(&body)
+            .send()
+            .await
+            .ok()?;
+
+        let www_auth = resp
+            .headers()
+            .get("www-authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        parse_www_auth_param(www_auth, "resource_metadata")
     }
 
     async fn ensure_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
@@ -447,6 +529,21 @@ impl McpAuthClient {
 fn base64_encode(input: &str) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(input.as_bytes())
+}
+
+/// Parse a parameter value from a WWW-Authenticate header string.
+/// e.g. `Bearer resource_metadata="https://...", error="..."` → `parse_www_auth_param(header, "resource_metadata")` → `Some("https://...")`
+fn parse_www_auth_param(www_auth: &str, param_name: &str) -> Option<String> {
+    for part in www_auth.split(',') {
+        let trimmed = part.trim();
+        if let Some(rest) = trimmed.strip_prefix(&format!("{}=", param_name)) {
+            let value = rest.trim().trim_matches('"');
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
