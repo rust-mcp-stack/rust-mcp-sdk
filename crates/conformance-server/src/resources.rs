@@ -1,5 +1,7 @@
 use rust_mcp_macros::{mcp_resource, mcp_resource_template};
-use rust_mcp_sdk::schema::{BlobResourceContents, ReadResourceResult, RpcError, TextResourceContents};
+use rust_mcp_sdk::schema::{
+    BlobResourceContents, ReadResourceResult, RpcError, TextResourceContents,
+};
 
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
@@ -82,9 +84,11 @@ impl TemplateDataResource {
         });
 
         Ok(ReadResourceResult {
-            contents: vec![TextResourceContents::new(content.to_string(), uri.to_string())
-                .with_mime_type("application/json")
-                .into()],
+            contents: vec![
+                TextResourceContents::new(content.to_string(), uri.to_string())
+                    .with_mime_type("application/json")
+                    .into(),
+            ],
             meta: None,
         })
     }
@@ -140,9 +144,11 @@ impl WatchedResource {
         });
 
         Ok(ReadResourceResult {
-            contents: vec![TextResourceContents::new(content.to_string(), uri.to_string())
-                .with_mime_type("application/json")
-                .into()],
+            contents: vec![
+                TextResourceContents::new(content.to_string(), uri.to_string())
+                    .with_mime_type("application/json")
+                    .into(),
+            ],
             meta: None,
         })
     }

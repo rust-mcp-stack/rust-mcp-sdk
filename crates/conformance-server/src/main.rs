@@ -9,10 +9,10 @@ use rust_mcp_axum::{mcp_routes, McpMountOptions};
 use rust_mcp_sdk::{
     event_store::InMemoryEventStore,
     id_generator::{FastIdGenerator, UuidGenerator},
-    mcp_http::{DnsRebindingOptions, McpAppState, McpHttpHandler, resolve_dns_middleware},
+    mcp_http::{resolve_dns_middleware, DnsRebindingOptions, McpAppState, McpHttpHandler},
     schema::{
         Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
-        ServerCapabilitiesTools, ServerCapabilitiesResources, ServerCapabilitiesPrompts,
+        ServerCapabilitiesPrompts, ServerCapabilitiesResources, ServerCapabilitiesTools,
     },
     session_store::InMemorySessionStore,
     ToMcpServerHandler,
@@ -55,13 +55,10 @@ async fn main() -> std::io::Result<()> {
                 logging: Some(serde_json::Map::new()),
                 completions: Some(serde_json::Map::new()),
                 experimental: Some(
-                    [(
-                        "sampling".to_string(),
-                        serde_json::Map::new(),
-                    ), (
-                        "elicitation".to_string(),
-                        serde_json::Map::new(),
-                    )]
+                    [
+                        ("sampling".to_string(), serde_json::Map::new()),
+                        ("elicitation".to_string(), serde_json::Map::new()),
+                    ]
                     .into(),
                 ),
                 tasks: None,

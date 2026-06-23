@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use rust_mcp_sdk::mcp_server::ServerHandler;
 use rust_mcp_sdk::schema::schema_utils::CallToolError;
 use rust_mcp_sdk::schema::{
-    CallToolRequestParams, CallToolResult, CompleteRequestParams, CompleteRequestRef, CompleteResult,
-    CompleteResultCompletion, GetPromptRequestParams, GetPromptResult, ListPromptsResult,
-    ListResourceTemplatesResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
-    ReadResourceRequestParams, ReadResourceResult, RpcError, SetLevelRequestParams,
-    SubscribeRequestParams, UnsubscribeRequestParams,
+    CallToolRequestParams, CallToolResult, CompleteRequestParams, CompleteRequestRef,
+    CompleteResult, CompleteResultCompletion, GetPromptRequestParams, GetPromptResult,
+    ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListToolsResult,
+    PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResult, RpcError,
+    SetLevelRequestParams, SubscribeRequestParams, UnsubscribeRequestParams,
 };
 use rust_mcp_sdk::McpServer;
 use std::sync::Arc;
@@ -41,10 +41,7 @@ impl ServerHandler for ConformanceHandler {
         params: CallToolRequestParams,
         runtime: Arc<dyn McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        let progress_token = params
-            .meta
-            .as_ref()
-            .and_then(|m| m.progress_token.clone());
+        let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
         let tool_params: ConformanceTools =
             ConformanceTools::try_from(params).map_err(CallToolError::new)?;
 
@@ -56,7 +53,9 @@ impl ServerHandler for ConformanceHandler {
             ConformanceTools::TestMultipleContentTypes(t) => t.call_tool(),
             ConformanceTools::TestErrorHandling(t) => t.call_tool(),
             ConformanceTools::TestToolWithLogging(t) => t.call_tool(&runtime).await,
-            ConformanceTools::TestToolWithProgress(t) => t.call_tool(&runtime, progress_token).await,
+            ConformanceTools::TestToolWithProgress(t) => {
+                t.call_tool(&runtime, progress_token).await
+            }
             ConformanceTools::TestSampling(t) => t.call_tool(&runtime).await,
             ConformanceTools::TestElicitation(t) => t.call_tool(&runtime).await,
             ConformanceTools::TestElicitationDefaults(t) => t.call_tool(&runtime).await,
@@ -141,8 +140,9 @@ impl ServerHandler for ConformanceHandler {
             "test_simple_prompt" => prompts::TestSimplePrompt::get_prompt(),
             "test_prompt_with_arguments" => {
                 let args = params.arguments.as_ref().ok_or_else(|| {
-                    RpcError::invalid_params()
-                        .with_message("Arguments required for test_prompt_with_arguments".to_string())
+                    RpcError::invalid_params().with_message(
+                        "Arguments required for test_prompt_with_arguments".to_string(),
+                    )
                 })?;
                 let arg1 = args.get("arg1").map(String::as_str).unwrap_or("default1");
                 let arg2 = args.get("arg2").map(String::as_str).unwrap_or("default2");
@@ -183,8 +183,10 @@ impl ServerHandler for ConformanceHandler {
                 meta: None,
             })
         } else {
-            Err(RpcError::method_not_found()
-                .with_message(format!("No completion handler for '{}'", params.argument.name)))
+            Err(RpcError::method_not_found().with_message(format!(
+                "No completion handler for '{}'",
+                params.argument.name
+            )))
         }
     }
 

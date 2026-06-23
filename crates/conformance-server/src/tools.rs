@@ -2,9 +2,8 @@ use rust_mcp_macros::JsonSchema;
 use rust_mcp_sdk::{
     macros::mcp_tool,
     schema::{
-        schema_utils::CallToolError,
-        AudioContent, CallToolResult, ContentBlock, EmbeddedResource, EmbeddedResourceResource,
-        ImageContent, TextContent, TextResourceContents,
+        schema_utils::CallToolError, AudioContent, CallToolResult, ContentBlock, EmbeddedResource,
+        EmbeddedResourceResource, ImageContent, TextContent, TextResourceContents,
     },
     tool_box,
 };
@@ -12,8 +11,7 @@ use rust_mcp_sdk::{
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
-const AUDIO_BASE64: &str =
-    "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+const AUDIO_BASE64: &str = "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
 fn content_text(text: impl Into<String>) -> ContentBlock {
     TextContent::new(text.into(), None, None).into()
@@ -25,7 +23,12 @@ fn content_image(data: &str, mime: &str) -> ContentBlock {
 
 fn content_embedded_resource(text: &str, uri: &str, mime: &str) -> ContentBlock {
     let trc = TextResourceContents::new(text.to_string(), uri.to_string()).with_mime_type(mime);
-    EmbeddedResource::new(EmbeddedResourceResource::TextResourceContents(trc), None, None).into()
+    EmbeddedResource::new(
+        EmbeddedResourceResource::TextResourceContents(trc),
+        None,
+        None,
+    )
+    .into()
 }
 
 // ---------------
@@ -269,9 +272,7 @@ impl TestToolWithProgress {
     ) -> Result<CallToolResult, CallToolError> {
         use rust_mcp_sdk::schema::{ProgressNotificationParams, ProgressToken};
 
-        let token = progress_token.unwrap_or(ProgressToken::String(
-            "progress-test-1".into(),
-        ));
+        let token = progress_token.unwrap_or(ProgressToken::String("progress-test-1".into()));
 
         runtime
             .notify_progress(ProgressNotificationParams {
@@ -408,7 +409,10 @@ impl TestElicitation {
             PrimitiveSchemaDefinition::StringSchema(StringSchema::new(
                 None,
                 Some("User's name".into()),
-                None, None, None, None,
+                None,
+                None,
+                None,
+                None,
             )),
         );
         properties.insert(
@@ -416,11 +420,15 @@ impl TestElicitation {
             PrimitiveSchemaDefinition::StringSchema(StringSchema::new(
                 None,
                 Some("User's email address".into()),
-                None, None, None, None,
+                None,
+                None,
+                None,
+                None,
             )),
         );
 
-        let schema = ElicitFormSchema::new(properties, vec!["username".into(), "email".into()], None);
+        let schema =
+            ElicitFormSchema::new(properties, vec!["username".into(), "email".into()], None);
         let params: ElicitRequestParams =
             ElicitRequestFormParams::new(self.message.clone(), schema, None, None).into();
 
@@ -529,8 +537,13 @@ impl TestElicitationDefaults {
 
         let schema = ElicitFormSchema::new(properties, vec![], None);
 
-        let params: ElicitRequestParams =
-            ElicitRequestFormParams::new("Please provide your information".into(), schema, None, None).into();
+        let params: ElicitRequestParams = ElicitRequestFormParams::new(
+            "Please provide your information".into(),
+            schema,
+            None,
+            None,
+        )
+        .into();
 
         let response = runtime
             .request_elicitation(params)
@@ -567,8 +580,8 @@ impl TestElicitationEnums {
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
         use rust_mcp_sdk::schema::{
-            ElicitFormSchema, ElicitRequestFormParams, ElicitRequestParams,
-            LegacyTitledEnumSchema, PrimitiveSchemaDefinition, TitledMultiSelectEnumSchema,
+            ElicitFormSchema, ElicitRequestFormParams, ElicitRequestParams, LegacyTitledEnumSchema,
+            PrimitiveSchemaDefinition, TitledMultiSelectEnumSchema,
             TitledMultiSelectEnumSchemaItems, TitledMultiSelectEnumSchemaItemsAnyOfItem,
             TitledSingleSelectEnumSchema, TitledSingleSelectEnumSchemaOneOfItem,
             UntitledMultiSelectEnumSchema, UntitledMultiSelectEnumSchemaItems,
@@ -617,15 +630,17 @@ impl TestElicitationEnums {
 
         properties.insert(
             "legacyEnum".into(),
-            PrimitiveSchemaDefinition::LegacyTitledEnumSchema(
-                LegacyTitledEnumSchema::new(
-                    vec!["opt1".into(), "opt2".into(), "opt3".into()],
-                    vec!["Option One".into(), "Option Two".into(), "Option Three".into()],
-                    None,
-                    Some("Legacy titled enum".into()),
-                    None,
-                ),
-            ),
+            PrimitiveSchemaDefinition::LegacyTitledEnumSchema(LegacyTitledEnumSchema::new(
+                vec!["opt1".into(), "opt2".into(), "opt3".into()],
+                vec![
+                    "Option One".into(),
+                    "Option Two".into(),
+                    "Option Three".into(),
+                ],
+                None,
+                Some("Legacy titled enum".into()),
+                None,
+            )),
         );
 
         properties.insert(
@@ -634,7 +649,9 @@ impl TestElicitationEnums {
                 UntitledMultiSelectEnumSchema::new(
                     vec![],
                     UntitledMultiSelectEnumSchemaItems::new(vec![
-                        "option1".into(), "option2".into(), "option3".into(),
+                        "option1".into(),
+                        "option2".into(),
+                        "option3".into(),
                     ]),
                     Some("Untitled multi-select".into()),
                     None,
@@ -676,7 +693,8 @@ impl TestElicitationEnums {
         let schema = ElicitFormSchema::new(properties, vec![], None);
 
         let params: ElicitRequestParams =
-            ElicitRequestFormParams::new("Select from enum options".into(), schema, None, None).into();
+            ElicitRequestFormParams::new("Select from enum options".into(), schema, None, None)
+                .into();
 
         let response = runtime
             .request_elicitation(params)
@@ -697,17 +715,20 @@ impl TestElicitationEnums {
 // ---------------
 // Tool box
 // ---------------
-tool_box!(ConformanceTools, [
-    TestSimpleText,
-    TestImageContent,
-    TestAudioContent,
-    TestEmbeddedResource,
-    TestMultipleContentTypes,
-    TestErrorHandling,
-    TestToolWithLogging,
-    TestToolWithProgress,
-    TestSampling,
-    TestElicitation,
-    TestElicitationDefaults,
-    TestElicitationEnums,
-]);
+tool_box!(
+    ConformanceTools,
+    [
+        TestSimpleText,
+        TestImageContent,
+        TestAudioContent,
+        TestEmbeddedResource,
+        TestMultipleContentTypes,
+        TestErrorHandling,
+        TestToolWithLogging,
+        TestToolWithProgress,
+        TestSampling,
+        TestElicitation,
+        TestElicitationDefaults,
+        TestElicitationEnums,
+    ]
+);
