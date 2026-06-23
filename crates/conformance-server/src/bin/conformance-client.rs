@@ -258,7 +258,6 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
             return;
         }
         Ok(resp) => {
-            // Parse WWW-Authenticate header to find resource_metadata URL
             let www_auth = resp.headers()
                 .get("www-authenticate")
                 .and_then(|v| v.to_str().ok())
@@ -266,25 +265,48 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
 
             let resource_metadata_url = parse_auth_param(www_auth, "resource_metadata");
             match resource_metadata_url {
-                Some(ref url) => {
-                    // Fetch resource metadata to find authorization server URL
-                    match http_client.get(url).send().await {
+                Some(url) => {
+                    match http_client.get(&url).send().await {
                         Ok(rm_resp) if rm_resp.status().is_success() => {
                             match rm_resp.json::<serde_json::Value>().await {
-                                Ok(rm) => {
-                                    rm.get("authorization_servers")
-                                        .and_then(|v| v.as_array())
-                                        .and_then(|a| a.first())
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string())
-                                }
+                                Ok(rm) => rm.get("authorization_servers")
+                                    .and_then(|v| v.as_array())
+                                    .and_then(|a| a.first())
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string()),
                                 Err(_) => None,
                             }
                         }
                         _ => None,
+                    }.or_else(|| {
+                        let base = server_url.trim_end_matches('/');
+                        Some(format!("{}/.well-known/oauth-authorization-server", base))
+                    })
+                }
+                None => {
+                    // No resource_metadata in header — try well-known protected resource path
+                    // Server URL is like http://host:port/mcp
+                    // Protected resource metadata at /.well-known/oauth-protected-resource
+                    if let Some(mcp_pos) = server_url.find("/mcp") {
+                        let host = &server_url[..mcp_pos];
+                        let prm_url = format!("{}/.well-known/oauth-protected-resource/mcp", host);
+                        match http_client.get(&prm_url).send().await {
+                            Ok(prm_resp) if prm_resp.status().is_success() => {
+                                match prm_resp.json::<serde_json::Value>().await {
+                                    Ok(prm) => prm.get("authorization_servers")
+                                        .and_then(|v| v.as_array())
+                                        .and_then(|a| a.first())
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string()),
+                                    Err(_) => None,
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
                     }
                 }
-                None => None,
             }
         }
         Err(_) => {
@@ -324,6 +346,32 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         Ok(h) => h,
         Err(e) => { eprintln!("Auth failed: {e}"); return; }
     };
+
+    // If the server supports authorization_code, make the authorization request too
+    if let Ok(metadata) = auth_client.discover_metadata().await {
+        if let Some(grant_types) = &metadata.grant_types_supported {
+            if grant_types.iter().any(|g| g == "authorization_code") {
+                let auth_endpoint = metadata.authorization_endpoint.as_str();
+                let client_id = context.get("client_id").and_then(|v| v.as_str())
+                    .unwrap_or("conformance-client");
+                let scope = context.get("scope").and_then(|v| v.as_str())
+                    .unwrap_or("mcp");
+                let pkce = rust_mcp_sdk::auth::generate_pkce_params();
+                let _ = http_client
+                    .get(auth_endpoint)
+                    .query(&[
+                        ("response_type", "code"),
+                        ("client_id", client_id),
+                        ("redirect_uri", "http://localhost/callback"),
+                        ("scope", scope),
+                        ("code_challenge", &pkce.code_challenge),
+                        ("code_challenge_method", "S256"),
+                    ])
+                    .send()
+                    .await;
+            }
+        }
+    }
 
     // Step 3: Connect to MCP server with Bearer token
     let client_details = InitializeRequestParams {
