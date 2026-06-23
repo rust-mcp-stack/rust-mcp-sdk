@@ -344,7 +344,11 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
 
     let auth_headers = match auth_client.get_auth_headers().await {
         Ok(h) => h,
-        Err(e) => { eprintln!("Auth failed: {e}"); return; }
+        Err(e) => {
+            eprintln!("Auth failed: {e}");
+            eprintln!("Auth server URL: {}", auth_client.server_url());
+            return;
+        }
     };
 
     // If the server supports authorization_code, make the authorization request too
