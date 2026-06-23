@@ -255,53 +255,56 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
             let www_auth = resp.headers()
                 .get("www-authenticate")
                 .and_then(|v| v.to_str().ok())
-                .unwrap_or("");
+                .unwrap_or("")
+                .to_string();
 
-            let resource_metadata_url = parse_auth_param(www_auth, "resource_metadata");
-            match resource_metadata_url {
-                Some(url) => {
-                    match http_client.get(&url).send().await {
-                        Ok(rm_resp) if rm_resp.status().is_success() => {
-                            match rm_resp.json::<serde_json::Value>().await {
-                                Ok(rm) => rm.get("authorization_servers")
-                                    .and_then(|v| v.as_array())
-                                    .and_then(|a| a.first())
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_string()),
-                                Err(_) => None,
+            let resource_metadata_url = parse_auth_param(&www_auth, "resource_metadata");
+
+            // Build list of PRM URLs to try in priority order
+            let mcp_host = reqwest::Url::parse(server_url)
+                .map(|u| format!("{}://{}", u.scheme(), u.authority()))
+                .unwrap_or_else(|_| server_url.to_string());
+            let mcp_path = reqwest::Url::parse(server_url)
+                .map(|u| u.path().to_string())
+                .unwrap_or_default();
+            let path_trimmed = mcp_path.trim_end_matches('/');
+
+            let mut prm_candidates: Vec<String> = Vec::new();
+            // 1. resource_metadata URL from WWW-Authenticate (if any)
+            if let Some(url) = resource_metadata_url {
+                prm_candidates.push(url);
+            }
+            // 2. Path-based PRM: /.well-known/oauth-protected-resource{path}
+            if !path_trimmed.is_empty() {
+                prm_candidates.push(format!("{}/.well-known/oauth-protected-resource{}", mcp_host, path_trimmed));
+            }
+            // 3. Root PRM: /.well-known/oauth-protected-resource
+            prm_candidates.push(format!("{}/.well-known/oauth-protected-resource", mcp_host));
+
+            // Try each PRM URL until one returns valid metadata
+            let mut found_auth_server: Option<String> = None;
+            for prm_url in &prm_candidates {
+                if let Ok(rm_resp) = http_client.get(prm_url).send().await {
+                    if rm_resp.status().is_success() {
+                        if let Ok(rm) = rm_resp.json::<serde_json::Value>().await {
+                            if let Some(server) = rm.get("authorization_servers")
+                                .and_then(|v| v.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|v| v.as_str())
+                            {
+                                found_auth_server = Some(server.to_string());
+                                break;
                             }
                         }
-                        _ => None,
-                    }.or_else(|| {
-                        let base = server_url.trim_end_matches('/');
-                        Some(format!("{}/.well-known/oauth-authorization-server", base))
-                    })
-                }
-                None => {
-                    // No resource_metadata in header — try well-known protected resource path
-                    // Server URL is like http://host:port/mcp
-                    // Protected resource metadata at /.well-known/oauth-protected-resource
-                    if let Some(mcp_pos) = server_url.find("/mcp") {
-                        let host = &server_url[..mcp_pos];
-                        let prm_url = format!("{}/.well-known/oauth-protected-resource/mcp", host);
-                        match http_client.get(&prm_url).send().await {
-                            Ok(prm_resp) if prm_resp.status().is_success() => {
-                                match prm_resp.json::<serde_json::Value>().await {
-                                    Ok(prm) => prm.get("authorization_servers")
-                                        .and_then(|v| v.as_array())
-                                        .and_then(|a| a.first())
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string()),
-                                    Err(_) => None,
-                                }
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
                     }
                 }
             }
+
+            found_auth_server.or_else(|| {
+                // Fallback: treat MCP server as auth server
+                Some(format!("{}/.well-known/oauth-authorization-server",
+                    server_url.trim_end_matches('/')))
+            })
         }
         Err(_) => {
             // Can't reach server, try well-known
@@ -318,18 +321,8 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
         }
     };
 
-    // Send direct auth metadata requests to satisfy test checks
-    let mcp_host = reqwest::Url::parse(server_url)
-        .map(|u| format!("{}://{}", u.scheme(), u.authority()))
-        .unwrap_or_else(|_| server_url.to_string());
-    // Request well-known on auth server URL (may fail if different port)
-    let _ = http_client.get(&format!("{}/.well-known/oauth-authorization-server", auth_server_url)).send().await;
-    // Also request well-known on MCP host (always succeeds in reaching server)
-    if mcp_host != auth_server_url {
-        let _ = http_client.get(&format!("{}/.well-known/oauth-authorization-server", mcp_host)).send().await;
-    }
-
-    // Build McpAuthClient. On failure, retry with MCP host
+    // Build McpAuthClient with auth server URL discovered from PRM.
+    // The SDK handles metadata discovery with prepend/append paths and OIDC variants.
     let mut builder = McpAuthConfig::builder().server_url(&auth_server_url);
 
     if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) {
@@ -343,32 +336,14 @@ async fn run_auth_scenario(server_url: &str, context: &serde_json::Value) {
     }
     builder = builder.resource(server_url);
 
-    let mut auth_client = match builder.build() {
+    let auth_client = match builder.build() {
         Ok(c) => c,
         Err(e) => { eprintln!("Auth client build failed: {e}"); return; }
     };
 
     let auth_headers = match auth_client.get_auth_headers().await {
         Ok(h) => h,
-        Err(e) => {
-            if mcp_host != auth_server_url {
-                let mut b2 = McpAuthConfig::builder().server_url(&mcp_host).resource(server_url);
-                if let Some(id) = context.get("client_id").and_then(|v| v.as_str()) { b2 = b2.client_id(id); }
-                if let Some(s) = context.get("client_secret").and_then(|v| v.as_str()) { b2 = b2.client_secret(s); }
-                if let Some(s) = context.get("scope").and_then(|v| v.as_str()) { b2 = b2.scope(s); }
-                if let Ok(a2) = b2.build() {
-                    auth_client = a2;
-                    match auth_client.get_auth_headers().await {
-                        Ok(h) => Some(h),
-                        Err(e2) => { eprintln!("Auth retry failed: {e2}"); None }
-                    }
-                } else { None }
-            } else { None }
-        }.unwrap_or_else(|| {
-            eprintln!("Auth failed: {e}");
-            // fall through with empty headers
-            std::collections::HashMap::new()
-        })
+        Err(e) => { eprintln!("Auth failed: {e}"); return; }
     };
 
     // If the server supports authorization_code, make the authorization request too
