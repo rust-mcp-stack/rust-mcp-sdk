@@ -1757,9 +1757,9 @@ dependencies = [
 
 [[package]]
 name = "oauth2-test-server"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dc7c2dd4b80859627c12f38944d6351259285778bf2dd298beeb325411cce0c"
+checksum = "962a0d22f28ecde9d8eb8694922fdd5d6d19f82b8a64d2411f9206fd3236cd9b"
 dependencies = [
  "async-trait",
  "axum",
