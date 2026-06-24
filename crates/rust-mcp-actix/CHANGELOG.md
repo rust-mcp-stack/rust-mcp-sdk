@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.3...rust-mcp-actix-v0.1.4) (2026-06-24)
+
+
+### 🐛 Bug Fixes
+
+* Update crate metadata ([7619890](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/7619890583143b716100ac1cf4736549b5c0c96e))
+
 ## [0.1.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.2...rust-mcp-actix-v0.1.3) (2026-06-24)
 
 

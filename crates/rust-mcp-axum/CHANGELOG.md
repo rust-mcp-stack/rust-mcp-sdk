@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.2...rust-mcp-axum-v0.2.3) (2026-06-24)
+
+
+### 🐛 Bug Fixes
+
+* Update crate metadata ([7619890](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/7619890583143b716100ac1cf4736549b5c0c96e))
+
 ## [0.2.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.1...rust-mcp-axum-v0.2.2) (2026-06-24)
 
 

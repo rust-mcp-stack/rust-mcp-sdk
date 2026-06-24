@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-actix"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Ali Hashemi"]
 categories = ["web-programming", "asynchronous", "network-programming"]
 description = "Actix-web HTTP server integration for rust-mcp-sdk"
