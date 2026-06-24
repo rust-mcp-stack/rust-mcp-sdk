@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.9.0...rust-mcp-transport-v0.9.1) (2026-06-24)
+
+
+### 🚀 Features
+
+* 100% MCP server and client conformance ([#185](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/185)) ([9c0c6ef](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9c0c6ef0d1b8a08c9d406e4890ae99fa06ba9c1b))
+
+
+### 🐛 Bug Fixes
+
+* **transport:** Cap transport line length ([#164](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/164)) ([344e9ee](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/344e9ee8486f403472622075583844223d738402))
+* **transport:** Make message channel capacity configurable for all transports ([#171](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/171)) ([f4edef4](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/f4edef44fa0dc54408a7932f2cb33c829bfc2b91))
+
+
+### 📚 Documentation
+
+* Documentation audit, examples upgrade, and test stabilization ([#174](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/174)) ([667e522](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/667e522f407291b34ec16b8fbd4068586207f2b6))
+
 ## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.8.0...rust-mcp-transport-v0.9.0) (2026-03-13)
 
 

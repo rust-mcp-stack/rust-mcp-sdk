@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.0...rust-mcp-macros-v0.9.1) (2026-06-24)
+
+
+### 📚 Documentation
+
+* Documentation audit, examples upgrade, and test stabilization ([#174](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/174)) ([667e522](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/667e522f407291b34ec16b8fbd4068586207f2b6))
+* Prepare v0.10.0 release ,upgrading.md, and migration guide ([#175](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/175)) ([4086a08](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4086a08742b1d46ff8abb17ce3796727de8e6ec3))
+
 ## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.8.1...rust-mcp-macros-v0.9.0) (2026-03-13)
 
 

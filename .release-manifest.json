@@ -1,10 +1,10 @@
 {
-  "crates/rust-mcp-sdk": "0.9.0",
-  "crates/rust-mcp-macros": "0.9.0",
-  "crates/rust-mcp-transport": "0.9.0",
-  "crates/rust-mcp-extra": "0.2.4",
-  "crates/rust-mcp-axum": "0.1.0",
-  "crates/rust-mcp-actix": "0.1.0",
+  "crates/rust-mcp-sdk": "0.10.0",
+  "crates/rust-mcp-macros": "0.9.1",
+  "crates/rust-mcp-transport": "0.9.1",
+  "crates/rust-mcp-extra": "0.3.0",
+  "crates/rust-mcp-axum": "0.2.0",
+  "crates/rust-mcp-actix": "0.1.1",
   "examples/hello-world-mcp-server-stdio": "0.1.33",
   "examples/hello-world-mcp-server-stdio-core": "0.1.24",
   "examples/simple-mcp-client-stdio": "0.1.33",
@@ -15,5 +15,7 @@
   "examples/simple-mcp-client-sse": "0.1.27",
   "examples/simple-mcp-client-streamable-http": "0.1.5",
   "examples/simple-mcp-client-streamable-http-core": "0.1.5",
-  "examples/auth/server-oauth-remote": "0.1.35"
+  "examples/auth/server-oauth-remote": "0.1.35",
+  "crates/conformance-client": "0.1.1",
+  "crates/conformance-server": "0.1.1"
 }
