@@ -1,6 +1,6 @@
 [package]
 name = "conformance-server"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 rust-version = "1.80.0"
 description = "MCP conformance test server — implements all scenarios from the MCP conformance suite. Also serves as a reference implementation showing how to build a fully-featured MCP server with rust-mcp-sdk."

@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-axum"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Ali Hashemi"]
 categories = ["data-structures", "parser-implementations", "parsing"]
 description = "Axum HTTP server integration for rust-mcp-sdk"
