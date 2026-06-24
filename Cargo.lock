@@ -551,6 +551,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "conformance-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "rust-mcp-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "conformance-server"
 version = "0.1.0"
 dependencies = [
@@ -558,7 +570,6 @@ dependencies = [
  "axum",
  "axum-server",
  "base64",
- "reqwest",
  "rust-mcp-axum",
  "rust-mcp-macros",
  "rust-mcp-sdk",

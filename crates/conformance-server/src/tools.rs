@@ -237,9 +237,7 @@ impl TestToolWithProgress {
     ) -> Result<CallToolResult, CallToolError> {
         use rust_mcp_sdk::schema::ProgressToken;
 
-        let token = Some(
-            progress_token.unwrap_or(ProgressToken::String("progress-test-1".into())),
-        );
+        let token = Some(progress_token.unwrap_or(ProgressToken::String("progress-test-1".into())));
 
         runtime
             .report_progress(token.clone(), 0.0, Some(100.0), None)

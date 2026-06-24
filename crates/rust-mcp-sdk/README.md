@@ -24,6 +24,7 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
+- ✅ **100% MCP Conformance** — passes all official client (254/254) and server (40/40) conformance tests
 - ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
 - ✅ Framework Agnostic: Seamless **Axum**, **Actix**, and **BYO Server** integrations
 - ✅ Multi-client concurrency

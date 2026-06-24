@@ -118,9 +118,7 @@ pub async fn discover_oauth_server_info(
     for url in metadata_url_fallbacks(mcp_server_url) {
         if let Some(meta) = try_fetch_metadata(http_client, &url).await {
             return Some(OauthServerInfo {
-                authorization_server_url: mcp_server_url
-                    .trim_end_matches('/')
-                    .to_string(),
+                authorization_server_url: mcp_server_url.trim_end_matches('/').to_string(),
                 authorization_server_metadata: meta,
                 resource_metadata,
             });
@@ -149,7 +147,10 @@ fn prm_url_candidates(mcp_server_url: &str, explicit_prm_url: Option<&str>) -> V
         let origin = format!("{}://{}", parsed.scheme(), parsed.authority());
         let path = parsed.path().trim_end_matches('/');
         if !path.is_empty() && path != "/" {
-            urls.push(format!("{}/.well-known/oauth-protected-resource{}", origin, path));
+            urls.push(format!(
+                "{}/.well-known/oauth-protected-resource{}",
+                origin, path
+            ));
         }
         urls.push(format!("{}/.well-known/oauth-protected-resource", origin));
     }
@@ -172,7 +173,10 @@ pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
     let Ok(parsed) = url::Url::parse(server_url) else {
         // Fallback: append well-known
         let trimmed = server_url.trim_end_matches('/');
-        urls.push(format!("{}/.well-known/oauth-authorization-server", trimmed));
+        urls.push(format!(
+            "{}/.well-known/oauth-authorization-server",
+            trimmed
+        ));
         return urls;
     };
 
@@ -182,10 +186,19 @@ pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
 
     if has_path {
         // Prepend-style: /.well-known/{type}{path}
-        urls.push(format!("{}/.well-known/oauth-authorization-server{}", origin, path));
-        urls.push(format!("{}/.well-known/openid-configuration{}", origin, path));
+        urls.push(format!(
+            "{}/.well-known/oauth-authorization-server{}",
+            origin, path
+        ));
+        urls.push(format!(
+            "{}/.well-known/openid-configuration{}",
+            origin, path
+        ));
         // Append-style (OIDC Discovery 1.0): {path}/.well-known/openid-configuration
-        urls.push(format!("{}{}/.well-known/openid-configuration", origin, path));
+        urls.push(format!(
+            "{}{}/.well-known/openid-configuration",
+            origin, path
+        ));
     } else {
         // Root path
         urls.push(format!("{}/.well-known/oauth-authorization-server", origin));
@@ -253,21 +266,36 @@ mod tests {
     fn prm_candidates_explicit_first() {
         let cands = prm_url_candidates("https://x.example/mcp", Some("https://a.b/c"));
         assert_eq!(cands[0], "https://a.b/c");
-        assert_eq!(cands[1], "https://x.example/.well-known/oauth-protected-resource/mcp");
-        assert_eq!(cands[2], "https://x.example/.well-known/oauth-protected-resource");
+        assert_eq!(
+            cands[1],
+            "https://x.example/.well-known/oauth-protected-resource/mcp"
+        );
+        assert_eq!(
+            cands[2],
+            "https://x.example/.well-known/oauth-protected-resource"
+        );
     }
 
     #[test]
     fn prm_candidates_skips_empty_explicit() {
         let cands = prm_url_candidates("https://x.example/mcp", Some(""));
-        assert_eq!(cands[0], "https://x.example/.well-known/oauth-protected-resource/mcp");
-        assert_eq!(cands[1], "https://x.example/.well-known/oauth-protected-resource");
+        assert_eq!(
+            cands[0],
+            "https://x.example/.well-known/oauth-protected-resource/mcp"
+        );
+        assert_eq!(
+            cands[1],
+            "https://x.example/.well-known/oauth-protected-resource"
+        );
     }
 
     #[test]
     fn prm_candidates_root_url() {
         let cands = prm_url_candidates("https://x.example", None);
         assert_eq!(cands.len(), 1);
-        assert_eq!(cands[0], "https://x.example/.well-known/oauth-protected-resource");
+        assert_eq!(
+            cands[0],
+            "https://x.example/.well-known/oauth-protected-resource"
+        );
     }
 }

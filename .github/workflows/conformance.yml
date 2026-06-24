@@ -38,3 +38,26 @@ jobs:
         with:
           mode: server
           url: http://localhost:3000/mcp
+
+  client-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: conformance-client
+
+      - name: Build conformance client
+        run: cargo build -p conformance-client --release
+
+      - uses: modelcontextprotocol/conformance@v0.1.16
+        with:
+          mode: client
+          command: ./target/release/conformance-client
+          suite: core

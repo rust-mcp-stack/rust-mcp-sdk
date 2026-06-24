@@ -62,14 +62,23 @@ mod tests {
     #[test]
     fn parses_bearer_scope() {
         let h = r#"Bearer scope="mcp:read""#;
-        assert_eq!(parse_www_authenticate_param(h, "scope"), Some("mcp:read".into()));
+        assert_eq!(
+            parse_www_authenticate_param(h, "scope"),
+            Some("mcp:read".into())
+        );
     }
 
     #[test]
     fn parses_multiple_params() {
         let h = r#"Bearer scope="mcp:read mcp:write", error="insufficient_scope""#;
-        assert_eq!(parse_www_authenticate_param(h, "scope"), Some("mcp:read mcp:write".into()));
-        assert_eq!(parse_www_authenticate_param(h, "error"), Some("insufficient_scope".into()));
+        assert_eq!(
+            parse_www_authenticate_param(h, "scope"),
+            Some("mcp:read mcp:write".into())
+        );
+        assert_eq!(
+            parse_www_authenticate_param(h, "error"),
+            Some("insufficient_scope".into())
+        );
     }
 
     #[test]
@@ -97,18 +106,27 @@ mod tests {
     fn handles_no_scheme_prefix() {
         // Some servers omit the scheme; we still parse.
         let h = r#"scope="mcp:read""#;
-        assert_eq!(parse_www_authenticate_param(h, "scope"), Some("mcp:read".into()));
+        assert_eq!(
+            parse_www_authenticate_param(h, "scope"),
+            Some("mcp:read".into())
+        );
     }
 
     #[test]
     fn handles_lowercase_scheme() {
         let h = r#"bearer scope="mcp:read""#;
-        assert_eq!(parse_www_authenticate_param(h, "scope"), Some("mcp:read".into()));
+        assert_eq!(
+            parse_www_authenticate_param(h, "scope"),
+            Some("mcp:read".into())
+        );
     }
 
     #[test]
     fn handles_unquoted_value() {
         let h = r#"Bearer error=invalid_token"#;
-        assert_eq!(parse_www_authenticate_param(h, "error"), Some("invalid_token".into()));
+        assert_eq!(
+            parse_www_authenticate_param(h, "error"),
+            Some("invalid_token".into())
+        );
     }
 }

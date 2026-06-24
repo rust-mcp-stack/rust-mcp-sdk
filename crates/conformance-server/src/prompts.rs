@@ -6,7 +6,10 @@ const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
 fn user_message(content: ContentBlock) -> PromptMessage {
-    PromptMessage { role: Role::User, content }
+    PromptMessage {
+        role: Role::User,
+        content,
+    }
 }
 
 // ---------------
@@ -28,7 +31,9 @@ impl TestSimplePrompt {
 
     pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
-            messages: vec![user_message(ContentBlock::text_content("This is a simple prompt for testing.".to_string()))],
+            messages: vec![user_message(ContentBlock::text_content(
+                "This is a simple prompt for testing.".to_string(),
+            ))],
             meta: None,
             description: Some("This is a simple prompt for testing.".into()),
         })
@@ -113,7 +118,9 @@ impl TestPromptWithEmbeddedResource {
                     "text/plain",
                     "Embedded resource content for testing.",
                 )),
-                user_message(ContentBlock::text_content("Please process the embedded resource above.".to_string())),
+                user_message(ContentBlock::text_content(
+                    "Please process the embedded resource above.".to_string(),
+                )),
             ],
             meta: None,
             description: Some("A prompt with embedded resource for conformance testing.".into()),
@@ -141,8 +148,13 @@ impl TestPromptWithImage {
     pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
             messages: vec![
-                user_message(ContentBlock::image_content(IMAGE_BASE64.to_string(), "image/png".to_string())),
-                user_message(ContentBlock::text_content("Please analyze the image above.".to_string())),
+                user_message(ContentBlock::image_content(
+                    IMAGE_BASE64.to_string(),
+                    "image/png".to_string(),
+                )),
+                user_message(ContentBlock::text_content(
+                    "Please analyze the image above.".to_string(),
+                )),
             ],
             meta: None,
             description: Some("A prompt with image content for conformance testing.".into()),

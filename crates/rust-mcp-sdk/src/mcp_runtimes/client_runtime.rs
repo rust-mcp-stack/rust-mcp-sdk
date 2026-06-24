@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use futures::future::{join_all, try_join_all};
+use futures::future::try_join_all;
 use futures::StreamExt;
 use rust_mcp_schema::schema_utils::ResultFromServer;
 use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
@@ -467,37 +467,34 @@ async fn sse_reconnect_loop(
             if *runtime.is_shut_down.lock().await {
                 return Ok(());
             }
-                match stream.next().await {
-                    Some(ServerMessages::Single(server_message)) => {
+            match stream.next().await {
+                Some(ServerMessages::Single(server_message)) => {
                     reconnect_attempt = 0;
-                    let result = runtime
-                        .handle_message(server_message, &transport)
-                        .await?;
+                    let result = runtime.handle_message(server_message, &transport).await?;
                     if let Some(response) = result {
                         transport
                             .send_message(ClientMessages::Single(response), None)
                             .await?;
                     }
-                    }
-                    Some(ServerMessages::Batch(server_messages)) => {
-                        reconnect_attempt = 0;
-                        let handling_tasks: Vec<_> = server_messages
-                            .into_iter()
-                            .map(|msg| runtime.handle_message(msg, &transport))
-                            .collect();
-                        let results = try_join_all(handling_tasks).await?;
-                        let responses: Vec<_> =
-                            results.into_iter().flatten().collect();
-                        if !responses.is_empty() {
-                            transport
-                                .send_message(ClientMessages::Batch(responses), None)
-                                .await?;
-                        }
-                    }
-                    None => {
-                        break;
+                }
+                Some(ServerMessages::Batch(server_messages)) => {
+                    reconnect_attempt = 0;
+                    let handling_tasks: Vec<_> = server_messages
+                        .into_iter()
+                        .map(|msg| runtime.handle_message(msg, &transport))
+                        .collect();
+                    let results = try_join_all(handling_tasks).await?;
+                    let responses: Vec<_> = results.into_iter().flatten().collect();
+                    if !responses.is_empty() {
+                        transport
+                            .send_message(ClientMessages::Batch(responses), None)
+                            .await?;
                     }
                 }
+                None => {
+                    break;
+                }
+            }
         }
 
         if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await {

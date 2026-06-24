@@ -62,7 +62,11 @@ pub fn select_scope(
     }
     configured_scope.and_then(|s| {
         let trimmed = s.trim();
-        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
     })
 }
 
@@ -145,10 +149,7 @@ mod tests {
 
     #[test]
     fn union_scopes_basic() {
-        assert_eq!(
-            union_scopes(Some("a"), Some("b")).as_deref(),
-            Some("a b")
-        );
+        assert_eq!(union_scopes(Some("a"), Some("b")).as_deref(), Some("a b"));
     }
 
     #[test]

@@ -249,9 +249,7 @@ impl McpAuthClient {
 
         // Phase 1: try RFC 8414 / OIDC well-known URLs on the configured server URL
         for url in discovery::metadata_url_fallbacks(&self.config.server_url) {
-            if let Some(meta) =
-                discovery::try_fetch_metadata(&self.http_client, &url).await
-            {
+            if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await {
                 let mut lock = self.discovered_metadata.write().await;
                 *lock = Some(meta.clone());
                 return Ok(meta);
@@ -277,8 +275,7 @@ impl McpAuthClient {
             for auth_server in &prm.authorization_servers {
                 let auth_url = auth_server.as_str().trim_end_matches('/').to_string();
                 for url in discovery::metadata_url_fallbacks(&auth_url) {
-                    if let Some(meta) =
-                        discovery::try_fetch_metadata(&self.http_client, &url).await
+                    if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await
                     {
                         let mut lock = self.discovered_metadata.write().await;
                         *lock = Some(meta.clone());
@@ -520,10 +517,13 @@ impl McpAuthClient {
                 form.push(("client_secret", secret));
                 request = self.http_client.post(token_endpoint.clone()).form(&form);
             } else {
-                request = request.header("Authorization", &format!(
-                    "Basic {}",
-                    base64_encode(&format!("{}:{}", client_id, secret))
-                ));
+                request = request.header(
+                    "Authorization",
+                    &format!(
+                        "Basic {}",
+                        base64_encode(&format!("{}:{}", client_id, secret))
+                    ),
+                );
             }
         }
 
@@ -553,9 +553,7 @@ impl McpAuthClient {
     /// Returns the cached [`OauthProtectedResourceMetadata`] if it was
     /// resolved during discovery (RFC 9728). `None` when discovery has not
     /// been performed or the server does not advertise PRM.
-    pub async fn resource_metadata(
-        &self,
-    ) -> Option<crate::auth::OauthProtectedResourceMetadata> {
+    pub async fn resource_metadata(&self) -> Option<crate::auth::OauthProtectedResourceMetadata> {
         self.discovered_resource_metadata.read().await.clone()
     }
 
@@ -580,15 +578,9 @@ impl McpAuthClient {
     ) -> ClientResult<String> {
         let metadata = self.ensure_metadata().await?;
         let registration = self.register().await?;
-        let redirect_uri = self
-            .config
-            .redirect_uri
-            .as_deref()
-            .ok_or_else(|| {
-                ClientError::Other(
-                    "redirect_uri is required for the authorization_code flow".into(),
-                )
-            })?;
+        let redirect_uri = self.config.redirect_uri.as_deref().ok_or_else(|| {
+            ClientError::Other("redirect_uri is required for the authorization_code flow".into())
+        })?;
 
         let mut url = metadata.authorization_endpoint.clone();
         {
