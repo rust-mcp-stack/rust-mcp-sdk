@@ -550,7 +550,7 @@ impl McpAuthClient {
         self.exchange_token(&GrantType::ClientCredentials).await
     }
 
-    /// Returns the cached [`OauthProtectedResourceMetadata`] if it was
+    /// Returns the cached `OauthProtectedResourceMetadata` if it was
     /// resolved during discovery (RFC 9728). `None` when discovery has not
     /// been performed or the server does not advertise PRM.
     pub async fn resource_metadata(&self) -> Option<crate::auth::OauthProtectedResourceMetadata> {
