@@ -6,7 +6,7 @@ pub mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;
-#[cfg(any(feature = "server", feature = "sse", feature = "streamable-http"))]
+#[cfg(feature = "server")]
 pub mod session_store;
 pub mod task_store;
 mod utils;

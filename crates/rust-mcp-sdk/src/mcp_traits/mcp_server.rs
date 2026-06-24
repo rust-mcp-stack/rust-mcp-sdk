@@ -6,8 +6,8 @@ use crate::schema::{
         ResultFromClient, ServerMessage,
     },
     CreateMessageRequestParams, CreateMessageResult, ElicitRequestParams, ElicitResult,
-    Implementation, InitializeRequestParams, InitializeResult, ListRootsResult,
-    LoggingMessageNotificationParams, NotificationParams, RequestId, RequestParams,
+    Implementation, InitializeRequestParams, InitializeResult, ListRootsResult, LoggingLevel,
+    LoggingMessageNotificationParams, NotificationParams, ProgressToken, RequestId, RequestParams,
     ResourceUpdatedNotificationParams, RpcError, ServerCapabilities,
 };
 use crate::task_store::{ClientTaskStore, CreateTaskOptions, ServerTaskStore};
@@ -410,6 +410,86 @@ pub trait McpServer: Sync + Send {
     async fn notify_progress(&self, params: ProgressNotificationParams) -> SdkResult<()> {
         self.send_notification(NotificationFromServer::ProgressNotification(params))
             .await
+    }
+
+    /// Convenience shortcut for [`Self::notify_progress`].
+    ///
+    /// Sends a progress update for a long-running request without requiring
+    /// the caller to construct a full [`ProgressNotificationParams`].
+    ///
+    /// # Arguments
+    /// - `progress_token` — the token supplied by the client in the original
+    ///   request's `_meta.progressToken`. If `None`, the notification is
+    ///   skipped (the server has no token to address).
+    /// - `progress` — current progress value.
+    /// - `total` — optional total value the progress is approaching.
+    /// - `message` — optional human-readable status message.
+    async fn report_progress(
+        &self,
+        progress_token: Option<ProgressToken>,
+        progress: f64,
+        total: Option<f64>,
+        message: Option<String>,
+    ) -> SdkResult<()> {
+        let Some(progress_token) = progress_token else {
+            return Ok(());
+        };
+        self.notify_progress(ProgressNotificationParams {
+            progress_token,
+            progress,
+            total,
+            message,
+            meta: None,
+        })
+        .await
+    }
+
+    /// Convenience shortcut for [`Self::notify_log_message`] at [`LoggingLevel::Debug`].
+    ///
+    /// The message is sent as a JSON string in the notification's `data`
+    /// field. Use [`Self::notify_log_message`] directly for structured data
+    /// or a custom `logger` name.
+    async fn log_debug(&self, message: String) -> SdkResult<()> {
+        self.notify_log_message(LoggingMessageNotificationParams {
+            level: LoggingLevel::Debug,
+            data: ::serde_json::Value::String(message),
+            logger: None,
+            meta: None,
+        })
+        .await
+    }
+
+    /// Convenience shortcut for [`Self::notify_log_message`] at [`LoggingLevel::Info`].
+    async fn log_info(&self, message: String) -> SdkResult<()> {
+        self.notify_log_message(LoggingMessageNotificationParams {
+            level: LoggingLevel::Info,
+            data: ::serde_json::Value::String(message),
+            logger: None,
+            meta: None,
+        })
+        .await
+    }
+
+    /// Convenience shortcut for [`Self::notify_log_message`] at [`LoggingLevel::Warning`].
+    async fn log_warn(&self, message: String) -> SdkResult<()> {
+        self.notify_log_message(LoggingMessageNotificationParams {
+            level: LoggingLevel::Warning,
+            data: ::serde_json::Value::String(message),
+            logger: None,
+            meta: None,
+        })
+        .await
+    }
+
+    /// Convenience shortcut for [`Self::notify_log_message`] at [`LoggingLevel::Error`].
+    async fn log_error(&self, message: String) -> SdkResult<()> {
+        self.notify_log_message(LoggingMessageNotificationParams {
+            level: LoggingLevel::Error,
+            data: ::serde_json::Value::String(message),
+            logger: None,
+            meta: None,
+        })
+        .await
     }
 
     /// Send an optional notification from the receiver to the requestor, informing them that a task's status has changed.

@@ -1,4 +1,4 @@
-#[cfg(feature = "sse")]
+#[cfg(all(feature = "sse", feature = "server"))]
 use super::http_utils::handle_sse_connection;
 use super::http_utils::{
     accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
@@ -7,6 +7,11 @@ use super::types::GenericBody;
 use crate::auth::AuthInfo;
 #[cfg(feature = "auth")]
 use crate::auth::AuthProvider;
+#[cfg(all(feature = "server", any(feature = "sse", feature = "streamable-http")))]
+use crate::mcp_http::http_utils::{
+    create_standalone_stream, delete_session, process_incoming_message,
+    process_incoming_message_return, start_new_session,
+};
 use crate::mcp_http::McpHttpError;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, HealthHandler, RequestExt};
@@ -15,11 +20,7 @@ use crate::schema::schema_utils::SdkError;
 use crate::{
     error::McpSdkError,
     mcp_http::{
-        http_utils::{
-            acceptable_content_type, create_standalone_stream, delete_session,
-            process_incoming_message, process_incoming_message_return, start_new_session,
-            valid_streaming_http_accept_header,
-        },
+        http_utils::{acceptable_content_type, valid_streaming_http_accept_header},
         McpAppState, McpHttpResult,
     },
     utils::valid_initialize_method,
@@ -279,6 +280,7 @@ impl McpHttpHandler {
         handle(request, state).await
     }
 
+    #[cfg(feature = "server")]
     async fn internal_handle_sse_message(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -318,9 +320,45 @@ impl McpHttpHandler {
         let method = request.method();
 
         let response = match method {
-            &http::Method::GET => return Self::handle_http_get(request, state, auth_info).await,
-            &http::Method::POST => return Self::handle_http_post(request, state, auth_info).await,
-            &http::Method::DELETE => return Self::handle_http_delete(request, state).await,
+            &http::Method::GET => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_get(request, state, auth_info).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
+            &http::Method::POST => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_post(request, state, auth_info).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
+            &http::Method::DELETE => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_delete(request, state).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
             other => {
                 let error = SdkError::bad_request().with_message(&format!(
                     "'{other}' is not a valid HTTP method for StreamableHTTP transport."
@@ -333,6 +371,7 @@ impl McpHttpHandler {
     }
 
     /// Processes POST requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_post(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -394,6 +433,7 @@ impl McpHttpHandler {
     }
 
     /// Processes GET requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_get(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -447,6 +487,7 @@ impl McpHttpHandler {
     }
 
     /// Processes DELETE requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_delete(
         request: http::Request<&str>,
         state: Arc<McpAppState>,

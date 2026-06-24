@@ -29,23 +29,22 @@ pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(timestamp)
 }
 
-/// Checks if the client and server protocol versions are compatible by ensuring they are equal.
+/// Checks if the client and server protocol versions are compatible.
 ///
-/// This function compares the provided client and server protocol versions. If they are equal,
-/// it returns `Ok(())`, indicating compatibility. If they differ (either the client version is
-/// lower or higher than the server version), it returns an error with details about the
-/// incompatible versions.
+/// A client implementing a spec version can interoperate with a server implementing the
+/// same or an older spec version (backwards compatibility). If the server implements a
+/// newer version than the client, the connection is rejected — the client cannot
+/// understand features from a newer spec.
 ///
 /// # Arguments
 ///
-/// * `client_protocol_version` - A string slice representing the client's protocol version.
-/// * `server_protocol_version` - A string slice representing the server's protocol version.
+/// * `client_protocol_version` - The protocol version the client implements.
+/// * `server_protocol_version` - The protocol version the server reported.
 ///
 /// # Returns
 ///
-/// * `Ok(())` if the versions are equal.
-/// * `Err(McpSdkError::IncompatibleProtocolVersion)` if the versions differ, containing the
-///   client and server versions as strings.
+/// * `Ok(())` if `client_protocol_version >= server_protocol_version`.
+/// * `Err(...)` if `client_protocol_version < server_protocol_version`.
 ///
 /// # Examples
 ///
@@ -53,24 +52,20 @@ pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
 /// use rust_mcp_sdk::mcp_client::ensure_server_protocole_compatibility;
 /// use rust_mcp_sdk::error::McpSdkError;
 ///
-/// // Compatible versions
+/// // Equal versions: compatible
 /// let result = ensure_server_protocole_compatibility("2024_11_05", "2024_11_05");
 /// assert!(result.is_ok());
 ///
-/// // Incompatible versions (requested < current)
+/// // Client newer than server: compatible (backwards compat)
+/// let result = ensure_server_protocole_compatibility("2025_11_25", "2025_03_26");
+/// assert!(result.is_ok());
+///
+/// // Client older than server: incompatible (server uses newer spec)
 /// let result = ensure_server_protocole_compatibility("2024_11_05", "2025_03_26");
 /// assert!(matches!(
 ///     result,
-///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
+///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {ref requested, ref current}})
 ///     if requested == "2024_11_05" && current == "2025_03_26"
-/// ));
-///
-/// // Incompatible versions (requested > current)
-/// let result = ensure_server_protocole_compatibility("2025_03_26", "2024_11_05");
-/// assert!(matches!(
-///     result,
-///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
-///     if requested == "2025_03_26" && current == "2024_11_05"
 /// ));
 /// ```
 #[allow(unused)]
@@ -79,13 +74,13 @@ pub fn ensure_server_protocole_compatibility(
     server_protocol_version: &str,
 ) -> SdkResult<()> {
     match client_protocol_version.cmp(server_protocol_version) {
-        Ordering::Less | Ordering::Greater => Err(McpSdkError::Protocol {
+        Ordering::Less => Err(McpSdkError::Protocol {
             kind: ProtocolErrorKind::IncompatibleVersion {
                 requested: client_protocol_version.to_string(),
                 current: server_protocol_version.to_string(),
             },
         }),
-        Ordering::Equal => Ok(()),
+        Ordering::Equal | Ordering::Greater => Ok(()),
     }
 }
 

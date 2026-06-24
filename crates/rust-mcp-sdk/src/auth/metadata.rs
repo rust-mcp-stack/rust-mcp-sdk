@@ -620,6 +620,7 @@ impl<'a> AuthMetadataBuilder<'a> {
                 .code_challenge_methods_supported
                 .map(|v| v.into_iter().map(|c| c.into_owned()).collect()),
             jwks_uri: jwks_uri.clone(),
+            client_id_metadata_document_supported: None,
         };
 
         let resource = Self::parse_url_field("resource", self.resource, None)?;

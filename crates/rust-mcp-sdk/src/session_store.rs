@@ -1,4 +1,5 @@
 mod in_memory_session_store;
+#[cfg(feature = "server")]
 use crate::mcp_server::ServerRuntime;
 use async_trait::async_trait;
 pub use in_memory_session_store::*;

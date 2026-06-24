@@ -1,0 +1,19 @@
+[package]
+name = "conformance-client"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80.0"
+description = "MCP conformance test client — runs the official MCP client conformance suite against the rust-mcp-sdk client runtime."
+publish = false
+
+[[bin]]
+name = "conformance-client"
+path = "src/bin/conformance-client.rs"
+
+[dependencies]
+rust-mcp-sdk = { workspace = true, features = ["client", "streamable-http", "macros", "auth"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["json", "rustls-tls"] }

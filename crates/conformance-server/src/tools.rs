@@ -2,8 +2,8 @@ use rust_mcp_macros::JsonSchema;
 use rust_mcp_sdk::{
     macros::mcp_tool,
     schema::{
-        schema_utils::CallToolError, AudioContent, CallToolResult, ContentBlock, EmbeddedResource,
-        EmbeddedResourceResource, ImageContent, TextContent, TextResourceContents,
+        schema_utils::CallToolError, AudioContent, CallToolResult, ContentBlock, ImageContent,
+        TextContent,
     },
     tool_box,
 };
@@ -12,24 +12,6 @@ const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
 const AUDIO_BASE64: &str = "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-
-fn content_text(text: impl Into<String>) -> ContentBlock {
-    TextContent::new(text.into(), None, None).into()
-}
-
-fn content_image(data: &str, mime: &str) -> ContentBlock {
-    ImageContent::new(data.to_string(), mime.into(), None, None).into()
-}
-
-fn content_embedded_resource(text: &str, uri: &str, mime: &str) -> ContentBlock {
-    let trc = TextResourceContents::new(text.to_string(), uri.to_string()).with_mime_type(mime);
-    EmbeddedResource::new(
-        EmbeddedResourceResource::TextResourceContents(trc),
-        None,
-        None,
-    )
-    .into()
-}
 
 // ---------------
 // 1. test_simple_text
@@ -117,10 +99,10 @@ pub struct TestEmbeddedResource {
 
 impl TestEmbeddedResource {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
-        let block = content_embedded_resource(
-            "This is an embedded resource content.",
+        let block = ContentBlock::embedded_text_resource(
             "test://embedded-resource",
             "text/plain",
+            "This is an embedded resource content.",
         );
         Ok(CallToolResult {
             content: vec![block],
@@ -148,12 +130,12 @@ impl TestMultipleContentTypes {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
             content: vec![
-                content_text("Multiple content types test:"),
-                content_image(IMAGE_BASE64, "image/png"),
-                content_embedded_resource(
-                    r#"{"test":"data","value":123}"#,
+                ContentBlock::text_content("Multiple content types test:".to_string()),
+                ContentBlock::image_content(IMAGE_BASE64.to_string(), "image/png".to_string()),
+                ContentBlock::embedded_text_resource(
                     "test://mixed-content-resource",
                     "application/json",
+                    r#"{"test":"data","value":123}"#,
                 ),
             ],
             is_error: None,
@@ -179,8 +161,8 @@ pub struct TestErrorHandling {
 impl TestErrorHandling {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
-            content: vec![content_text(
-                "This tool intentionally returns an error for testing",
+            content: vec![ContentBlock::text_content(
+                "This tool intentionally returns an error for testing".to_string(),
             )],
             is_error: Some(true),
             meta: None,
@@ -207,39 +189,22 @@ impl TestToolWithLogging {
         &self,
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        use rust_mcp_sdk::schema::{LoggingLevel, LoggingMessageNotificationParams};
-
         runtime
-            .notify_log_message(LoggingMessageNotificationParams {
-                level: LoggingLevel::Info,
-                data: serde_json::Value::String("Tool execution started".into()),
-                logger: None,
-                meta: None,
-            })
+            .log_info("Tool execution started".into())
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         runtime
-            .notify_log_message(LoggingMessageNotificationParams {
-                level: LoggingLevel::Info,
-                data: serde_json::Value::String("Tool processing data".into()),
-                logger: None,
-                meta: None,
-            })
+            .log_info("Tool processing data".into())
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         runtime
-            .notify_log_message(LoggingMessageNotificationParams {
-                level: LoggingLevel::Info,
-                data: serde_json::Value::String("Tool execution completed".into()),
-                logger: None,
-                meta: None,
-            })
+            .log_info("Tool execution completed".into())
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
@@ -270,44 +235,26 @@ impl TestToolWithProgress {
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
         progress_token: Option<rust_mcp_sdk::schema::ProgressToken>,
     ) -> Result<CallToolResult, CallToolError> {
-        use rust_mcp_sdk::schema::{ProgressNotificationParams, ProgressToken};
+        use rust_mcp_sdk::schema::ProgressToken;
 
-        let token = progress_token.unwrap_or(ProgressToken::String("progress-test-1".into()));
+        let token = Some(progress_token.unwrap_or(ProgressToken::String("progress-test-1".into())));
 
         runtime
-            .notify_progress(ProgressNotificationParams {
-                progress_token: token.clone(),
-                progress: 0.0,
-                total: Some(100.0),
-                message: None,
-                meta: None,
-            })
+            .report_progress(token.clone(), 0.0, Some(100.0), None)
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         runtime
-            .notify_progress(ProgressNotificationParams {
-                progress_token: token.clone(),
-                progress: 50.0,
-                total: Some(100.0),
-                message: None,
-                meta: None,
-            })
+            .report_progress(token.clone(), 50.0, Some(100.0), None)
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         runtime
-            .notify_progress(ProgressNotificationParams {
-                progress_token: token,
-                progress: 100.0,
-                total: Some(100.0),
-                message: None,
-                meta: None,
-            })
+            .report_progress(token, 100.0, Some(100.0), None)
             .await
             .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
@@ -340,8 +287,8 @@ impl TestSampling {
 
         if !runtime.client_supports_sampling().unwrap_or(false) {
             return Ok(CallToolResult {
-                content: vec![content_text(
-                    "Error: Client does not support sampling capability",
+                content: vec![ContentBlock::text_content(
+                    "Error: Client does not support sampling capability".to_string(),
                 )],
                 is_error: Some(true),
                 meta: None,

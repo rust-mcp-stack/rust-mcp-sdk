@@ -17,8 +17,11 @@ pub use auth_info::AuthInfo;
 pub use auth_provider::*;
 #[cfg(feature = "auth")]
 pub use client_auth::{
-    generate_pkce_params, ClientError, ClientResult, GrantType, InMemoryTokenStore, McpAuthClient,
-    McpAuthConfig, PkceParams, RegistrationResponse, TokenResponse, TokenStore, TokenStoreError,
+    discover_oauth_server_info, discover_protected_resource_metadata,
+    fetch_protected_resource_metadata, generate_pkce_params, metadata_url_fallbacks,
+    parse_www_authenticate_param, select_scope, union_scopes, ClientError, ClientResult, GrantType,
+    InMemoryTokenStore, McpAuthClient, McpAuthConfig, OauthServerInfo, PkceParams,
+    RegistrationResponse, TokenResponse, TokenStore, TokenStoreError,
 };
 #[cfg(feature = "auth")]
 pub use error::*;

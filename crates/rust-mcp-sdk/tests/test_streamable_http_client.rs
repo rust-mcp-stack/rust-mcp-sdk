@@ -692,6 +692,12 @@ async fn should_reconnect_a_get_initiated_notification_stream_that_fails() {
     let (client, _) = create_client(&mcp_url, None).await;
 
     client.clone().start().await.unwrap();
+
+    // The standalone SSE GET is opened from a background task that retries on
+    // HTTP errors with a 1s default backoff. Wait long enough for the retry
+    // to fire so the second GET mock has a chance to match before the mock
+    // server is dropped (and its verifications run).
+    tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
 //****************** Resumability ******************

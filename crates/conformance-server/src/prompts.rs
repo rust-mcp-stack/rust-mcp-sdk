@@ -1,44 +1,14 @@
 use rust_mcp_sdk::schema::{
-    ContentBlock, GetPromptResult, Prompt, PromptArgument, PromptMessage, Role, TextContent,
+    ContentBlock, GetPromptResult, Prompt, PromptArgument, PromptMessage, Role,
 };
-use serde_json::json;
 
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
-fn text_message(text: impl Into<String>) -> PromptMessage {
+fn user_message(content: ContentBlock) -> PromptMessage {
     PromptMessage {
         role: Role::User,
-        content: TextContent::new(text.into(), None, None).into(),
-    }
-}
-
-fn image_message(data: &str, mime: &str) -> PromptMessage {
-    let json_val = json!({
-        "type": "image",
-        "data": data,
-        "mimeType": mime
-    });
-    let block: ContentBlock = serde_json::from_value(json_val).unwrap();
-    PromptMessage {
-        role: Role::User,
-        content: block,
-    }
-}
-
-fn resource_message(uri: &str, text: &str) -> PromptMessage {
-    let json_val = json!({
-        "type": "resource",
-        "resource": {
-            "uri": uri,
-            "mimeType": "text/plain",
-            "text": text
-        }
-    });
-    let block: ContentBlock = serde_json::from_value(json_val).unwrap();
-    PromptMessage {
-        role: Role::User,
-        content: block,
+        content,
     }
 }
 
@@ -61,7 +31,9 @@ impl TestSimplePrompt {
 
     pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
-            messages: vec![text_message("This is a simple prompt for testing.")],
+            messages: vec![user_message(ContentBlock::text_content(
+                "This is a simple prompt for testing.".to_string(),
+            ))],
             meta: None,
             description: Some("This is a simple prompt for testing.".into()),
         })
@@ -103,9 +75,9 @@ impl TestPromptWithArguments {
         arg2: &str,
     ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
-            messages: vec![text_message(format!(
+            messages: vec![user_message(ContentBlock::text_content(format!(
                 "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"
-            ))],
+            )))],
             meta: None,
             description: Some(format!(
                 "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"
@@ -141,8 +113,14 @@ impl TestPromptWithEmbeddedResource {
     ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
             messages: vec![
-                resource_message(resource_uri, "Embedded resource content for testing."),
-                text_message("Please process the embedded resource above."),
+                user_message(ContentBlock::embedded_text_resource(
+                    resource_uri,
+                    "text/plain",
+                    "Embedded resource content for testing.",
+                )),
+                user_message(ContentBlock::text_content(
+                    "Please process the embedded resource above.".to_string(),
+                )),
             ],
             meta: None,
             description: Some("A prompt with embedded resource for conformance testing.".into()),
@@ -170,8 +148,13 @@ impl TestPromptWithImage {
     pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
             messages: vec![
-                image_message(IMAGE_BASE64, "image/png"),
-                text_message("Please analyze the image above."),
+                user_message(ContentBlock::image_content(
+                    IMAGE_BASE64.to_string(),
+                    "image/png".to_string(),
+                )),
+                user_message(ContentBlock::text_content(
+                    "Please analyze the image above.".to_string(),
+                )),
             ],
             meta: None,
             description: Some("A prompt with image content for conformance testing.".into()),

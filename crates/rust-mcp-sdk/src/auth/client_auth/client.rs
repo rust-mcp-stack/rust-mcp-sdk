@@ -1,6 +1,7 @@
 use crate::auth::client_auth::discovery;
 use crate::auth::client_auth::error::{ClientError, ClientResult};
 use crate::auth::client_auth::in_memory_store::InMemoryTokenStore;
+use crate::auth::client_auth::pkce::PkceParams;
 use crate::auth::client_auth::registration::RegistrationResponse;
 use crate::auth::client_auth::store::TokenStore;
 use crate::auth::client_auth::token::{GrantType, TokenResponse};
@@ -44,6 +45,14 @@ pub struct McpAuthConfig {
     pub scope: Option<String>,
     pub redirect_uri: Option<String>,
     pub metadata: Option<AuthorizationServerMetadata>,
+    pub resource: Option<String>,
+    /// HTTPS URL of this client's Client ID Metadata Document
+    /// ([SEP-991](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) /
+    /// IETF draft-ietf-oauth-client-id-metadata-document). When set and the
+    /// authorization server advertises `client_id_metadata_document_supported: true`,
+    /// this URL is used as the `client_id` and dynamic client registration is
+    /// skipped.
+    pub client_metadata_url: Option<String>,
 }
 
 impl McpAuthConfig {
@@ -65,6 +74,8 @@ pub struct McpAuthConfigBuilder {
     redirect_uri: Option<String>,
     metadata: Option<AuthorizationServerMetadata>,
     token_store: Option<Arc<dyn TokenStore>>,
+    resource: Option<String>,
+    client_metadata_url: Option<String>,
 }
 
 impl McpAuthConfigBuilder {
@@ -106,6 +117,24 @@ impl McpAuthConfigBuilder {
         self
     }
 
+    /// Resource indicator (RFC 8707). Typically the MCP server URL.
+    /// Included in authorization and token requests as the `resource` parameter.
+    pub fn resource(mut self, resource: impl Into<String>) -> Self {
+        self.resource = Some(resource.into());
+        self
+    }
+
+    /// HTTPS URL of this client's [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)
+    /// (SEP-991 / IETF CIMD).
+    ///
+    /// When set and the authorization server advertises
+    /// `client_id_metadata_document_supported: true`, the client uses this URL
+    /// as its `client_id` and skips dynamic client registration entirely.
+    pub fn client_metadata_url(mut self, url: impl Into<String>) -> Self {
+        self.client_metadata_url = Some(url.into());
+        self
+    }
+
     /// Provide a custom [`TokenStore`] backend.
     ///
     /// Defaults to [`InMemoryTokenStore`](crate::auth::InMemoryTokenStore) if not set.
@@ -130,12 +159,16 @@ impl McpAuthConfigBuilder {
                 scope: self.scope,
                 redirect_uri: self.redirect_uri,
                 metadata: self.metadata,
+                resource: self.resource,
+                client_metadata_url: self.client_metadata_url,
             }),
             http_client: shared_http_client(),
             token_store: self
                 .token_store
                 .unwrap_or_else(|| Arc::new(InMemoryTokenStore::new())),
             discovered_metadata: RwLock::new(None),
+            discovered_resource_metadata: RwLock::new(None),
+            discovered_www_auth_scope: RwLock::new(None),
             registration: RwLock::new(None),
         })
     }
@@ -175,6 +208,11 @@ pub struct McpAuthClient {
     http_client: reqwest::Client,
     token_store: Arc<dyn TokenStore>,
     discovered_metadata: RwLock<Option<AuthorizationServerMetadata>>,
+    discovered_resource_metadata: RwLock<Option<crate::auth::OauthProtectedResourceMetadata>>,
+    /// `scope` parameter captured from a `WWW-Authenticate: Bearer …` challenge
+    /// during the 401-probe phase of metadata discovery. Used by the SEP-835
+    /// scope-selection strategy in [`McpAuthClient::resolved_scope`].
+    discovered_www_auth_scope: RwLock<Option<String>>,
     registration: RwLock<Option<RegistrationResponse>>,
 }
 
@@ -184,11 +222,17 @@ impl McpAuthClient {
         &self.config.server_url
     }
 
-    /// Discover OAuth metadata from the server's well-known endpoint.
+    /// Discover OAuth metadata.
     ///
-    /// Results are cached after the first successful call. Subsequent calls
-    /// return the cached value. If `metadata` was provided in the config,
-    /// that value is used instead of performing a network request.
+    /// Tries multiple URL resolution strategies:
+    /// 1. Well-known path on the configured server URL
+    /// 2. Direct fetch from the server URL
+    /// 3. Host-only well-known path
+    /// 4. If the server returns 401, extracts resource_metadata from
+    ///    WWW-Authenticate, fetches PRM to find the authorization server,
+    ///    and retries with the auth server URL.
+    ///
+    /// Results are cached after the first successful call.
     pub async fn discover_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
         if let Some(ref metadata) = self.config.metadata {
             let mut lock = self.discovered_metadata.write().await;
@@ -203,23 +247,133 @@ impl McpAuthClient {
             }
         }
 
-        let metadata =
-            discovery::discover_metadata(&self.http_client, &self.config.server_url).await?;
+        // Phase 1: try RFC 8414 / OIDC well-known URLs on the configured server URL
+        for url in discovery::metadata_url_fallbacks(&self.config.server_url) {
+            if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await {
+                let mut lock = self.discovered_metadata.write().await;
+                *lock = Some(meta.clone());
+                return Ok(meta);
+            }
+        }
 
-        let mut lock = self.discovered_metadata.write().await;
-        *lock = Some(metadata.clone());
-        Ok(metadata)
+        // Phase 2: probe the server for a 401, follow RFC 9728 PRM to find the
+        // authorization server, then fetch its metadata. We cache the PRM on
+        // the client so callers can reach it via `resource_metadata()`.
+        let explicit_prm = self.probe_for_resource_metadata().await;
+        let prm = discovery::discover_protected_resource_metadata(
+            &self.http_client,
+            &self.config.server_url,
+            explicit_prm.as_deref(),
+        )
+        .await;
+
+        if let Some(prm) = prm.clone() {
+            let mut prm_lock = self.discovered_resource_metadata.write().await;
+            *prm_lock = Some(prm.clone());
+            drop(prm_lock);
+
+            for auth_server in &prm.authorization_servers {
+                let auth_url = auth_server.as_str().trim_end_matches('/').to_string();
+                for url in discovery::metadata_url_fallbacks(&auth_url) {
+                    if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await
+                    {
+                        let mut lock = self.discovered_metadata.write().await;
+                        *lock = Some(meta.clone());
+                        return Ok(meta);
+                    }
+                }
+            }
+        }
+
+        Err(ClientError::DiscoveryFailed(
+            "metadata not found at any tried URL".into(),
+        ))
+    }
+
+    /// Probe the MCP server for a 401 response and extract the
+    /// `resource_metadata` URL from the WWW-Authenticate header. Also captures
+    /// the `scope` parameter (if any) into the discovered-scope cache so
+    /// [`resolved_scope`](Self::resolved_scope) can return it.
+    async fn probe_for_resource_metadata(&self) -> Option<String> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": { "name": "mcp-auth-client", "version": "1.0.0" }
+            }
+        });
+
+        let resp = self
+            .http_client
+            .post(&self.config.server_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .json(&body)
+            .send()
+            .await
+            .ok()?;
+
+        let www_auth = resp
+            .headers()
+            .get("www-authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        // Cache the challenged scope (SEP-835 priority 1).
+        if let Some(scope) = parse_www_auth_param(&www_auth, "scope") {
+            let mut lock = self.discovered_www_auth_scope.write().await;
+            *lock = Some(scope);
+        }
+
+        parse_www_auth_param(&www_auth, "resource_metadata")
+    }
+
+    /// Resolve the OAuth `scope` to use for a request, following the SEP-835
+    /// scope-selection strategy:
+    ///
+    /// 1. `scope` from a `WWW-Authenticate` challenge captured during discovery
+    /// 2. `scopes_supported` from the discovered Protected Resource Metadata
+    /// 3. The `scope` configured on [`McpAuthConfig`]
+    ///
+    /// Returns `None` when no scope is available, signaling that the `scope`
+    /// parameter should be omitted from the OAuth request entirely.
+    pub async fn resolved_scope(&self) -> Option<String> {
+        let www_auth_scope = self.discovered_www_auth_scope.read().await.clone();
+        let prm_scopes = self
+            .discovered_resource_metadata
+            .read()
+            .await
+            .as_ref()
+            .and_then(|p| p.scopes_supported.clone());
+
+        super::scope::select_scope(
+            www_auth_scope.as_deref(),
+            prm_scopes.as_deref(),
+            self.config.scope.as_deref(),
+        )
     }
 
     async fn ensure_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
         self.discover_metadata().await
     }
 
-    /// Register this client with the authorization server via DCR (RFC 7591).
+    /// Register this client with the authorization server.
     ///
-    /// If `client_id` was provided in the config (pre-registered), this returns
-    /// immediately without making a network call. Otherwise, it performs DCR
-    /// at the server's `registration_endpoint`.
+    /// Resolution order:
+    /// 1. If `client_id` was provided in the config (pre-registered), it is
+    ///    returned without a network call.
+    /// 2. If `client_metadata_url` was provided **and** the discovered
+    ///    authorization server metadata advertises
+    ///    `client_id_metadata_document_supported: true`
+    ///    ([SEP-991](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)),
+    ///    the URL is used as the `client_id` and no DCR call is made.
+    /// 3. Otherwise the client performs Dynamic Client Registration
+    ///    ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) against
+    ///    the metadata's `registration_endpoint`.
     pub async fn register(&self) -> ClientResult<RegistrationResponse> {
         if let Some(ref client_id) = self.config.client_id {
             let reg = RegistrationResponse {
@@ -234,6 +388,23 @@ impl McpAuthClient {
         }
 
         let metadata = self.ensure_metadata().await?;
+
+        // SEP-991 / CIMD — if the AS supports URL-based client IDs and the
+        // caller has configured a Client ID Metadata Document URL, use it.
+        if let Some(ref cimd_url) = self.config.client_metadata_url {
+            if metadata.client_id_metadata_document_supported == Some(true) {
+                let reg = RegistrationResponse {
+                    client_id: cimd_url.clone(),
+                    client_secret: None,
+                    client_id_issued_at: None,
+                    client_secret_expires_at: None,
+                };
+                let mut lock = self.registration.write().await;
+                *lock = Some(reg.clone());
+                return Ok(reg);
+            }
+        }
+
         let registration_endpoint = metadata
             .registration_endpoint
             .as_ref()
@@ -244,8 +415,10 @@ impl McpAuthClient {
             "client_name".into(),
             serde_json::Value::String("rust-mcp-client".into()),
         );
-        if let Some(ref scope) = self.config.scope {
-            body.insert("scope".into(), serde_json::Value::String(scope.clone()));
+        // SEP-835 scope selection for DCR too — use the same resolution as the
+        // token request so the registration captures all required scopes.
+        if let Some(scope) = self.resolved_scope().await {
+            body.insert("scope".into(), serde_json::Value::String(scope));
         }
         body.insert(
             "grant_types".into(),
@@ -319,18 +492,39 @@ impl McpAuthClient {
             }
         }
 
-        if let Some(ref scope) = self.config.scope {
+        // SEP-835: pick scope = WWW-Auth challenge > PRM scopes_supported >
+        // config. We materialize into a local so the &str borrow lasts long
+        // enough for `form`.
+        let resolved_scope = self.resolved_scope().await;
+        if let Some(ref scope) = resolved_scope {
             form.push(("scope", scope));
+        }
+
+        if let Some(ref resource) = self.config.resource {
+            form.push(("resource", resource));
         }
 
         let mut request = self.http_client.post(token_endpoint.clone()).form(&form);
 
         if let Some(ref secret) = client_secret {
-            let auth_header = format!(
-                "Basic {}",
-                base64_encode(&format!("{}:{}", client_id, secret))
-            );
-            request = request.header("Authorization", &auth_header);
+            let uses_post = metadata
+                .token_endpoint_auth_methods_supported
+                .as_ref()
+                .map(|methods| methods.iter().any(|m| m == "client_secret_post"))
+                .unwrap_or(false);
+
+            if uses_post {
+                form.push(("client_secret", secret));
+                request = self.http_client.post(token_endpoint.clone()).form(&form);
+            } else {
+                request = request.header(
+                    "Authorization",
+                    &format!(
+                        "Basic {}",
+                        base64_encode(&format!("{}:{}", client_id, secret))
+                    ),
+                );
+            }
         }
 
         let response = request.send().await?;
@@ -354,6 +548,92 @@ impl McpAuthClient {
     /// Calls `exchange_token` with [`GrantType::ClientCredentials`].
     pub async fn authenticate(&self) -> ClientResult<TokenResponse> {
         self.exchange_token(&GrantType::ClientCredentials).await
+    }
+
+    /// Returns the cached `OauthProtectedResourceMetadata` if it was
+    /// resolved during discovery (RFC 9728). `None` when discovery has not
+    /// been performed or the server does not advertise PRM.
+    pub async fn resource_metadata(&self) -> Option<crate::auth::OauthProtectedResourceMetadata> {
+        self.discovered_resource_metadata.read().await.clone()
+    }
+
+    /// Build a fully formed `/authorize` request URL.
+    ///
+    /// The returned URL includes `response_type=code`, the resolved `client_id`,
+    /// the configured `redirect_uri`, the PKCE `code_challenge`/`code_challenge_method`,
+    /// the optional `resource` indicator (RFC 8707), the requested `scope`,
+    /// and an optional `state`.
+    ///
+    /// Callers that own the browser redirect (CLI, GUI, web app) typically:
+    /// 1. call [`generate_pkce_params`](crate::auth::generate_pkce_params)
+    /// 2. call this method to obtain the URL
+    /// 3. send the user to the URL and capture the returned `code`
+    /// 4. call [`complete_authorization_code_flow`](Self::complete_authorization_code_flow)
+    ///    to exchange the code for a token.
+    pub async fn build_authorization_url(
+        &self,
+        pkce: &PkceParams,
+        scope: Option<&str>,
+        state: Option<&str>,
+    ) -> ClientResult<String> {
+        let metadata = self.ensure_metadata().await?;
+        let registration = self.register().await?;
+        let redirect_uri = self.config.redirect_uri.as_deref().ok_or_else(|| {
+            ClientError::Other("redirect_uri is required for the authorization_code flow".into())
+        })?;
+
+        let mut url = metadata.authorization_endpoint.clone();
+        {
+            let mut q = url.query_pairs_mut();
+            q.append_pair("response_type", "code");
+            q.append_pair("client_id", &registration.client_id);
+            q.append_pair("redirect_uri", redirect_uri);
+            q.append_pair("code_challenge", &pkce.code_challenge);
+            q.append_pair("code_challenge_method", "S256");
+            if let Some(resource) = &self.config.resource {
+                q.append_pair("resource", resource);
+            }
+            if let Some(s) = scope {
+                if !s.is_empty() {
+                    q.append_pair("scope", s);
+                }
+            }
+            if let Some(s) = state {
+                q.append_pair("state", s);
+            }
+        }
+        Ok(url.into())
+    }
+
+    /// Exchange an authorization code (received via redirect) for an access
+    /// token using PKCE.
+    ///
+    /// `code` is the `code` query parameter the authorization server included
+    /// in the redirect to your `redirect_uri`. `code_verifier` is the
+    /// verifier that pairs with the `code_challenge` you sent in the
+    /// authorization request — it is produced by
+    /// [`generate_pkce_params`](crate::auth::generate_pkce_params).
+    pub async fn complete_authorization_code_flow(
+        &self,
+        code: impl Into<String>,
+        code_verifier: impl Into<String>,
+    ) -> ClientResult<TokenResponse> {
+        let redirect_uri = self
+            .config
+            .redirect_uri
+            .as_deref()
+            .ok_or_else(|| {
+                ClientError::Other(
+                    "redirect_uri is required for the authorization_code flow".into(),
+                )
+            })?
+            .to_string();
+        self.exchange_token(&GrantType::AuthorizationCodePkce {
+            code: code.into(),
+            redirect_uri,
+            code_verifier: code_verifier.into(),
+        })
+        .await
     }
 
     /// Refresh an access token using a refresh token.
@@ -423,6 +703,14 @@ impl McpAuthClient {
 fn base64_encode(input: &str) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(input.as_bytes())
+}
+
+/// Parse a parameter value from a WWW-Authenticate header string.
+///
+/// Thin wrapper around [`super::www_authenticate::parse_www_authenticate_param`]
+/// kept for internal call sites; new code should use that function directly.
+fn parse_www_auth_param(www_auth: &str, param_name: &str) -> Option<String> {
+    super::www_authenticate::parse_www_authenticate_param(www_auth, param_name)
 }
 
 #[cfg(test)]
