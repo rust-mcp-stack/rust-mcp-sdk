@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.10.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.9.0...rust-mcp-sdk-v0.10.0) (2026-06-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146))
+* extract Axum to standalone rust-mcp-axum crate
+
+### 🚀 Features
+
+* 100% MCP server and client conformance ([#185](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/185)) ([9c0c6ef](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9c0c6ef0d1b8a08c9d406e4890ae99fa06ba9c1b))
+* Add allowlist override for JWKS algorithms ([ee680a8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ee680a8e3ffd4cc5e3c742c619b63c1cba063e43))
+* Add MCP conformance server, CI workflow ([#176](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/176)) ([4422d5d](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4422d5d1f9fc2b39acfbf5e16f71c6237a4ff6af))
+* Add McpAuthClient for client-side OAuth 2.0 support ([#184](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/184)) ([9d9be73](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/9d9be73aadfc7e23b3417f94db89c2e033b10555))
+* Enforce request body size limits with shared McpMountOptions ([#163](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/163)) ([8dd749a](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/8dd749aa9aa5cac9aef8d7a931bb16e947e01a42))
+* Extract Axum to standalone rust-mcp-axum crate ([0bd6cf6](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0bd6cf6721b25c1066c702d2bdf752143ad2ecf3))
+* Extract Axum to standalone rust-mcp-axum crate ([#146](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/146)) ([ddc5600](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/ddc56001cd561aef0eccadd0c3bb788c176575ff))
+* Introduce framework-agnostic McpHttpError type ([4199845](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/41998454b9b99b74be090b66aa862211ecfd420b))
+* Introduce framework-agnostic McpHttpError type ([#143](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/143)) ([2e3c4ca](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/2e3c4ca25dc2c0eb1d21e7b1be3a2fee7edee8b3))
+* **session:** Make session store injectable with bounded default ([#167](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/167)) ([af601b5](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/af601b56e236fe0e10bb5659e7f6ed6b90917d51))
+
+
+### 🐛 Bug Fixes
+
+* **auth:** Pin JWT validation algorithms to an allowlist ([#148](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/148)) ([c1ee180](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/c1ee1808145fb29ef95b273fdb30bb7139e959eb))
+* **auth:** Validate token audience by default ([#149](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/149)) ([1f714bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1f714bf728caefcc1f4c07d853ce90b2622456a1))
+* Drop lock before sleep, configurable options ([#170](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/170)) ([0f15e56](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/0f15e56c7d8a323237a1b463d4735ddc40ac3287))
+* **http:** Auto-derive DNS rebinding allowed_hosts from bind address ([#165](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/165)) ([55d8a03](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/55d8a03764921329e0e81f0d406452ca3313bffd))
+* **http:** Validate session-id and last-event-id headers ([#169](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/169)) ([67e5a2d](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/67e5a2dacef249191e9355a6fcd4b2bb22e2bb5c))
+
+
+### ⚡ Performance Improvements
+
+* **auth:** Reuse a shared reqwest::Client with timeouts ([#172](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/172)) ([c644426](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/c64442644076d5dbcd9437245aecff5c36b4fb32))
+* Extract POST body as Bytes ([#166](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/166)) ([352a5fd](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/352a5fd890378181dda1f893e91ef4a5e16d6b63))
+* Shard session store lock with monotonic time and O(1) capacity check ([#168](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/168)) ([a5181a9](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/a5181a9c62ec95420edd79485654cacd532dbf73))
+
+
+### 📚 Documentation
+
+* Documentation audit, examples upgrade, and test stabilization ([#174](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/174)) ([667e522](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/667e522f407291b34ec16b8fbd4068586207f2b6))
+* Prepare v0.10.0 release ,upgrading.md, and migration guide ([#175](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/175)) ([4086a08](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4086a08742b1d46ff8abb17ce3796727de8e6ec3))
+
+
+### 🚜 Code Refactoring
+
+* Switch mcp http to framework-agnostic McpHttpError  ([#144](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/144)) ([e0c44c0](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e0c44c0e4f8aaed9bfc59b9274d11c346646a635))
+* Switch mcp_http layer to framework-agnostic McpHttpError ([afaf4b1](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/afaf4b1ebfe070f565a1857ed707da678b9d16ae))
+
 ## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.8.3...rust-mcp-sdk-v0.9.0) (2026-03-13)
 
 
