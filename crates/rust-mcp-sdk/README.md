@@ -18,9 +18,9 @@ This SDK fully implements the latest MCP protocol version ([2025-11-25](https://
 `rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem.  It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.
 
 
-### ⚠ Upgrading from v0.7.x
+### ⚠ Upgrading from v0.9.x
 
-[v0.8.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/releases/tag/rust-mcp-sdk-v0.8.0) includes breaking changes compared to v0.7. If you are upgrading, please review the breaking changes section of the [release](https://github.com/rust-mcp-stack/rust-mcp-sdk/releases/tag/rust-mcp-sdk-v0.8.0) notes to update your code and dependencies accordingly.
+v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, please review the [migration guide](../../doc/migration/v0.9.x-to-v0.10.x.md).
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
