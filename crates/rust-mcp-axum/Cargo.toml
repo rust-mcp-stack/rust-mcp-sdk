@@ -2,11 +2,11 @@
 name = "rust-mcp-axum"
 version = "0.2.2"
 authors = ["Ali Hashemi"]
-categories = ["data-structures", "parser-implementations", "parsing"]
+categories = ["web-programming", "asynchronous", "network-programming"]
 description = "Axum HTTP server integration for rust-mcp-sdk"
 repository = "https://github.com/rust-mcp-stack/rust-mcp-sdk"
 documentation = "https://docs.rs/rust-mcp-axum"
-keywords = ["rust-mcp-stack", "model", "context", "protocol", "sdk", "axum"]
+keywords = ["rust-mcp-stack", "model", "context", "protocol", "axum"]
 license = "MIT"
 edition = "2021"
 rust-version = { workspace = true }
