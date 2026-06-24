@@ -12,7 +12,7 @@ edition = "2021"
 rust-version = { workspace = true }
 
 [dependencies]
-rust-mcp-sdk = { workspace = true, features = ["server", "streamable-http", "sse", "auth"] }
+rust-mcp-sdk = { version = "0.10.0", workspace = true, features = ["server", "streamable-http", "sse", "auth"] }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
