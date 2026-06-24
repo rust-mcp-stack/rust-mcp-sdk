@@ -9,6 +9,7 @@ Provides a lightweight, production-ready Axum-based HTTP layer for MCP servers s
 
 > **Prefer Actix-web?** See [`rust-mcp-actix`](https://crates.io/crates/rust-mcp-actix) for an equivalent integration built on Actix-web. Both crates expose the same feature set and follow the same usage patterns.
 
+
 ---
 
 ## Features

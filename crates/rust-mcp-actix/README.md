@@ -9,6 +9,7 @@ Provides a production-ready Actix-web layer for MCP servers supporting **Streama
 
 > **Prefer Axum?** See [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) for an equivalent integration built on Axum. Both crates expose the same feature set and follow the same usage patterns.
 
+
 ---
 
 ## Features
