@@ -83,7 +83,6 @@ pub mod mcp_server {
 }
 
 pub mod auth;
-pub mod content;
 pub use mcp_traits::*;
 pub use rust_mcp_transport::error::*;
 pub use rust_mcp_transport::*;

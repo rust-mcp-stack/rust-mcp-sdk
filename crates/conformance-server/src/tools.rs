@@ -1,9 +1,9 @@
 use rust_mcp_macros::JsonSchema;
-use rust_mcp_sdk::content::Content;
 use rust_mcp_sdk::{
     macros::mcp_tool,
     schema::{
-        schema_utils::CallToolError, AudioContent, CallToolResult, ImageContent, TextContent,
+        schema_utils::CallToolError, AudioContent, CallToolResult, ContentBlock, ImageContent,
+        TextContent,
     },
     tool_box,
 };
@@ -99,7 +99,7 @@ pub struct TestEmbeddedResource {
 
 impl TestEmbeddedResource {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
-        let block = Content::embedded_text_resource(
+        let block = ContentBlock::embedded_text_resource(
             "test://embedded-resource",
             "text/plain",
             "This is an embedded resource content.",
@@ -130,9 +130,9 @@ impl TestMultipleContentTypes {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
             content: vec![
-                Content::text("Multiple content types test:"),
-                Content::image(IMAGE_BASE64, "image/png"),
-                Content::embedded_text_resource(
+                ContentBlock::text_content("Multiple content types test:".to_string()),
+                ContentBlock::image_content(IMAGE_BASE64.to_string(), "image/png".to_string()),
+                ContentBlock::embedded_text_resource(
                     "test://mixed-content-resource",
                     "application/json",
                     r#"{"test":"data","value":123}"#,
@@ -161,8 +161,8 @@ pub struct TestErrorHandling {
 impl TestErrorHandling {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
         Ok(CallToolResult {
-            content: vec![Content::text(
-                "This tool intentionally returns an error for testing",
+            content: vec![ContentBlock::text_content(
+                "This tool intentionally returns an error for testing".to_string(),
             )],
             is_error: Some(true),
             meta: None,
@@ -289,8 +289,8 @@ impl TestSampling {
 
         if !runtime.client_supports_sampling().unwrap_or(false) {
             return Ok(CallToolResult {
-                content: vec![Content::text(
-                    "Error: Client does not support sampling capability",
+                content: vec![ContentBlock::text_content(
+                    "Error: Client does not support sampling capability".to_string(),
                 )],
                 is_error: Some(true),
                 meta: None,
