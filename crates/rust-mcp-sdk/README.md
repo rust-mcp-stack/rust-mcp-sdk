@@ -23,7 +23,7 @@ Focus on your application logic , rust-mcp-sdk handles the protocol, transports,
 
 ### ⚠ Upgrading from v0.9.x
 
-v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, please review the [migration guide](../../doc/migration/v0.9.x-to-v0.10.x.md).
+v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, please review the [migration guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/doc/migration/v0.9.x-to-v0.10.x.md).
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
