@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.0...rust-mcp-axum-v0.2.1) (2026-06-24)
+
+
+### 🐛 Bug Fixes
+
+* Missig version in mcp-actix and mc-axum ([c33d2e6](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/c33d2e6800ac79af60b0affaa5d5cbe192b76d74))
+
 ## [0.2.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.1.0...rust-mcp-axum-v0.2.0) (2026-06-24)
 
 
