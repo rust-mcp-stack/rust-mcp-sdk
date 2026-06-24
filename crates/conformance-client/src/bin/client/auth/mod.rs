@@ -7,7 +7,7 @@
 //!   - [`discovery`]: probe the MCP server for a 401, follow the
 //!     `WWW-Authenticate` + RFC 9728 PRM chain to find the authorization
 //!     server, and pick the OAuth scope (SEP-835 priority order).
-//!   - [`token`]: build an [`McpAuthClient`], then acquire an access
+//!   - [`token`]: build an `McpAuthClient`, then acquire an access
 //!     token via PKCE authorization code if the AS supports it, otherwise
 //!     via client credentials.
 //!   - [`scope_step_up`]: if the first call to `tools/list` or

@@ -1,14 +1,18 @@
 use crate::auth::AuthInfo;
 use crate::mcp_http::types::GenericBody;
 use crate::schema::schema_utils::{ClientMessage, SdkError};
+#[cfg(feature = "server")]
 use crate::McpServer;
 use crate::{
     error::SdkResult,
     mcp_http::{McpAppState, McpHttpError, McpHttpResult},
+    utils::validate_mcp_protocol_version,
+};
+#[cfg(feature = "server")]
+use crate::{
     mcp_runtimes::server_runtime::DEFAULT_STREAM_ID,
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{IdGenerator, McpServerHandler},
-    utils::validate_mcp_protocol_version,
 };
 use bytes::Bytes;
 use futures::stream;
@@ -141,6 +145,7 @@ pub async fn error_message_from_response(
     response.text().await.unwrap_or(default_message.to_owned())
 }
 
+#[cfg(feature = "server")]
 async fn create_sse_stream(
     runtime: Arc<ServerRuntime>,
     session_id: SessionId,
@@ -331,6 +336,7 @@ fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
     }
 }
 
+#[cfg(feature = "server")]
 pub(crate) async fn create_standalone_stream(
     session_id: SessionId,
     last_event_id: Option<EventId>,
@@ -372,6 +378,7 @@ pub(crate) async fn create_standalone_stream(
     Ok(response)
 }
 
+#[cfg(feature = "server")]
 pub(crate) async fn start_new_session(
     state: Arc<McpAppState>,
     payload: &str,
@@ -419,6 +426,7 @@ pub(crate) async fn start_new_session(
     }
     response
 }
+#[cfg(feature = "server")]
 async fn single_shot_stream(
     runtime: Arc<ServerRuntime>,
     session_id: SessionId,
@@ -519,6 +527,7 @@ async fn single_shot_stream(
     }
 }
 
+#[cfg(feature = "server")]
 pub(crate) async fn process_incoming_message_return(
     session_id: SessionId,
     state: Arc<McpAppState>,
@@ -546,6 +555,7 @@ pub(crate) async fn process_incoming_message_return(
     }
 }
 
+#[cfg(feature = "server")]
 pub(crate) async fn process_incoming_message(
     session_id: SessionId,
     state: Arc<McpAppState>,
@@ -602,6 +612,7 @@ pub(crate) fn is_empty_sse_message(sse_payload: &str) -> bool {
     sse_payload.is_empty() || sse_payload.trim() == ":"
 }
 
+#[cfg(feature = "server")]
 pub(crate) async fn delete_session(
     session_id: SessionId,
     state: Arc<McpAppState>,
@@ -719,7 +730,7 @@ pub(crate) fn query_param(request: &http::Request<&str>, key: &str) -> Option<St
     })
 }
 
-#[cfg(feature = "sse")]
+#[cfg(all(feature = "sse", feature = "server"))]
 pub(crate) async fn handle_sse_connection(
     state: Arc<McpAppState>,
     sse_message_endpoint: Option<&str>,
