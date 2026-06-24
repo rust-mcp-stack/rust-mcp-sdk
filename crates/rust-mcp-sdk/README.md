@@ -13,10 +13,13 @@
 
 
 A high-performance, asynchronous Rust toolkit for building MCP servers and clients.  
-Focus on your application logic - rust-mcp-sdk handles the protocol, transports, and the rest!  
-This SDK fully implements the latest MCP protocol version ([2025-11-25](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema)), with backward compatibility built-in.  
-`rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem.  It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.
 
+This SDK fully implements the latest MCP protocol version ([2025-11-25](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema)) and passes [100% of official MCP conformance tests](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml).  
+
+`rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem.  
+It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros for tools and user input elicitation.  
+
+Focus on your application logic , rust-mcp-sdk handles the protocol, transports, and the rest!  
 
 ### ⚠ Upgrading from v0.9.x
 
@@ -24,7 +27,7 @@ v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, plea
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
-- ✅ **100% MCP Conformance** - passes all official client (254/254) and server (40/40) conformance tests
+- ✅ **100% MCP Conformance** - passes all [official](https://github.com/modelcontextprotocol/conformance) client (254/254) and server (40/40) [conformance tests](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml)
 - ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
 - ✅ Framework Agnostic: Seamless **Axum**, **Actix**, and **BYO Server** integrations
 - ✅ Multi-client concurrency
