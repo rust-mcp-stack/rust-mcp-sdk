@@ -35,7 +35,7 @@ http-body-util = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 url = {workspace = true, optional=true, features=["serde"]}
 jsonwebtoken = {version="10.1", optional=true, features=["aws_lc_rs"]}
-sha2 = { version = "0.10", optional = true }
+sha2 = { version = "0.11", optional = true }
 reqwest = { workspace = true, default-features = false, features = [
     "stream",
     "rustls-tls",
