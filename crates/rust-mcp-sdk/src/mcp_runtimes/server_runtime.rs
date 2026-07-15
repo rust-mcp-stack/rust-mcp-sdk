@@ -24,7 +24,7 @@ use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{mpsc, oneshot, watch, RwLock, RwLockReadGuard};
+use tokio::sync::{mpsc, oneshot, watch, Notify, RwLock, RwLockReadGuard};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 const TASK_CHANNEL_CAPACITY: usize = 500;
@@ -55,6 +55,12 @@ pub struct ServerRuntime {
     server_details: Arc<InitializeResult>,
     session_id: Option<SessionId>,
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
+    /// Notified (via `notify_waiters`) immediately after the DEFAULT standalone
+    /// transport is stored in `transport_map`. Allows `create_standalone_stream`
+    /// to block until the transport is ready before returning the SSE response,
+    /// preventing the race where a subsequent `tools/call` POST arrives before
+    /// the transport is registered.
+    transport_ready: Notify,
     request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
     client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
@@ -456,9 +462,37 @@ impl ServerRuntime {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
         }
-        let mut transport_map = self.transport_map.write().await;
-        tracing::trace!("save transport for stream id : {}", stream_id);
-        *transport_map = Some(transport);
+        {
+            let mut transport_map = self.transport_map.write().await;
+            tracing::trace!("save transport for stream id : {}", stream_id);
+            *transport_map = Some(transport);
+        } // release write lock before notifying
+        self.transport_ready.notify_waiters();
+        Ok(())
+    }
+
+    /// Waits until the DEFAULT standalone transport has been stored in
+    /// `transport_map`. Returns immediately if it is already present.
+    ///
+    /// Returns `Err` if the timeout elapses, which indicates the
+    /// spawned `start_stream` task failed or hung before calling
+    /// `store_transport`.
+    pub(crate) async fn wait_for_transport_ready(&self, timeout: std::time::Duration) -> SdkResult<()> {
+        // Fast path: transport already stored — no need to wait.
+        if self.transport_map.read().await.is_some() {
+            return Ok(());
+        }
+        tracing::trace!("Waiting for DEFAULT transport to be stored…");
+        tokio::time::timeout(
+            timeout,
+            self.transport_ready.notified(),
+        )
+        .await
+        .map_err(|_| {
+            SdkError::internal_error()
+                .with_message("Timed out waiting for DEFAULT transport storage")
+        })?;
+        tracing::trace!("DEFAULT transport stored, proceeding.");
         Ok(())
     }
 
@@ -654,6 +688,7 @@ impl ServerRuntime {
             handler,
             session_id: Some(session_id),
             transport_map: tokio::sync::RwLock::new(None),
+            transport_ready: Notify::new(),
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
@@ -713,6 +748,7 @@ impl ServerRuntime {
             handler: options.handler,
             session_id: None,
             transport_map: tokio::sync::RwLock::new(Some(Arc::new(options.transport))),
+            transport_ready: Notify::new(),
             client_details_tx,
             client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
