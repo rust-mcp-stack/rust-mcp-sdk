@@ -383,7 +383,9 @@ pub(crate) async fn create_standalone_stream(
     runtime
         .wait_for_transport_ready(state.ping_interval)
         .await
-        .map_err(|err| McpHttpError::HttpError(format!("Failed waiting for transport readiness: {err}")))?;
+        .map_err(|err| {
+            McpHttpError::HttpError(format!("Failed waiting for transport readiness: {err}"))
+        })?;
 
     *response.status_mut() = StatusCode::OK;
     Ok(response)

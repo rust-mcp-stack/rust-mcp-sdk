@@ -477,21 +477,21 @@ impl ServerRuntime {
     /// Returns `Err` if the timeout elapses, which indicates the
     /// spawned `start_stream` task failed or hung before calling
     /// `store_transport`.
-    pub(crate) async fn wait_for_transport_ready(&self, timeout: std::time::Duration) -> SdkResult<()> {
+    pub(crate) async fn wait_for_transport_ready(
+        &self,
+        timeout: std::time::Duration,
+    ) -> SdkResult<()> {
         // Fast path: transport already stored — no need to wait.
         if self.transport_map.read().await.is_some() {
             return Ok(());
         }
         tracing::trace!("Waiting for DEFAULT transport to be stored…");
-        tokio::time::timeout(
-            timeout,
-            self.transport_ready.notified(),
-        )
-        .await
-        .map_err(|_| {
-            SdkError::internal_error()
-                .with_message("Timed out waiting for DEFAULT transport storage")
-        })?;
+        tokio::time::timeout(timeout, self.transport_ready.notified())
+            .await
+            .map_err(|_| {
+                SdkError::internal_error()
+                    .with_message("Timed out waiting for DEFAULT transport storage")
+            })?;
         tracing::trace!("DEFAULT transport stored, proceeding.");
         Ok(())
     }
