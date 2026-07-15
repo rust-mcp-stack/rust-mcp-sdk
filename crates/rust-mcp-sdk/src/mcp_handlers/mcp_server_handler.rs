@@ -88,7 +88,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ListResourcesResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ListResourcesRequest::method_value(),
+            ListResourcesRequest::method_value(),
         )))
     }
 
@@ -103,7 +103,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ListResourceTemplatesRequest::method_value(),
+            ListResourceTemplatesRequest::method_value(),
         )))
     }
 
@@ -118,7 +118,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ReadResourceResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ReadResourceRequest::method_value(),
+            ReadResourceRequest::method_value(),
         )))
     }
 
@@ -133,7 +133,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<Result, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &SubscribeRequest::method_value(),
+            SubscribeRequest::method_value(),
         )))
     }
 
@@ -148,7 +148,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<Result, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &UnsubscribeRequest::method_value(),
+            UnsubscribeRequest::method_value(),
         )))
     }
 
@@ -163,7 +163,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ListPromptsResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ListPromptsRequest::method_value(),
+            ListPromptsRequest::method_value(),
         )))
     }
 
@@ -178,7 +178,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<GetPromptResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &GetPromptRequest::method_value(),
+            GetPromptRequest::method_value(),
         )))
     }
 
@@ -193,7 +193,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ListToolsRequest::method_value(),
+            ListToolsRequest::method_value(),
         )))
     }
 
@@ -238,7 +238,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<Result, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &SetLevelRequest::method_value(),
+            SetLevelRequest::method_value(),
         )))
     }
 
@@ -253,7 +253,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<CompleteResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &CompleteRequest::method_value(),
+            CompleteRequest::method_value(),
         )))
     }
 
@@ -265,7 +265,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<GetTaskResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &GetTaskRequest::method_value(),
+            GetTaskRequest::method_value(),
         )))
     }
 
@@ -277,7 +277,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<GetTaskPayloadResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &GetTaskPayloadRequest::method_value(),
+            GetTaskPayloadRequest::method_value(),
         )))
     }
 
@@ -289,7 +289,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<CancelTaskResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &CancelTaskRequest::method_value(),
+            CancelTaskRequest::method_value(),
         )))
     }
 
@@ -301,7 +301,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     ) -> std::result::Result<ListTasksResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
-            &ListTasksRequest::method_value(),
+            ListTasksRequest::method_value(),
         )))
     }
 
