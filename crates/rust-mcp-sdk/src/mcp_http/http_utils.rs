@@ -374,6 +374,19 @@ pub(crate) async fn create_standalone_stream(
         last_event_id,
     )
     .await?;
+
+    // Wait for the DEFAULT transport to be stored in transport_map before
+    // returning the SSE response to the client. The spawned start_stream task
+    // inside create_sse_stream calls store_transport() asynchronously; we must
+    // block here so the client cannot send tools/call (which needs transport_map
+    // for reverse requests like sampling/createMessage) before it is ready.
+    runtime
+        .wait_for_transport_ready(state.ping_interval)
+        .await
+        .map_err(|err| {
+            McpHttpError::HttpError(format!("Failed waiting for transport readiness: {err}"))
+        })?;
+
     *response.status_mut() = StatusCode::OK;
     Ok(response)
 }
