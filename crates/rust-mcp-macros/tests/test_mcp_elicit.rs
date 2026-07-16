@@ -1,7 +1,7 @@
 use rust_mcp_macros::{mcp_elicit, JsonSchema};
 use rust_mcp_schema::{
     ElicitRequestFormParams, ElicitRequestParams, ElicitRequestUrlParams, ElicitResultContent,
-    RpcError,
+    PrimitiveSchemaDefinition, RpcError,
 };
 use std::collections::BTreeMap;
 
@@ -436,6 +436,42 @@ fn test_optional_fields_survive_form_schema_conversion() {
                     "`{field}` is missing from the form properties: the Option<T> type union was not collapsed back to its primitive"
                 );
             }
+
+            // Presence alone would still hold if the union collapsed to the wrong
+            // member, so pin the resolved schema kind of each optional field.
+            assert!(
+                matches!(
+                    properties.get("nickname"),
+                    Some(PrimitiveSchemaDefinition::StringSchema(_))
+                ),
+                "Option<String> should resolve to a string schema, got {:?}",
+                properties.get("nickname")
+            );
+            assert!(
+                matches!(
+                    properties.get("age"),
+                    Some(PrimitiveSchemaDefinition::NumberSchema(_))
+                ),
+                "Option<i32> should resolve to a number schema, got {:?}",
+                properties.get("age")
+            );
+            assert!(
+                matches!(
+                    properties.get("visits"),
+                    Some(PrimitiveSchemaDefinition::NumberSchema(_))
+                ),
+                "Option<i64> should resolve to a number schema, got {:?}",
+                properties.get("visits")
+            );
+            assert!(
+                matches!(
+                    properties.get("subscribed"),
+                    Some(PrimitiveSchemaDefinition::BooleanSchema(_))
+                ),
+                "Option<bool> should resolve to a boolean schema, got {:?}",
+                properties.get("subscribed")
+            );
+
             // Optionality stays encoded by `required`, not by the null union.
             assert_eq!(form.requested_schema.required, vec!["name"]);
         }
