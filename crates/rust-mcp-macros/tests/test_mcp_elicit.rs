@@ -401,3 +401,44 @@ fn readme_example_elicitation_url() {
     assert_eq!(user.tags, vec!["rust", "c++"]);
     assert_eq!(user.email.unwrap(), "alice@Borderland.com");
 }
+
+/// Regression guard for the `Option<T>` type-union encoding.
+///
+/// `Option<T>` fields emit the JSON-Schema-canonical union `{"type": ["X", "null"]}`.
+/// `PrimitiveSchemaDefinition::TryFrom` resolves a schema's type via `.as_str()`, which
+/// yields `None` for an array-valued `type`; the conversion then fails and
+/// `generate_form_schema` silently drops the field. The generator compensates by collapsing
+/// the union back to its non-null primitive for the form path only. Without that step every
+/// optional field disappears from the elicit form, so assert each one still survives.
+///
+/// Only primitive inner types are covered: `Vec<T>` maps to an array schema, which
+/// `PrimitiveSchemaDefinition` accepts solely as a multi-select enum (`items` carrying
+/// `enum`/`anyOf`), so a plain `Option<Vec<String>>` is dropped here for reasons unrelated
+/// to null-union handling.
+#[test]
+fn test_optional_fields_survive_form_schema_conversion() {
+    #[derive(Debug, Clone, JsonSchema)]
+    #[mcp_elicit(message = "Optional fields", mode = form)]
+    pub struct OptionalFields {
+        pub name: String,
+        pub nickname: Option<String>,
+        pub age: Option<i32>,
+        pub visits: Option<i64>,
+        pub subscribed: Option<bool>,
+    }
+
+    match OptionalFields::elicit_request_params() {
+        ElicitRequestParams::FormParams(form) => {
+            let properties = &form.requested_schema.properties;
+            for field in ["name", "nickname", "age", "visits", "subscribed"] {
+                assert!(
+                    properties.contains_key(field),
+                    "`{field}` is missing from the form properties: the Option<T> type union was not collapsed back to its primitive"
+                );
+            }
+            // Optionality stays encoded by `required`, not by the null union.
+            assert_eq!(form.requested_schema.required, vec!["name"]);
+        }
+        _ => panic!("Expected FormParams"),
+    }
+}
