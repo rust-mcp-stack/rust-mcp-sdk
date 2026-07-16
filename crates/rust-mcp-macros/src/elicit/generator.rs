@@ -176,9 +176,12 @@ pub fn generate_form_schema(
             // definitions whose `type` is a single scalar, so
             // `PrimitiveSchemaDefinition::TryFrom` resolves it via `.as_str()`.
             // That yields `None` for a union, the conversion fails, and the
-            // `filter_map` below drops the property. Project the union back to
-            // its non-null primitive for this conversion only; the full JSON
-            // schema emitted to clients keeps the union.
+            // `filter_map` below drops the property.
+            //
+            // Project the union back to its non-null primitive for this path
+            // only. Note which schema is which: this builds the elicit
+            // `requestedSchema`, so an elicitation client receives the
+            // projected scalar. The tool `inputSchema` keeps the union.
             fn __mcp_strip_null_from_type(
                 obj: &serde_json::Map<String, serde_json::Value>,
             ) -> serde_json::Map<String, serde_json::Value> {
