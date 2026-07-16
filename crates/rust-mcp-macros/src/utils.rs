@@ -290,15 +290,22 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                                 return quote! {
                                     {
                                         let mut map = #inner_schema;
-                                        // JSON Schema (Draft 7 / 2020-12) does NOT define "nullable" — that
-                                        // is an OpenAPI 3.0 extension keyword. The MCP spec references JSON
-                                        // Schema for the inputSchema field, and strict validators (notably
-                                        // the Anthropic API tool-call validator used by Claude sub-agents)
-                                        // reject the keyword. Encode "this field may be null" the canonical
-                                        // JSON Schema way: union the existing primitive `type` with "null"
-                                        // (`{"type": ["X", "null"]}`), or fall back to a top-level `anyOf`
-                                        // when the inner schema has no string `type` (e.g. nested object
-                                        // or `$ref` schemas).
+                                        // "nullable" is an OpenAPI 3.0 keyword that JSON Schema
+                                        // (Draft 7 / 2020-12, which MCP references for inputSchema)
+                                        // does not define. A conforming validator ignores it rather
+                                        // than rejecting it, which is exactly the problem: it asserts
+                                        // nothing, so the field still rejects the `null` that serde
+                                        // accepts for Option<T>. Encode nullability canonically instead.
+                                        //
+                                        // Widening `type` works whenever the inner schema has one:
+                                        // scalars, a Vec ("array") and a nested struct ("object") all
+                                        // do, and their type-specific keywords assert only against
+                                        // their own type, so `null` stays valid beside them. A derived
+                                        // enum emits `oneOf`/`enum` with no top-level `type`; there,
+                                        // widening is impossible and would be wrong anyway, since
+                                        // keywords in one schema object are conjunctive and a sibling
+                                        // `enum` would keep rejecting `null`. Wrap those in `anyOf` so
+                                        // the inner assertions stay intact.
                                         match map.get("type").cloned() {
                                             Some(serde_json::Value::String(t)) if t != "null" => {
                                                 map.insert(
