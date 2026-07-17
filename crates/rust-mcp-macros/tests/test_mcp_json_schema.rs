@@ -101,3 +101,50 @@ fn test_option_null_encoding_per_inner_shape() {
     // Optionality stays encoded by `required`, which no optional field joins.
     assert!(schema.get("required").is_none());
 }
+
+/// A type whose hand-written schema already carries an *array* `type`.
+///
+/// The derive recurses into this via `Option<MultiType>` (it calls the inherent
+/// `MultiType::json_schema()`), so the resulting `{"type":["string","integer"]}`
+/// reaches the array-`type` append arm in `type_to_json_schema`. That arm is the
+/// only place a pre-existing type *array* is widened with `"null"`; every derived
+/// inner shape emits either a scalar `type` (widened by the string arm) or an
+/// already-null-bearing `Option<Option<T>>` (the uniqueness path). Without this
+/// fixture the append arm can be neutered to a no-op and the suite still passes.
+struct MultiType;
+
+impl MultiType {
+    pub fn json_schema() -> serde_json::Map<String, serde_json::Value> {
+        match serde_json::json!({ "type": ["string", "integer"] }) {
+            serde_json::Value::Object(map) => map,
+            _ => unreachable!("object literal"),
+        }
+    }
+}
+
+/// Pins the array-`type` union append arm: `Option<T>` where `T`'s schema already
+/// has an array `type` must widen it to include `"null"`, not leave it untouched.
+///
+/// The whole field schema is compared by equality: a mutant that leaves the array
+/// as `["string","integer"]` rejects the `null` serde still deserializes to `None`,
+/// and a stray sibling keyword would make `null` invalid again — exact equality
+/// rules both out.
+#[test]
+fn test_option_widens_array_type_union() {
+    #[allow(unused)]
+    #[derive(JsonSchema)]
+    struct Holder {
+        pub multi: Option<MultiType>,
+    }
+
+    let schema = serde_json::Value::Object(Holder::json_schema());
+    let field = schema
+        .pointer("/properties/multi")
+        .expect("multi field present");
+
+    assert_eq!(
+        field,
+        &serde_json::json!({ "type": ["string", "integer", "null"] }),
+        "array-type union append arm did not widen type to include null"
+    );
+}
