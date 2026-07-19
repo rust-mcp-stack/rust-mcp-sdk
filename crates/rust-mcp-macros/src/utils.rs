@@ -326,7 +326,7 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                                             _ => {
                                                 // No primitive `type` to extend — wrap in anyOf so the schema
                                                 // remains JSON-Schema-valid.
-                                                let inner = serde_json::Value::Object(map.into_iter().collect());
+                                                let inner = serde_json::Value::Object(map);
                                                 let mut wrapper = serde_json::Map::new();
                                                 wrapper.insert(
                                                     "anyOf".to_string(),
