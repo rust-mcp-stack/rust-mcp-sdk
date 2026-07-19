@@ -467,7 +467,9 @@ impl ServerRuntime {
             tracing::trace!("save transport for stream id : {}", stream_id);
             *transport_map = Some(transport);
         } // release write lock before notifying
-        self.transport_ready.notify_waiters();
+        // ensure wait_for_transport_ready wont miss this wakeup regardless of
+        // scheduling order.
+        self.transport_ready.notify_one();
         Ok(())
     }
 
@@ -477,14 +479,25 @@ impl ServerRuntime {
     /// Returns `Err` if the timeout elapses, which indicates the
     /// spawned `start_stream` task failed or hung before calling
     /// `store_transport`.
+    ///
+    /// # Race-free logic
+    ///  - If the transport is already in the map → fast path returns.
+    ///  - If `store_transport` runs concurrently between the read and the
+    ///    `await` → the stored permit is immediately consumed; no hang.
+    ///  - If `store_transport` has not run yet → the task parks until
+    ///    `notify_one` fires.
+    ///
     pub(crate) async fn wait_for_transport_ready(
         &self,
         timeout: std::time::Duration,
     ) -> SdkResult<()> {
-        // Fast path: transport already stored — no need to wait.
+        // Fast path: transport already stored.
         if self.transport_map.read().await.is_some() {
             return Ok(());
         }
+        // Slow path: park until store_transport() fires notify_one().
+        // Because notify_one() stores a permit, we cannot miss the wakeup
+        // even if store_transport() ran between the read above and this await.
         tracing::trace!("Waiting for DEFAULT transport to be stored…");
         tokio::time::timeout(timeout, self.transport_ready.notified())
             .await
