@@ -357,7 +357,7 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 /// # Limitations
 /// - Supports only structs with named fields (e.g., `struct S { field: Type }`).
 /// - Nested structs must also derive `JsonSchema`, or compilation will fail.
-/// - Unknown types are mapped to `{"type": "unknown"}`.
+/// - Unrecognised types emit an empty schema `{}` (any value accepted).
 /// - Type paths must be in scope (e.g., fully qualified paths like `my_mod::InnerStruct` work if imported).
 ///
 /// # Panics
