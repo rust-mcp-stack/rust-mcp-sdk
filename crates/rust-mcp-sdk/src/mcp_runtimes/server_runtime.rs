@@ -491,13 +491,10 @@ impl ServerRuntime {
         &self,
         timeout: std::time::Duration,
     ) -> SdkResult<()> {
-        // Fast path: transport already stored.
-        if self.transport_map.read().await.is_some() {
-            return Ok(());
-        }
-        // Slow path: park until store_transport() fires notify_one().
-        // Because notify_one() stores a permit, we cannot miss the wakeup
-        // even if store_transport() ran between the read above and this await.
+        // transport_map it might contain a stale transport from a previous connection
+        // whose keep_alive task hasn't timed out yet.
+        // so we wait for the explicit signal from the new connection's `store_transport`.
+        // instead of checking is_some()
         tracing::trace!("Waiting for DEFAULT transport to be stored…");
         tokio::time::timeout(timeout, self.transport_ready.notified())
             .await
@@ -510,7 +507,11 @@ impl ServerRuntime {
     }
 
     //TODO: re-visit and simplify unnecessary hashmap
-    pub(crate) async fn remove_transport(&self, stream_id: &str, transport_to_remove: &TransportType) -> SdkResult<()> {
+    pub(crate) async fn remove_transport(
+        &self,
+        stream_id: &str,
+        transport_to_remove: &TransportType,
+    ) -> SdkResult<()> {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
         }
