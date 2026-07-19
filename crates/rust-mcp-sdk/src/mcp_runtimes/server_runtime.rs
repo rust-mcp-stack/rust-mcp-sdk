@@ -28,6 +28,10 @@ use tokio::sync::{mpsc, oneshot, watch, Notify, RwLock, RwLockReadGuard};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 const TASK_CHANNEL_CAPACITY: usize = 500;
+/// How long `send()` waits for a live DEFAULT standalone transport before
+/// failing a server-initiated request (e.g. elicitation/sampling) when the
+/// GET SSE stream has not been registered yet, or the previous one shut down.
+const DEFAULT_TRANSPORT_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 
 tokio::task_local! {
     /// Per-request transport for sending notifications on the POST response SSE stream.
@@ -37,7 +41,7 @@ tokio::task_local! {
 }
 
 // Define a type alias for the TransportDispatcher trait object
-type TransportType = Arc<
+pub(crate) type TransportType = Arc<
     dyn TransportDispatcher<
         ClientMessages,
         MessageFromServer,
@@ -54,12 +58,19 @@ pub struct ServerRuntime {
     // Information about the server
     server_details: Arc<InitializeResult>,
     session_id: Option<SessionId>,
+    /// Holds the latest DEFAULT standalone transport, which may be alive or
+    /// shut down. A shut-down entry is deliberately retained as an event-store
+    /// sink: `write_str` persists outgoing events to the event store before
+    /// attempting the (failing) socket write, so messages sent while the
+    /// client is briefly disconnected can be replayed after it reconnects.
+    /// `None` means no transport was stored yet, or the session was shut down.
+    /// Liveness must be judged via `is_shut_down()`, not by `is_some()`.
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
-    /// Notified (via `notify_waiters`) immediately after the DEFAULT standalone
+    /// Signaled (via `notify_one`) immediately after the DEFAULT standalone
     /// transport is stored in `transport_map`. Allows `create_standalone_stream`
-    /// to block until the transport is ready before returning the SSE response,
-    /// preventing the race where a subsequent `tools/call` POST arrives before
-    /// the transport is registered.
+    /// and `send()` to wait until a live transport is available, preventing the
+    /// race where a request (e.g. `elicitation/create`, `sampling/createMessage`)
+    /// is sent before the transport is registered.
     transport_ready: Notify,
     request_id_gen: Box<dyn RequestIdGen>,
     client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
@@ -178,12 +189,24 @@ impl McpServer for ServerRuntime {
             observer.on_send(&mcp_message);
         }
 
-        let transport_map = self.transport_map.read().await;
-        let transport = transport_map.as_ref().ok_or(
-            RpcError::internal_error()
-                .with_message("transport stream does not exists or is closed!".to_string()),
-        )?;
+        let transport = if is_notification {
+            // use the current DEFAULT transport even if it is shut down. A shut-down standalone
+            // transport still persists the event to the event store so it can be replayed
+            // when the client reconnects.
+            let transport_map = self.transport_map.read().await;
+            transport_map.as_ref().cloned().ok_or(
+                RpcError::internal_error()
+                    .with_message("transport stream does not exists or is closed!".to_string()),
+            )?
+        } else {
+            // wait for the DEFAULT standalone transport to be registered (and alive) instead of failing
+            // instantly when the GET SSE stream has not been processed yet, or a shut-down transport from a previous connection is still in the map.
+            self.wait_for_live_default_transport(DEFAULT_TRANSPORT_WAIT_TIMEOUT)
+                .await?
+        };
 
+        // The read guard is dropped above, before `send_message()` is
+        // awaited, so the lock is never held across a request round-trip.
         let response = transport
             .send_message(ServerMessages::Single(mcp_message), request_timeout)
             .await?
@@ -467,12 +490,61 @@ impl ServerRuntime {
             tracing::trace!("save transport for stream id : {}", stream_id);
             *transport_map = Some(transport);
         } // release write lock before notifying
-        self.transport_ready.notify_waiters();
+          // ensure wait_for_transport_ready wont miss this wakeup regardless of
+          // scheduling order.
+        self.transport_ready.notify_one();
         Ok(())
     }
 
     /// Waits until the DEFAULT standalone transport has been stored in
-    /// `transport_map`. Returns immediately if it is already present.
+    /// `transport_map` and is alive (not shut down), then returns a clone of it.
+    ///
+    /// Returns `Err` if the timeout elapses, which indicates the spawned
+    /// `start_stream` task failed or hung before calling `store_transport`,
+    /// or no live standalone stream exists.
+    ///
+    /// # Race-free logic
+    ///  - Fast path: a live transport is already in the map → returned immediately.
+    ///  - `store_transport()` fires `notify_one()`, whose stored permit guarantees
+    ///    no missed wakeup if it ran between the map check and the `await`.
+    ///  - On every wakeup the map is re-checked, so a stale/shut-down entry
+    ///    (e.g. from a previous connection) is never returned.
+    ///  - A cascading `notify_one()` re-arms the permit so other parked waiters
+    ///    also get to re-check the map.
+    async fn wait_for_live_default_transport(
+        &self,
+        timeout: std::time::Duration,
+    ) -> SdkResult<TransportType> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            {
+                let transport_map = self.transport_map.read().await;
+                if let Some(transport) = transport_map.as_ref() {
+                    if !transport.is_shut_down().await {
+                        // Cascade the wakeup so other parked waiters re-check the map.
+                        self.transport_ready.notify_one();
+                        return Ok(transport.clone());
+                    }
+                }
+            }
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return Err(SdkError::internal_error()
+                    .with_message("Timed out waiting for DEFAULT transport storage")
+                    .into());
+            }
+            tracing::trace!("Waiting for a live DEFAULT transport to be stored…");
+            tokio::time::timeout(deadline - now, self.transport_ready.notified())
+                .await
+                .map_err(|_| {
+                    SdkError::internal_error()
+                        .with_message("Timed out waiting for DEFAULT transport storage")
+                })?;
+        }
+    }
+
+    /// Waits until the DEFAULT standalone transport has been stored in
+    /// `transport_map` and is alive. Returns immediately if it already is.
     ///
     /// Returns `Err` if the timeout elapses, which indicates the
     /// spawned `start_stream` task failed or hung before calling
@@ -481,32 +553,34 @@ impl ServerRuntime {
         &self,
         timeout: std::time::Duration,
     ) -> SdkResult<()> {
-        // Fast path: transport already stored — no need to wait.
-        if self.transport_map.read().await.is_some() {
-            return Ok(());
-        }
-        tracing::trace!("Waiting for DEFAULT transport to be stored…");
-        tokio::time::timeout(timeout, self.transport_ready.notified())
+        self.wait_for_live_default_transport(timeout)
             .await
-            .map_err(|_| {
-                SdkError::internal_error()
-                    .with_message("Timed out waiting for DEFAULT transport storage")
-            })?;
-        tracing::trace!("DEFAULT transport stored, proceeding.");
-        Ok(())
+            .map(|_| ())
     }
 
     //TODO: re-visit and simplify unnecessary hashmap
-    pub(crate) async fn remove_transport(&self, stream_id: &str) -> SdkResult<()> {
+    pub(crate) async fn remove_transport(
+        &self,
+        stream_id: &str,
+        transport_to_remove: &TransportType,
+    ) -> SdkResult<()> {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
         }
+        // Shut down the matching transport but deliberately LEAVE it in
+        // `transport_map`: a shut-down standalone transport still persists
+        // outgoing events to the event store (`write_str` stores before
+        // writing), so server-initiated messages sent while the client is
+        // briefly disconnected can be replayed after it reconnects.
+        // The `ptr_eq` guard ensures a stale stream's teardown never shuts
+        // down the transport of a newer connection.
         let transport_map = self.transport_map.read().await;
-        tracing::trace!("removing transport for stream id : {}", stream_id);
-        if let Some(transport) = transport_map.as_ref() {
-            transport.shut_down().await?;
+        if let Some(current_transport) = transport_map.as_ref() {
+            if Arc::ptr_eq(current_transport, transport_to_remove) {
+                tracing::trace!("shutting down transport for stream id : {}", stream_id);
+                current_transport.shut_down().await?;
+            }
         }
-        // transport_map.remove(stream_id);
         Ok(())
     }
 
@@ -567,7 +641,7 @@ impl ServerRuntime {
         // payload would be message payload coming from the client
         if let Some(payload) = payload {
             if let Err(err) = transport.consume_string_payload(&payload).await {
-                let _ = self.remove_transport(stream_id).await;
+                let _ = self.remove_transport(stream_id, &transport).await;
                 return Err(err.into());
             }
         }
@@ -661,9 +735,9 @@ impl ServerRuntime {
                     while let Some(result) = rx.recv().await {
                         result?; // Propagate errors
                     }
-                                self.remove_transport(stream_id).await?;
-                                // Disconnection detected by keep-alive task
-                                return Err(SdkError::connection_closed().into());
+                    self.remove_transport(stream_id, &transport).await?;
+                    // Disconnection detected by keep-alive task
+                    return Err(SdkError::connection_closed().into());
 
                 }
             }
