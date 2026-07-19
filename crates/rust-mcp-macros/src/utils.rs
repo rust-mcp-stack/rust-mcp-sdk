@@ -364,9 +364,8 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                     };
                 }
-                // Handle imported serde_json::Value (single-segment, mirroring the 2-segment case above)
-                else if ident == "Value" {
-                    return quote! {
+// Handle imported serde_json::Value (single-segment, mirroring the 2-segment case above)
+                else if ident == "Value" && segment.arguments.is_empty() {
                         {
                             let mut map = serde_json::Map::new();
                             #description_quote
