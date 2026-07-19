@@ -467,8 +467,8 @@ impl ServerRuntime {
             tracing::trace!("save transport for stream id : {}", stream_id);
             *transport_map = Some(transport);
         } // release write lock before notifying
-        // ensure wait_for_transport_ready wont miss this wakeup regardless of
-        // scheduling order.
+          // ensure wait_for_transport_ready wont miss this wakeup regardless of
+          // scheduling order.
         self.transport_ready.notify_one();
         Ok(())
     }
