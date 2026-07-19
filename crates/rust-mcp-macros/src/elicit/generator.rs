@@ -168,12 +168,55 @@ pub fn generate_form_schema(
 ) -> proc_macro2::TokenStream {
     quote! {
         {
+            // Companion to the JSON-Schema-canonical `Option<T>` emission: an
+            // optional field's schema uses the type union `{"type": ["X", "null"]}`
+            // rather than the OpenAPI 3.0 `nullable` extension keyword.
+            //
+            // An elicit form schema is deliberately restricted to primitive
+            // definitions whose `type` is a single scalar, so
+            // `PrimitiveSchemaDefinition::TryFrom` resolves it via `.as_str()`.
+            // That yields `None` for a union, the conversion fails, and the
+            // `filter_map` below drops the property.
+            //
+            // Project the union back to its non-null primitive for this path
+            // only. Note which schema is which: this builds the elicit
+            // `requestedSchema`, so an elicitation client receives the
+            // projected scalar. The tool `inputSchema` keeps the union.
+            fn __mcp_strip_null_from_type(
+                obj: &serde_json::Map<String, serde_json::Value>,
+            ) -> serde_json::Map<String, serde_json::Value> {
+                let mut out = obj.clone();
+                if let Some(serde_json::Value::Array(arr)) = out.get("type").cloned() {
+                    // Collapse only the exact `[T, "null"]` union this derive emits for
+                    // `Option<T>`. A `type` union is order-independent and may legitimately
+                    // carry several non-null members; picking one of those would silently
+                    // change the schema's meaning. Anything else is left untouched so the
+                    // conversion below rejects it instead of guessing.
+                    let null_count = arr.iter().filter(|v| v.as_str() == Some("null")).count();
+                    let non_null: Vec<&str> = arr
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .filter(|s| *s != "null")
+                        .collect();
+                    if arr.len() == 2 && null_count == 1 && non_null.len() == 1 {
+                        out.insert(
+                            "type".to_string(),
+                            serde_json::Value::String(non_null[0].to_string()),
+                        );
+                    }
+                }
+                out
+            }
+
             let json = #struct_name::json_schema();
             let properties = json.get("properties")
                 .and_then(|v| v.as_object())
                 .into_iter()
                 .flatten()
-                .filter_map(|(k, v)| #base::PrimitiveSchemaDefinition::try_from(v.as_object()?).ok().map(|def| (k.clone(), def)))
+                .filter_map(|(k, v)| {
+                    let normalized = __mcp_strip_null_from_type(v.as_object()?);
+                    #base::PrimitiveSchemaDefinition::try_from(&normalized).ok().map(|def| (k.clone(), def))
+                })
                 .collect();
 
             let required = json.get("required")
