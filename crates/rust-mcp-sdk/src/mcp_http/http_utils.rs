@@ -196,6 +196,7 @@ async fn create_sse_stream(
     let runtime_clone = Arc::clone(&runtime);
     let stream_id_clone = stream_id.clone();
     let transport_clone = transport.clone();
+    let transport_for_remove: crate::mcp_runtimes::server_runtime::TransportType = transport.clone();
 
     //Start the server runtime
     tokio::spawn(async move {
@@ -211,7 +212,7 @@ async fn create_sse_stream(
             Ok(_) => tracing::trace!("stream {} exited gracefully.", &stream_id_clone),
             Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id_clone, err),
         }
-        let _ = runtime.remove_transport(&stream_id_clone).await;
+        let _ = runtime.remove_transport(&stream_id_clone, &transport_for_remove).await;
     });
 
     // Construct SSE stream
@@ -467,13 +468,15 @@ async fn single_shot_stream(
     };
     let ping_interval = state.ping_interval;
     let runtime_clone = Arc::clone(&runtime);
+    let transport_arc = Arc::new(transport);
+    let transport_for_remove: crate::mcp_runtimes::server_runtime::TransportType = transport_arc.clone();
 
     let payload_string = payload.map(|p| p.to_string());
 
     tokio::spawn(async move {
         match runtime_clone
             .start_stream(
-                Arc::new(transport),
+                transport_arc,
                 &stream_id,
                 ping_interval,
                 payload_string,
@@ -483,7 +486,7 @@ async fn single_shot_stream(
             Ok(_) => tracing::info!("stream {} exited gracefully.", &stream_id),
             Err(err) => tracing::info!("stream {} exited with error : {}", &stream_id, err),
         }
-        let _ = runtime.remove_transport(&stream_id).await;
+        let _ = runtime.remove_transport(&stream_id, &transport_for_remove).await;
     });
 
     let mut reader = BufReader::new(write_rx);

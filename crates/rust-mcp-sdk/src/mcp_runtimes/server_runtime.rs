@@ -37,7 +37,7 @@ tokio::task_local! {
 }
 
 // Define a type alias for the TransportDispatcher trait object
-type TransportType = Arc<
+pub(crate) type TransportType = Arc<
     dyn TransportDispatcher<
         ClientMessages,
         MessageFromServer,
@@ -510,12 +510,19 @@ impl ServerRuntime {
     }
 
     //TODO: re-visit and simplify unnecessary hashmap
-    pub(crate) async fn remove_transport(&self, stream_id: &str) -> SdkResult<()> {
+    pub(crate) async fn remove_transport(&self, stream_id: &str, transport_to_remove: &TransportType) -> SdkResult<()> {
         if stream_id != DEFAULT_STREAM_ID {
             return Ok(());
         }
         let mut transport_map = self.transport_map.write().await;
-        if let Some(transport) = transport_map.take() {
+        let should_remove = if let Some(current_transport) = transport_map.as_ref() {
+            Arc::ptr_eq(current_transport, transport_to_remove)
+        } else {
+            false
+        };
+
+        if should_remove {
+            let transport = transport_map.take().unwrap();
             tracing::trace!("removing transport for stream id : {}", stream_id);
             drop(transport_map);
             transport.shut_down().await?;
@@ -580,7 +587,7 @@ impl ServerRuntime {
         // payload would be message payload coming from the client
         if let Some(payload) = payload {
             if let Err(err) = transport.consume_string_payload(&payload).await {
-                let _ = self.remove_transport(stream_id).await;
+                let _ = self.remove_transport(stream_id, &transport).await;
                 return Err(err.into());
             }
         }
@@ -674,9 +681,9 @@ impl ServerRuntime {
                     while let Some(result) = rx.recv().await {
                         result?; // Propagate errors
                     }
-                                self.remove_transport(stream_id).await?;
-                                // Disconnection detected by keep-alive task
-                                return Err(SdkError::connection_closed().into());
+                    self.remove_transport(stream_id, &transport).await?;
+                    // Disconnection detected by keep-alive task
+                    return Err(SdkError::connection_closed().into());
 
                 }
             }
