@@ -342,7 +342,17 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Features
 /// - **Basic Types:** Maps `String` to `"string"`, `i32` to `"integer"`, `bool` to `"boolean"`, etc.
-/// - **`Option<T>`:** Adds `"nullable": true` to the schema of the inner type, indicating the field is optional.
+/// - **`Option<T>`:** Encodes nullability the JSON-Schema-canonical way. When the inner schema
+///   has a string `type` — `"string"` and `"integer"`, but equally `"object"` for a nested
+///   struct and `"array"` for a `Vec` — it is widened to a type union `["X", "null"]`.
+///   Type-specific keywords (`properties`, `items`, `minLength`, `format`, …) only assert
+///   against their own type, so `null` remains valid alongside them. When the inner schema
+///   already has an array `type`, `"null"` is appended. When it has no `type` at all — the
+///   shape a derived enum emits, using `oneOf`/`enum` — the inner schema is wrapped in
+///   `{"anyOf": [<inner>, {"type": "null"}]}`, which keeps the inner assertions intact rather
+///   than widening past them. The OpenAPI 3.0 keyword `"nullable": true` is not emitted: it
+///   carries no meaning in JSON Schema, so it never actually permitted `null` in the first
+///   place.
 /// - **`Vec<T>`:** Generates an `"array"` schema with an `"items"` field describing the inner type.
 /// - **Nested Structs:** Recursively includes the schema of nested structs (assumed to derive `JsonSchema`),
 ///   embedding their `"properties"` and `"required"` fields.
