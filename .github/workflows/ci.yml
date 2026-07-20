@@ -79,7 +79,7 @@ jobs:
 
       # install nodejs that is required for tests
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24" # Stable Node.js version
         # Verify npx is available
