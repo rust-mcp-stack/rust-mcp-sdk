@@ -12,7 +12,7 @@ use rust_mcp_sdk::{
 };
 use std::sync::Arc;
 
-const MCP_SERVER_URL: &str = "http://127.0.0.1:3001/mcp";
+const MCP_SERVER_URL: &str = "https://gateway.mcpservers.org/yahoo-finance/mcp";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {

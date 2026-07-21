@@ -77,12 +77,16 @@ impl SseParser {
             }
         }
 
-        // Put back any incomplete message
+        // Put back any incomplete message, preserving partial bytes
+        // that were after the last \n (self.buffer after the while loop).
+        // this prevents data loss when data is received in multiple chunks (like from Cloudflare workers (Issue: #199))
         if !current_message_lines.is_empty() {
-            self.buffer.clear();
-            for line in current_message_lines {
-                self.buffer.extend_from_slice(&line);
+            let mut new_buf = BytesMut::new();
+            for line in current_message_lines.into_iter() {
+                new_buf.extend_from_slice(&line);
             }
+            new_buf.extend_from_slice(&self.buffer);
+            self.buffer = new_buf;
         }
 
         events
@@ -268,6 +272,70 @@ mod tests {
         assert_eq!(
             events2[0].data.as_deref(),
             Some(Bytes::from("hello world\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_data_line_across_chunks_with_preceding_event_line() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("event: message\ndata: ");
+        let part2 = Bytes::from("hello\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 0);
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 1);
+        assert_eq!(events2[0].event.as_deref(), Some("message"));
+        assert_eq!(
+            events2[0].data.as_deref(),
+            Some(Bytes::from("hello\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_data_line_across_multiple_chunks_with_preceding_event() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("event: message\ndata: alpha bra");
+        let part2 = Bytes::from("vo charlie del");
+        let part3 = Bytes::from("ta echo foxtrot\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 0);
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 0);
+
+        let events3 = parser.process_new_chunk(part3);
+        assert_eq!(events3.len(), 1);
+        assert_eq!(events3[0].event.as_deref(), Some("message"));
+        assert_eq!(
+            events3[0].data.as_deref(),
+            Some(Bytes::from("alpha bravo charlie delta echo foxtrot\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_multiple_events_split_across_chunks() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("data: one\n\ndata: t");
+        let part2 = Bytes::from("wo\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 1);
+        assert_eq!(
+            events1[0].data.as_deref(),
+            Some(Bytes::from("one\n").as_ref())
+        );
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 1);
+        assert_eq!(
+            events2[0].data.as_deref(),
+            Some(Bytes::from("two\n").as_ref())
         );
     }
 
