@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.1.5](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.4...rust-mcp-actix-v0.1.5) (2026-07-21)
+
 ## [0.1.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.3...rust-mcp-actix-v0.1.4) (2026-06-24)
 
 

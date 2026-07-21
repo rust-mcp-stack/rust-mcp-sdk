@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.10.0...rust-mcp-sdk-v0.10.1) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* Prevent stdio stderr monitor busy loop ([#216](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/216)) ([fceead9](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/fceead9f571347d456e3550b7506efbe2e44a416))
+* Race condition in the Streamable HTTP transport setup ([#197](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/197)) ([44e50c8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/44e50c8dd51fe7a9feca57c4d854f1e09e81dac1))
+* Race free logic , fixing tools-call-sampling and tools-call-elicitation conformance failures. ([48d8b01](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/48d8b013c0174f3a48a2bb13688eeb812f4cdb73))
+* Resolve infinite test hang and conformance race with liveness-aware ([#202](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/202)) ([e0d8279](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e0d827930f7ea6eb1b1b494a4aa5bd4cd2ea5ab6))
+* **server:** Resolve race condition in SSE transport tear-down ([7586a2b](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/7586a2bcede97fcffb41c5266364d7b0e4bf4f32))
+
 ## [0.10.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.9.0...rust-mcp-sdk-v0.10.0) (2026-06-24)
 
 

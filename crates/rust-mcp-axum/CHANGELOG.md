@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.2.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.3...rust-mcp-axum-v0.2.4) (2026-07-21)
+
 ## [0.2.3](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.2...rust-mcp-axum-v0.2.3) (2026-06-24)
 
 

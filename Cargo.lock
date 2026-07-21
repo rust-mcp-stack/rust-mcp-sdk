@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "conformance-client"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "conformance-server"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "axum",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-actix"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "actix-http",
  "actix-rt",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-axum"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-trait",
  "axum",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-extra"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -2327,7 +2327,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-macros"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2349,7 +2349,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "async-trait",
  "base64",
@@ -2383,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-transport"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "async-trait",
  "bytes",
