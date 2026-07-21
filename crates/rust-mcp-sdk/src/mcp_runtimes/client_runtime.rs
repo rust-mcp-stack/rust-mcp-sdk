@@ -25,7 +25,7 @@ use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
 use rust_mcp_transport::{IoStream, SessionId, StreamId, TaskId, TransportDispatcher};
 use std::{sync::Arc, time::Duration};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, Lines};
 use tokio::sync::{watch, Mutex};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
@@ -39,6 +39,13 @@ type TransportDispatcherType = dyn TransportDispatcher<
     ClientMessage,
 >;
 type TransportType = Arc<TransportDispatcherType>;
+
+async fn next_process_error<R>(reader: &mut Lines<BufReader<R>>) -> std::io::Result<Option<String>>
+where
+    R: AsyncRead + Unpin,
+{
+    reader.next_line().await
+}
 
 pub struct McpClientOptions<T>
 where
@@ -254,7 +261,6 @@ impl ClientRuntime {
         //TODO: improve the flow
         let mut stream = transport.start().await?;
 
-        let transport_clone = transport.clone();
         let mut error_io_stream = transport.error_stream().write().await;
         let error_io_stream = error_io_stream.take();
 
@@ -268,29 +274,20 @@ impl ClientRuntime {
             if let Some(IoStream::Readable(error_input)) = error_io_stream {
                 let mut reader = BufReader::new(error_input).lines();
                 loop {
-                    tokio::select! {
-                        should_break = transport_clone.is_shut_down() =>{
-                            if should_break {
-                                break;
-                            }
+                    match next_process_error(&mut reader).await {
+                        Ok(Some(error_message)) => {
+                            self_ref
+                                .handler
+                                .handle_process_error(error_message, self_ref)
+                                .await?;
                         }
-                        line = reader.next_line() =>{
-                            match line {
-                                Ok(Some(error_message)) => {
-                                    self_ref
-                                        .handler
-                                        .handle_process_error(error_message, self_ref)
-                                        .await?;
-                                }
-                                Ok(None) => {
-                                    // end of input
-                                    break;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error reading from std_err: {e}");
-                                    break;
-                                }
-                            }
+                        Ok(None) => {
+                            // Transport shutdown terminates the child and closes stderr.
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("Error reading from std_err: {e}");
+                            break;
                         }
                     }
                 }
@@ -892,5 +889,47 @@ impl McpClient for ClientRuntime {
             }
         }
         let _ = self.shut_down().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::task::{Context, Poll};
+    use tokio::io::ReadBuf;
+
+    struct PendingReader {
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl AsyncRead for PendingReader {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.polls.fetch_add(1, Ordering::Relaxed);
+            Poll::Pending
+        }
+    }
+
+    #[tokio::test]
+    async fn process_error_reader_waits_without_busy_polling() {
+        let polls = Arc::new(AtomicUsize::new(0));
+        let input = PendingReader {
+            polls: Arc::clone(&polls),
+        };
+        let mut lines = BufReader::new(input).lines();
+
+        let result =
+            tokio::time::timeout(Duration::from_millis(25), next_process_error(&mut lines)).await;
+
+        assert!(result.is_err(), "pending stderr should remain pending");
+        assert!(
+            polls.load(Ordering::Relaxed) <= 2,
+            "idle stderr was polled repeatedly"
+        );
     }
 }
