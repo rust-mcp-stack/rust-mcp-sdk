@@ -148,9 +148,10 @@ impl MCPStream {
                                 tx.send(message).await.map_err(GenericSendError::new)?;
                             }
                             Err(e) => {
-                                // Handle error in reading from readable_std
+                                tracing::error!("Error reading from readable stream: {e}");
+                                // Handle error in reading from stream
                                 return Err(TransportError::ProcessError(format!(
-                                    "Error reading from readable_std: {e}"
+                                    "Error reading from readable stream: {e}"
                                 )));
                             }
                         }
