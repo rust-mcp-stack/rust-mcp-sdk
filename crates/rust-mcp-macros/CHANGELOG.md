@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.1...rust-mcp-macros-v0.9.2) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* **macros:** Emit Option&lt;T&gt; as a JSON Schema type union instead of the OpenAPI nullable keyword ([#200](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/200)) ([4444c6c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4444c6cd381822b83b7fa0d7f21d77e1d6fdc9a4))
+
 ## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.0...rust-mcp-macros-v0.9.1) (2026-06-24)
 
 

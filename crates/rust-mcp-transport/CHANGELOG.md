@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.9.1...rust-mcp-transport-v0.9.2) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* Preserve partial bytes in SSE parser when putting back incomplete lines ([#217](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/217)) ([83e3114](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/83e31140853acfcabfb62a3653157d306917196b))
+
 ## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.9.0...rust-mcp-transport-v0.9.1) (2026-06-24)
 
 
