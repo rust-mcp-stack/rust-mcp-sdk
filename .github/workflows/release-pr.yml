@@ -38,7 +38,7 @@ jobs:
           BRANCH=$(echo '${{ steps.release.outputs.pr }}' | jq -r '.headBranchName')
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
-      - name: Update Cargo.toml
+      - name: Update release PR files
         if: ${{ steps.release.outputs.prs_created }}
         run: |
           git config user.name "github-actions[bot]"
@@ -57,7 +57,11 @@ jobs:
 
           git add ./Cargo.toml
 
+          echo "Syncing root CHANGELOG.md"
+          cp crates/rust-mcp-sdk/CHANGELOG.md CHANGELOG.md
+          git add ./CHANGELOG.md
+
           if ! git diff --cached --quiet; then
-            git commit -m "chore: update Cargo.toml for release"
+            git commit -m "chore: update release PR files"
             git push
           fi
