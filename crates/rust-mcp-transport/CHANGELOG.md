@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.9.1...rust-mcp-transport-v1.0.0) (2026-07-25)
+
+
+### 🚀 Features
+
+* V1.0.0 release preparation and audit ([#219](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/219)) ([b609d94](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b609d9491b8308ed106fb1cf8070b57b1edef9b6))
+
+
+### 🐛 Bug Fixes
+
+* Preserve partial bytes in SSE parser when putting back incomplete lines ([#217](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/217)) ([83e3114](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/83e31140853acfcabfb62a3653157d306917196b))
+
 ## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-transport-v0.9.0...rust-mcp-transport-v0.9.1) (2026-06-24)
 
 

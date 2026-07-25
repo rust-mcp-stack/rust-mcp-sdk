@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.4...rust-mcp-actix-v1.0.0) (2026-07-25)
+
+
+### 🚀 Features
+
+* V1.0.0 release preparation and audit ([#219](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/219)) ([b609d94](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b609d9491b8308ed106fb1cf8070b57b1edef9b6))
+
+
+### 🚜 Code Refactoring
+
+* Replace rustls-pemfile with rustls-pki-types PemObject API ([449394a](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/449394ae7e445a2046365d1d24414f0bb590f7bd))
+
 ## [0.1.4](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-actix-v0.1.3...rust-mcp-actix-v0.1.4) (2026-06-24)
 
 
