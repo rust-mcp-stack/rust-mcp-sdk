@@ -7,7 +7,7 @@ use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use std::sync::Arc;
 
 pub fn routes(mcp_handler: Arc<McpHttpHandler>) -> Router<Arc<McpAppState>> {
-    let endpoints: Vec<&String> = mcp_handler.oauth_endppoints().unwrap_or_default();
+    let endpoints: Vec<&String> = mcp_handler.oauth_endpoints().unwrap_or_default();
 
     endpoints
         .into_iter()

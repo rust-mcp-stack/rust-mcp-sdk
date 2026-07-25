@@ -140,7 +140,7 @@ impl ScalekitAuthProvider {
         builder = builder.authorization_servers(vec![&authorization_servers]);
 
         if !required_scopes.is_empty() {
-            builder = builder.reqquired_scopes(required_scopes)
+            builder = builder.required_scopes(required_scopes)
         }
         if let Some(resource_name) = options.resource_name.as_ref() {
             builder = builder.resource_name(resource_name)

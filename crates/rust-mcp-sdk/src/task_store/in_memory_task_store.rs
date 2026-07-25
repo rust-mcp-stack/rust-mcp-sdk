@@ -234,7 +234,7 @@ where
     /// * `page_size` - page size for task listing; `None` uses the default.
     /// * `broadcast_capacity` - capacity of the status-change broadcast channel;
     ///   `None` uses the default.
-    #[deprecated(note = "use `with_options` instead")]
+    #[deprecated(since = "0.8.0", note = "use `with_options` instead")]
     pub fn with_capacity(page_size: Option<usize>, broadcast_capacity: Option<usize>) -> Self {
         let mut opts = InMemoryTaskStoreOptions::default();
         if let Some(p) = page_size {

@@ -16,7 +16,6 @@ pub struct GenericSendError {
     inner: Box<dyn Any + Send>,
 }
 
-#[allow(unused)]
 impl GenericSendError {
     pub fn new<T: Send + 'static>(error: mpsc::error::SendError<T>) -> Self {
         Self {
@@ -28,6 +27,7 @@ impl GenericSendError {
     ///
     /// # Returns
     /// `Some(T)` if the error can be downcasted, `None` otherwise.
+    #[allow(unused)]
     fn downcast<T: Send + 'static>(self) -> Option<broadcast::error::SendError<T>> {
         self.inner
             .downcast::<broadcast::error::SendError<T>>()

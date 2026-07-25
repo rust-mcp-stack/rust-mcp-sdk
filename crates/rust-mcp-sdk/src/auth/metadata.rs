@@ -13,7 +13,6 @@ use url::Url;
 pub const WELL_KNOWN_OAUTH_AUTHORIZATION_SERVER: &str = "/.well-known/oauth-authorization-server";
 pub const OAUTH_PROTECTED_RESOURCE_BASE: &str = "/.well-known/oauth-protected-resource";
 
-#[allow(unused)]
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub enum OauthEndpoint {
     AuthorizationEndpoint,
@@ -26,7 +25,7 @@ pub enum OauthEndpoint {
 }
 
 #[derive(Debug, Error)]
-pub enum AuthMetadateError {
+pub enum AuthMetadataError {
     #[error("Url Parse Error: {0}")]
     Transport(#[from] url::ParseError),
 }
@@ -450,7 +449,7 @@ impl<'a> AuthMetadataBuilder<'a> {
         self
     }
 
-    pub fn reqquired_scopes<S>(mut self, scopes: Vec<S>) -> Self
+    pub fn required_scopes<S>(mut self, scopes: Vec<S>) -> Self
     where
         S: Into<Cow<'a, str>>,
     {

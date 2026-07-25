@@ -74,7 +74,6 @@ impl CancellationToken {
     ///
     /// # Returns
     /// * `bool` - True if cancellation is requested, false otherwise
-    #[allow(unused)]
     pub fn is_cancelled(&self) -> bool {
         *self.receiver.borrow()
     }
