@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 pub fn auth_routes(http_handler: Arc<McpHttpHandler>) -> Option<Scope> {
     let endpoints: Vec<String> = http_handler
-        .oauth_endppoints()
+        .oauth_endpoints()
         .unwrap_or_default()
         .into_iter()
         .cloned()

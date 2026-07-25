@@ -8,6 +8,7 @@ If you are upgrading between major/breaking versions, please consult the guides 
 
 ## Migration Guides
 
+- **[v0.10.x to v1.0.0](doc/migration/v0.10.x-to-v1.0.0.md)** (First stable release — typo fixes, dead code removal, handler traits stabilized)
 - **[v0.9.x to v0.10.x](doc/migration/v0.9.x-to-v0.10.x.md)** (Extraction of Axum/Actix HTTP frameworks into standalone crates)
 
 ---

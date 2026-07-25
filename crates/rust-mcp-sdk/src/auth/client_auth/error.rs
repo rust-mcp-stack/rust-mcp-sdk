@@ -40,4 +40,4 @@ pub enum ClientError {
     Other(String),
 }
 
-pub type ClientResult<T> = Result<T, ClientError>;
+pub type ClientResult<T> = core::result::Result<T, ClientError>;

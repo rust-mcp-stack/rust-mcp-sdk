@@ -126,7 +126,7 @@ impl KeycloakAuthProvider {
             matches!(required_scopes.as_ref(), Some(scopes) if scopes.contains(&"openid"));
 
         if let Some(scopes) = required_scopes {
-            builder = builder.reqquired_scopes(scopes)
+            builder = builder.required_scopes(scopes)
         }
         if let Some(resource_name) = options.resource_name.as_ref() {
             builder = builder.resource_name(resource_name)

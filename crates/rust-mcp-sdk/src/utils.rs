@@ -49,27 +49,26 @@ pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
 /// # Examples
 ///
 /// ```
-/// use rust_mcp_sdk::mcp_client::ensure_server_protocole_compatibility;
+/// use rust_mcp_sdk::mcp_client::ensure_server_protocol_compatibility;
 /// use rust_mcp_sdk::error::McpSdkError;
 ///
 /// // Equal versions: compatible
-/// let result = ensure_server_protocole_compatibility("2024_11_05", "2024_11_05");
+/// let result = ensure_server_protocol_compatibility("2024_11_05", "2024_11_05");
 /// assert!(result.is_ok());
 ///
 /// // Client newer than server: compatible (backwards compat)
-/// let result = ensure_server_protocole_compatibility("2025_11_25", "2025_03_26");
+/// let result = ensure_server_protocol_compatibility("2025_11_25", "2025_03_26");
 /// assert!(result.is_ok());
 ///
 /// // Client older than server: incompatible (server uses newer spec)
-/// let result = ensure_server_protocole_compatibility("2024_11_05", "2025_03_26");
+/// let result = ensure_server_protocol_compatibility("2024_11_05", "2025_03_26");
 /// assert!(matches!(
 ///     result,
 ///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {ref requested, ref current}})
 ///     if requested == "2024_11_05" && current == "2025_03_26"
 /// ));
 /// ```
-#[allow(unused)]
-pub fn ensure_server_protocole_compatibility(
+pub fn ensure_server_protocol_compatibility(
     client_protocol_version: &str,
     server_protocol_version: &str,
 ) -> SdkResult<()> {
@@ -127,7 +126,6 @@ pub fn ensure_server_protocole_compatibility(
 ///     if requested == "2025_03_26" && current == "2024_11_05"
 /// ));
 /// ```
-#[allow(unused)]
 pub fn enforce_compatible_protocol_version(
     client_protocol_version: &str,
     server_protocol_version: &str,

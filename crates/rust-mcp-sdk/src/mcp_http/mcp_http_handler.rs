@@ -135,7 +135,7 @@ impl McpHttpHandler {
 // auth related methods
 #[cfg(feature = "auth")]
 impl McpHttpHandler {
-    pub fn oauth_endppoints(&self) -> Option<Vec<&String>> {
+    pub fn oauth_endpoints(&self) -> Option<Vec<&String>> {
         self.auth
             .as_ref()
             .and_then(|a| a.auth_endpoints().map(|e| e.keys().collect::<Vec<_>>()))

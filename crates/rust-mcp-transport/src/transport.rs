@@ -182,29 +182,6 @@ where
 {
 }
 
-// pub trait IntoClientTransport {
-//     type TransportType: Transport<
-//         ServerMessages,
-//         MessageFromClient,
-//         ServerMessage,
-//         ClientMessages,
-//         ClientMessage,
-//     >;
-
-//     fn into_transport(self, session_id: Option<SessionId>) -> TransportResult<Self::TransportType>;
-// }
-
-// impl<T> IntoClientTransport for T
-// where
-//     T: Transport<ServerMessages, MessageFromClient, ServerMessage, ClientMessages, ClientMessage>,
-// {
-//     type TransportType = T;
-
-//     fn into_transport(self, _: Option<SessionId>) -> TransportResult<Self::TransportType> {
-//         Ok(self)
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;

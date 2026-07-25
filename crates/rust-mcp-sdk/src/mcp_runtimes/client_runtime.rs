@@ -4,7 +4,7 @@ use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
 use crate::mcp_traits::{McpClient, McpClientHandler};
 use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
-use crate::utils::ensure_server_protocole_compatibility;
+use crate::utils::ensure_server_protocol_compatibility;
 use crate::McpObserver;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
@@ -160,7 +160,7 @@ impl ClientRuntime {
             .await?;
 
         if let ResultFromServer::InitializeResult(initialize_result) = result {
-            ensure_server_protocole_compatibility(
+            ensure_server_protocol_compatibility(
                 &self.client_details.protocol_version,
                 &initialize_result.protocol_version,
             )?;

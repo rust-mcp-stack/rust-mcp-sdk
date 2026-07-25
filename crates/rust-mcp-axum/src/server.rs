@@ -38,7 +38,7 @@ use tokio::signal;
 
 // Default client ping interval (12 seconds)
 const DEFAULT_CLIENT_PING_INTERVAL: Duration = Duration::from_secs(12);
-const GRACEFUL_SHUTDOWN_TMEOUT_SECS: u64 = 5;
+const GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 5;
 
 /// Lightweight mount configuration for BYO-server scenarios.
 ///
@@ -488,15 +488,6 @@ impl AxumServer {
         &self.options
     }
 
-    // pub fn with_layer<L>(mut self, layer: L) -> Self
-    // where
-    //     // L: Layer<axum::body::Body> + Clone + Send + Sync + 'static,
-    //     L::Service: Send + Sync + 'static,
-    // {
-    //     self.router = self.router.layer(layer);
-    //     self
-    // }
-
     /// Starts the server with SSL support (available when "ssl" feature is enabled)
     ///
     /// # Arguments
@@ -612,7 +603,7 @@ async fn shutdown_signal(handle: Handle<SocketAddr>, state: Arc<McpAppState>) {
     tracing::info!("Signal received, starting graceful shutdown");
     state.session_store.clear().await;
     // Trigger graceful shutdown with a timeout
-    handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TMEOUT_SECS)));
+    handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TIMEOUT_SECS)));
 }
 
 #[cfg(test)]
