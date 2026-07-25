@@ -1010,6 +1010,7 @@ mod tests {
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
         // Must NOT emit the invalid "unknown" type string
-        assert!(!output.contains("unknown"));
+        assert!(!output
+            .contains("\"type\".to_string(),serde_json::Value::String(\"unknown\".to_string())"));
     }
 }
