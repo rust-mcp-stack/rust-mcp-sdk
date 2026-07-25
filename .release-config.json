@@ -65,12 +65,10 @@
   "pull-request-header": ":robot: Auto-generated release PR",
   "packages": {
     "crates/rust-mcp-macros": {
-      "release-as": "",
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
@@ -80,12 +78,10 @@
       ]
     },
     "crates/rust-mcp-transport": {
-      "release-as": "",
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
@@ -95,12 +91,10 @@
       ]
     },
     "crates/rust-mcp-sdk": {
-      "release-as": "",
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
@@ -110,11 +104,10 @@
       ]
     },
     "crates/rust-mcp-extra": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
@@ -124,11 +117,10 @@
       ]
     },
     "crates/rust-mcp-axum": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
@@ -138,11 +130,10 @@
       ]
     },
     "crates/rust-mcp-actix": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "changelogPath": "CHANGELOG.md",
       "extra-files": [
         {
