@@ -411,6 +411,18 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                     };
                 }
+                // Handle imported serde_json::Value (single-segment, mirroring the 2-segment case above)
+                else if ident == "Value" && segment.arguments.is_empty() {
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            #description_quote
+                            #title_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
                 // Handle nested structs
                 else if might_be_struct(ty) {
                     let path = &type_path.path;
@@ -550,12 +562,29 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                     };
                 }
+                // Handle serde_json::Value — any JSON value; emit empty schema {}
+                if seg0.ident == "serde_json"
+                    && seg0.arguments.is_empty()
+                    && seg1.ident == "Value"
+                    && seg1.arguments.is_empty()
+                {
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            #description_quote
+                            #title_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
             }
-            // Fallback for unknown types
+            // Fallback for unknown types — emit empty schema {} (any value accepted).
+            // An empty schema is always valid JSON Schema; strict MCP clients reject
+            // non-standard type strings like "unknown".
             quote! {
                 {
                     let mut map = serde_json::Map::new();
-                    map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
                     #description_quote
                     #title_quote
                     #default_quote
@@ -566,7 +595,6 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
         _ => quote! {
             {
                 let mut map = serde_json::Map::new();
-                map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
                 #description_quote
                 #title_quote
                 #default_quote
@@ -976,10 +1004,13 @@ mod tests {
 
     #[test]
     fn test_json_schema_fallback_unknown() {
+        // The fallback for unrecognised types now emits an empty schema {}
+        // (no type key), which is valid JSON Schema meaning "accept any value".
         let ty: syn::Type = parse_quote!((i32, i32));
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
-        assert!(output
+        // Must NOT emit the invalid "unknown" type string
+        assert!(!output
             .contains("\"type\".to_string(),serde_json::Value::String(\"unknown\".to_string())"));
     }
 }
