@@ -598,17 +598,30 @@ mod ssl_tests {
 
         let keygen = Command::new("openssl")
             .args([
-                "req", "-x509", "-newkey", "rsa:2048",
-                "-keyout", key_path, "-out", cert_path,
-                "-days", "1", "-nodes",
-                "-subj", "/CN=localhost",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-keyout",
+                key_path,
+                "-out",
+                cert_path,
+                "-days",
+                "1",
+                "-nodes",
+                "-subj",
+                "/CN=localhost",
             ])
             .output()
             .expect("openssl must be installed");
         assert!(keygen.status.success(), "openssl keygen failed");
 
         let result = super::load_rustls_config(cert_path, key_path);
-        assert!(result.is_ok(), "load_rustls_config failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "load_rustls_config failed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -621,10 +634,19 @@ mod ssl_tests {
 
         let keygen = Command::new("openssl")
             .args([
-                "req", "-x509", "-newkey", "rsa:2048",
-                "-keyout", key_path, "-out", cert_path,
-                "-days", "1", "-nodes",
-                "-subj", "/CN=localhost",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-keyout",
+                key_path,
+                "-out",
+                cert_path,
+                "-days",
+                "1",
+                "-nodes",
+                "-subj",
+                "/CN=localhost",
             ])
             .output()
             .expect("openssl must be installed");
@@ -632,6 +654,9 @@ mod ssl_tests {
 
         // Point key_path at the cert file: PEM sections exist but hold no private key.
         let result = super::load_rustls_config(cert_path, cert_path);
-        assert!(result.is_err(), "expected error when key file has no private key");
+        assert!(
+            result.is_err(),
+            "expected error when key file has no private key"
+        );
     }
 }
