@@ -35,8 +35,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.10"
-rust-mcp-actix = "0.1"
+rust-mcp-sdk = "1.0.0"
+rust-mcp-actix = "1.0.0"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 ```
@@ -203,10 +203,12 @@ server.start().await?;
 
 > **Note:** Unlike `rust-mcp-axum`, Actix-web has no optional crypto provider split, so there is no `tls-no-provider` variant.
 
+<!-- x-release-please-start-version -->
 ```toml
 # With TLS/SSL
-rust-mcp-actix = { version = "0.1", features = ["ssl"] }
+rust-mcp-actix = { version = "1.0.0", features = ["ssl"] }
 ```
+<!-- x-release-please-end -->
 
 ---
 

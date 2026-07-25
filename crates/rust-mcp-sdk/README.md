@@ -96,7 +96,7 @@ v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, plea
 Add to your Cargo.toml:
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.9.0"  # Check crates.io for the latest version
+rust-mcp-sdk = "1.0.0"  # Check crates.io for the latest version
 ```
 <!-- x-release-please-end -->
 
@@ -563,7 +563,7 @@ When you add rust-mcp-sdk as a dependency without specifying any features, all f
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.9.0"
+rust-mcp-sdk = "1.0.0"
 ```
 
 <!-- x-release-please-end -->
@@ -576,7 +576,7 @@ If you only need the MCP Server functionality, you can disable the default featu
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["server","macros","stdio"] }
+rust-mcp-sdk = { version = "1.0.0", default-features = false, features = ["server","macros","stdio"] }
 ```
 Optionally add [`rust-mcp-axum`](https://crates.io/crates/rust-mcp-axum) and the `streamable-http` feature for **Streamable HTTP** transport, and use `rust-mcp-axum`'s `ssl` feature for TLS/SSL support.
 
@@ -591,7 +591,7 @@ Add the following to your Cargo.toml:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "0.9.0", default-features = false, features = ["client","stdio"] }
+rust-mcp-sdk = { version = "1.0.0", default-features = false, features = ["client","stdio"] }
 ```
 
 <!-- x-release-please-end -->

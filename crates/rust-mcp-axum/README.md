@@ -35,8 +35,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "0.10"
-rust-mcp-axum = "0.1"
+rust-mcp-sdk = "1.0.0"
+rust-mcp-axum = "1.0.0"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 ```
@@ -201,10 +201,12 @@ server.start().await?;
 | `ssl` | Enables TLS/SSL via `axum-server` + `rustls`. Requires `ssl_cert_path` and `ssl_key_path` in options. |
 | `tls-no-provider` | TLS support without installing a crypto provider (use if you already have one). |
 
+<!-- x-release-please-start-version -->
 ```toml
 # With TLS/SSL
-rust-mcp-axum = { version = "0.1", features = ["ssl"] }
+rust-mcp-axum = { version = "1.0.0", features = ["ssl"] }
 ```
+<!-- x-release-please-end -->
 
 ---
 
