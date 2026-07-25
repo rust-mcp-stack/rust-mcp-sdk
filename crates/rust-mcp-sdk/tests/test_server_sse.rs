@@ -4,7 +4,7 @@ mod tets_server_sse {
     use std::{sync::Arc, time::Duration};
 
     use crate::common::{
-        sse_data, sse_event,
+        random_port, sse_data, sse_event,
         test_server_common::{
             collect_sse_lines, create_test_server, TestIdGenerator, INITIALIZE_REQUEST,
         },
@@ -20,7 +20,7 @@ mod tets_server_sse {
     #[tokio::test]
     async fn tets_sse_endpoint_event_default() {
         let server_options = AxumServerOptions {
-            port: 8081,
+            port: random_port(),
             session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
                 "AAA-BBB-CCC".to_string()
             ]))),
@@ -79,7 +79,7 @@ mod tets_server_sse {
     #[tokio::test]
     async fn tets_sse_message_endpoint_query_hash() {
         let server_options = AxumServerOptions {
-            port: 8082,
+            port: random_port(),
             custom_messages_endpoint: Some(
                 "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
             ),
@@ -145,7 +145,7 @@ mod tets_server_sse {
     #[tokio::test]
     async fn tets_sse_custom_message_endpoint() {
         let server_options = AxumServerOptions {
-            port: 8083,
+            port: random_port(),
             custom_messages_endpoint: Some(
                 "/custom-msg-endpoint?something=true&otherthing=false#section-59".to_string(),
             ),

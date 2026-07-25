@@ -13,7 +13,6 @@ use rust_mcp_sdk::mcp_client::ClientHandler;
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
-use std::process;
 use std::sync::Once;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
@@ -276,77 +275,15 @@ pub fn sse_data(sse_raw: &str) -> String {
     sse_raw.replace("data: ", "")
 }
 
-// Simple Xorshift PRNG struct
-struct Xorshift {
-    state: u64,
-}
-
-impl Xorshift {
-    // Initialize with a seed based on system time and process ID
-    fn new() -> Self {
-        // Get nanoseconds since UNIX epoch
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("System time error")
-            .as_nanos() as u64;
-        // Get process ID for additional entropy
-        let pid = process::id() as u64;
-        // Combine nanos and pid with a simple mix
-        let seed = nanos ^ (pid << 32) ^ (nanos.rotate_left(17));
-        Xorshift { state: seed | 1 } // Ensure non-zero seed
-    }
-
-    // Generate the next random u64 using Xorshift
-    fn next_u64(&mut self) -> u64 {
-        let mut x = self.state;
-        self.state = x.wrapping_add(0x9E3779B97F4A7C15);
-        x = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        x = (x ^ (x >> 27)).wrapping_mul(0x94D049BB133111EB);
-        x ^ (x >> 31)
-    }
-
-    // Generate a random u16 within a range [min, max]
-    fn next_u16_range(&mut self, min: u16, max: u16) -> u16 {
-        assert!(max >= min, "max must be greater than or equal to min");
-        let range = (max - min + 1) as u64;
-        min + (self.next_u64() % range) as u16
-    }
-}
-
+/// Picks a free ephemeral port by binding to port 0 and reading the OS-assigned port.
+///
+/// The port is released immediately after discovery. Because `TcpListener::bind` creates
+/// a listening socket (not a connection), no `TIME_WAIT` state is involved — the port
+/// is immediately reusable by the server.
 pub fn random_port() -> u16 {
-    use std::time::SystemTime;
-    let min: u16 = 10000;
-    let max: u16 = 40000;
-    let range = (max - min + 1) as u64;
-
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("systime error!");
-
-    let nanos = now.subsec_nanos() as u64;
-    let secs = now.as_secs();
-    let mixed = (nanos ^ (secs << 16)) ^ (nanos.rotate_left(13));
-    let pid_mix = mixed.wrapping_mul(std::process::id() as u64);
-    min + (pid_mix % range) as u16
-}
-
-pub fn random_port_old() -> u16 {
-    let min: u16 = 8081;
-    let max: u16 = 15000;
-    let range = max - min + 1;
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("systime error!");
-
-    // Combine seconds and nanoseconds for better entropy
-    let nanos = now.subsec_nanos() as u64;
-    let secs = now.as_secs();
-
-    // Simple hash-like mix
-    let mixed = (nanos ^ (secs << 16)) ^ (nanos.rotate_left(13));
-
-    min + ((mixed as u16) % range)
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr().map(|a| a.port()))
+        .expect("random_port: failed to bind to ephemeral port")
 }
 
 pub mod sample_tools {

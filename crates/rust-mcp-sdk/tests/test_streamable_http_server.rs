@@ -185,7 +185,6 @@ async fn should_reject_batch_initialize_request() {
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
-        enable_json_response: None,
         ..Default::default()
     };
 
@@ -1297,7 +1296,6 @@ async fn should_reject_requests_with_disallowed_host_headers() {
         ClientJsonrpcRequest::new(RequestId::Integer(0), initialize_request().into());
 
     let server_options = AxumServerOptions {
-        port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
         ]))),
