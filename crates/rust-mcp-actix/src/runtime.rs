@@ -554,27 +554,29 @@ impl McpHttpServer for ActixRuntime {
 
 #[cfg(feature = "ssl")]
 fn load_rustls_config(cert_path: &str, key_path: &str) -> std::io::Result<rustls::ServerConfig> {
-    use std::fs::File;
-    use std::io::BufReader;
+    use rustls::pki_types::pem::{Error as PemError, PemObject};
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use std::io::{Error, ErrorKind};
 
-    let cert_file = File::open(cert_path)?;
-    let mut cert_reader = BufReader::new(cert_file);
-    let certs: Vec<rustls::pki_types::CertificateDer> = rustls_pemfile::certs(&mut cert_reader)
+    // Preserve raw io::Error for file I/O failures (e.g. NotFound);
+    // map PEM parse failures to InvalidData.
+    let map_err = |e: PemError| match e {
+        PemError::Io(io) => io,
+        other => Error::new(ErrorKind::InvalidData, other),
+    };
+
+    // Fail loud on any malformed cert section — never silently drop chain entries.
+    let certs = CertificateDer::pem_file_iter(cert_path)
+        .map_err(map_err)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        .map_err(map_err)?;
 
-    let key_file = File::open(key_path)?;
-    let mut key_reader = BufReader::new(key_file);
-    let key = rustls_pemfile::private_key(&mut key_reader)?.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "no private key found")
-    })?;
+    let key = PrivateKeyDer::from_pem_file(key_path).map_err(map_err)?;
 
-    let config = rustls::ServerConfig::builder()
+    rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
-
-    Ok(config)
+        .map_err(|e| Error::new(ErrorKind::InvalidInput, e))
 }
 
 #[cfg(all(test, feature = "ssl"))]
@@ -583,5 +585,53 @@ mod ssl_tests {
     fn install_crypto_provider_idempotent() {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
+
+    #[test]
+    fn load_rustls_config_parses_pem_cert_and_key() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        // Generate test cert + key on the fly
+        use std::process::Command;
+        let cert_path = "/tmp/test_actix_cert.pem";
+        let key_path = "/tmp/test_actix_key.pem";
+
+        let keygen = Command::new("openssl")
+            .args([
+                "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", key_path, "-out", cert_path,
+                "-days", "1", "-nodes",
+                "-subj", "/CN=localhost",
+            ])
+            .output()
+            .expect("openssl must be installed");
+        assert!(keygen.status.success(), "openssl keygen failed");
+
+        let result = super::load_rustls_config(cert_path, key_path);
+        assert!(result.is_ok(), "load_rustls_config failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn load_rustls_config_fails_loud_on_missing_key() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        use std::process::Command;
+        let cert_path = "/tmp/test_actix_cert_nokey.pem";
+        let key_path = "/tmp/test_actix_key_nokey.pem";
+
+        let keygen = Command::new("openssl")
+            .args([
+                "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", key_path, "-out", cert_path,
+                "-days", "1", "-nodes",
+                "-subj", "/CN=localhost",
+            ])
+            .output()
+            .expect("openssl must be installed");
+        assert!(keygen.status.success(), "openssl keygen failed");
+
+        // Point key_path at the cert file: PEM sections exist but hold no private key.
+        let result = super::load_rustls_config(cert_path, cert_path);
+        assert!(result.is_err(), "expected error when key file has no private key");
     }
 }
