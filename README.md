@@ -22,9 +22,7 @@ It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) cra
 Focus on your application logic , rust-mcp-sdk handles the protocol, transports, and the rest!  
 
 
-### ⚠ Upgrading from v0.9.x
-
-v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, please review the [migration guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/doc/migration/v0.9.x-to-v0.10.x.md).
+> **Upgrading?** See the [upgrade guide](UPGRADING.md) for migration paths between versions.
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25

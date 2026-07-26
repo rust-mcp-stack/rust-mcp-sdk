@@ -1,7 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "rust",
-  "release-as": "",
   "include-component-in-tag": true,
   "changelog-sections": [
     {
@@ -65,7 +64,6 @@
   "pull-request-header": ":robot: Auto-generated release PR",
   "packages": {
     "crates/rust-mcp-macros": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -78,7 +76,6 @@
       ]
     },
     "crates/rust-mcp-transport": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -91,7 +88,6 @@
       ]
     },
     "crates/rust-mcp-sdk": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -108,7 +104,6 @@
       ]
     },
     "crates/rust-mcp-extra": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -121,7 +116,6 @@
       ]
     },
     "crates/rust-mcp-axum": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -138,7 +132,6 @@
       ]
     },
     "crates/rust-mcp-actix": {
-      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,

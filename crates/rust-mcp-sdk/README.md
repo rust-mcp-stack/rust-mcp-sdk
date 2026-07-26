@@ -21,9 +21,7 @@ It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) cra
 
 Focus on your application logic , rust-mcp-sdk handles the protocol, transports, and the rest!  
 
-### ⚠ Upgrading from v0.9.x
-
-v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, please review the [migration guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/doc/migration/v0.9.x-to-v0.10.x.md).
+> **Upgrading?** See the [upgrade guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/UPGRADING.md) for migration paths between versions.
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
@@ -45,7 +43,7 @@ v0.10.0 includes breaking changes compared to v0.9.x. If you are upgrading, plea
     - ✅ **Scalekit** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#scalekit))
 - ✅ OAuth Authentication for MCP Clients (metadata discovery, DCR, PKCE, token refresh, pluggable storage)
 
-**⚠️** Project is currently under development and should be used at your own risk.
+**✅** v1.0.0 — stable and production-ready.
 
 ## Table of Contents
 - [Quick Start](#quick-start)
