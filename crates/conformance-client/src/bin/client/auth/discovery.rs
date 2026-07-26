@@ -10,7 +10,8 @@
 //!   3. the test-context `scope`, if any (priority 3)
 
 use rust_mcp_sdk::auth::{
-    discover_oauth_server_info, parse_www_authenticate_param, select_scope, OauthServerInfo,
+    discover_oauth_server_info, parse_www_authenticate_param, select_scope,
+    AuthorizationServerMetadata, OauthServerInfo,
 };
 use rust_mcp_sdk::schema::LATEST_PROTOCOL_VERSION;
 
@@ -46,8 +47,9 @@ pub async fn resolve(
     let Some(server_info) =
         discover_oauth_server_info(http, server_url, resource_metadata_url.as_deref()).await
     else {
-        eprintln!("OAuth discovery failed");
-        return None;
+        // 2025-03-26 backcompat: when metadata discovery fails entirely,
+        // fall back to standard OAuth endpoints at the server origin.
+        return fallback_standard_endpoints(server_url);
     };
 
     // SEP-835 scope selection.
@@ -75,6 +77,59 @@ pub async fn resolve(
         server_info,
         selected_scope,
         supports_auth_code,
+    })
+}
+
+/// 2025-03-26 backcompat fallback: construct standard OAuth endpoints
+/// (`/authorize`, `/token`, `/register`) on the server origin when all
+/// metadata discovery paths have been exhausted.
+///
+/// Returns `None` only when the server URL cannot be parsed — this
+/// shouldn't happen for a URL produced by the conformance test harness.
+fn fallback_standard_endpoints(server_url: &str) -> Option<Discovery> {
+    let url = url::Url::parse(server_url).ok()?;
+    let origin = format!("{}://{}", url.scheme(), url.authority());
+
+    let Ok(authz) = url::Url::parse(&format!("{origin}/authorize")) else {
+        return None;
+    };
+    let Ok(token) = url::Url::parse(&format!("{origin}/token")) else {
+        return None;
+    };
+    let reg = url::Url::parse(&format!("{origin}/register")).ok();
+
+    let meta = AuthorizationServerMetadata {
+        issuer: url::Url::parse(&origin).ok()?,
+        authorization_endpoint: authz,
+        token_endpoint: token,
+        jwks_uri: None,
+        registration_endpoint: reg,
+        scopes_supported: None,
+        response_types_supported: vec!["code".to_string()],
+        response_modes_supported: None,
+        grant_types_supported: Some(vec!["authorization_code".to_string()]),
+        token_endpoint_auth_methods_supported: Some(vec!["none".to_string()]),
+        token_endpoint_auth_signing_alg_values_supported: None,
+        service_documentation: None,
+        revocation_endpoint: None,
+        revocation_endpoint_auth_signing_alg_values_supported: None,
+        revocation_endpoint_auth_methods_supported: None,
+        introspection_endpoint: None,
+        introspection_endpoint_auth_methods_supported: None,
+        introspection_endpoint_auth_signing_alg_values_supported: None,
+        code_challenge_methods_supported: Some(vec!["S256".to_string()]),
+        userinfo_endpoint: None,
+        client_id_metadata_document_supported: None,
+    };
+
+    Some(Discovery {
+        server_info: OauthServerInfo {
+            authorization_server_url: origin,
+            authorization_server_metadata: meta,
+            resource_metadata: None,
+        },
+        selected_scope: None,
+        supports_auth_code: true,
     })
 }
 

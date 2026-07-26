@@ -25,7 +25,7 @@ Focus on your application logic , rust-mcp-sdk handles the protocol, transports,
 
 **Key Features**
 - ✅ Latest MCP protocol specification supported: 2025-11-25
-- ✅ **100% MCP Conformance** - passes all [official](https://github.com/modelcontextprotocol/conformance) client (254/254) and server (40/40) [conformance tests](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml)
+- ✅ **100% MCP Conformance** - passes all [official](https://github.com/modelcontextprotocol/conformance) client  and server  [conformance tests](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml)
 - ✅ Transports:Stdio, Streamable HTTP, and backward-compatible SSE support
 - ✅ Framework Agnostic: Seamless **Axum**, **Actix**, and **BYO Server** integrations
 - ✅ Multi-client concurrency

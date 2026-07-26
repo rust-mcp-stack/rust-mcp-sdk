@@ -199,6 +199,10 @@ pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
             "{}{}/.well-known/openid-configuration",
             origin, path
         ));
+        // Root well-known paths (auth server may serve metadata at root
+        // regardless of the discovery-trigger URL's path component).
+        urls.push(format!("{}/.well-known/oauth-authorization-server", origin));
+        urls.push(format!("{}/.well-known/openid-configuration", origin));
     } else {
         // Root path
         urls.push(format!("{}/.well-known/oauth-authorization-server", origin));
@@ -214,7 +218,8 @@ mod tests {
 
     #[test]
     fn fallback_path_based_prepend_style() {
-        // RFC 8414 prepend-style for path-based authorization server URLs
+        // RFC 8414 prepend-style for path-based authorization server URLs.
+        // The root well-known paths are appended after the path-specific ones.
         let urls = metadata_url_fallbacks("https://example.com/tenant1");
         assert_eq!(
             urls[0],
@@ -228,6 +233,15 @@ mod tests {
             urls[2],
             "https://example.com/tenant1/.well-known/openid-configuration"
         );
+        assert_eq!(
+            urls[3],
+            "https://example.com/.well-known/oauth-authorization-server"
+        );
+        assert_eq!(
+            urls[4],
+            "https://example.com/.well-known/openid-configuration"
+        );
+        assert_eq!(urls.len(), 5);
     }
 
     #[test]
@@ -237,6 +251,7 @@ mod tests {
             urls[0],
             "https://example.com/.well-known/oauth-authorization-server/tenant1"
         );
+        assert_eq!(urls.len(), 5);
     }
 
     #[test]

@@ -28,6 +28,7 @@ pub(super) fn build_auth_client(
     let mut builder = McpAuthConfig::builder()
         .server_url(discovery.auth_server_url())
         .resource(server_url)
+        .metadata(discovery.server_info.authorization_server_metadata.clone())
         .redirect_uri(REDIRECT_URI)
         .client_metadata_url(CIMD_URL);
 
