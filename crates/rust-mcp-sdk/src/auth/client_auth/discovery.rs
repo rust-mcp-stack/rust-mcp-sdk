@@ -201,10 +201,7 @@ pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
         ));
         // Root well-known paths (auth server may serve metadata at root
         // regardless of the discovery-trigger URL's path component).
-        urls.push(format!(
-            "{}/.well-known/oauth-authorization-server",
-            origin
-        ));
+        urls.push(format!("{}/.well-known/oauth-authorization-server", origin));
         urls.push(format!("{}/.well-known/openid-configuration", origin));
     } else {
         // Root path
