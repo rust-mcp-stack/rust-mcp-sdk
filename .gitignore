@@ -2,7 +2,6 @@
 .DS_store
 settings.json
 /.vscode
-/docs
 /.opencode
 
 # test artifacts
@@ -10,5 +9,3 @@ settings.json
 *.lcov
 # *.profraw
 target/**
-
-ROADMAP.md
