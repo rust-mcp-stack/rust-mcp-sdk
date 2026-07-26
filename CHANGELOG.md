@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.0.0...rust-mcp-sdk-v1.0.1) (2026-07-26)
+
+
+### 🐛 Bug Fixes
+
+* Update stale upgrading sections in READMEs ([36a4139](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/36a4139d81f69bd502df5eb90856e094d9922624))
+
 ## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v0.10.0...rust-mcp-sdk-v1.0.0) (2026-07-25)
 
 
