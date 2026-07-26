@@ -206,7 +206,7 @@ server.start().await?;
 <!-- x-release-please-start-version -->
 ```toml
 # With TLS/SSL
-rust-mcp-actix = { version = "1.0.0", features = ["ssl"] }
+rust-mcp-actix = { version = "1.0.1", features = ["ssl"] }
 ```
 <!-- x-release-please-end -->
 

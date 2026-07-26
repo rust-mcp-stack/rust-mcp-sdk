@@ -204,7 +204,7 @@ server.start().await?;
 <!-- x-release-please-start-version -->
 ```toml
 # With TLS/SSL
-rust-mcp-axum = { version = "1.0.0", features = ["ssl"] }
+rust-mcp-axum = { version = "1.0.1", features = ["ssl"] }
 ```
 <!-- x-release-please-end -->
 
