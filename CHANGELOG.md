@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.0.1...rust-mcp-sdk-v1.0.2) (2026-07-27)
+
+
+### 🐛 Bug Fixes
+
+* Auth-backcompat-discovery ([#221](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/221)) ([6a3999f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6a3999f68a5ba989b54f6581cb9e694e479e7fa8))
+
 ## [1.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.0.0...rust-mcp-sdk-v1.0.1) (2026-07-26)
 
 
