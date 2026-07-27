@@ -30,7 +30,7 @@ dependencies = [
  "actix-service",
  "actix-tls",
  "actix-utils",
- "base64",
+ "base64 0.22.1",
  "bitflags",
  "brotli",
  "bytes",
@@ -404,6 +404,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,7 +577,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "base64",
+ "base64 0.23.0",
  "rust-mcp-axum",
  "rust-mcp-macros",
  "rust-mcp-sdk",
@@ -1280,7 +1286,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -1488,7 +1494,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eba32bfb4ffdeaca3e34431072faf01745c9b26d25504aa7a6cf5684334fc4fc"
 dependencies = [
  "aws-lc-rs",
- "base64",
+ "base64 0.22.1",
  "getrandom 0.2.17",
  "js-sys",
  "pem",
@@ -1764,7 +1770,7 @@ checksum = "962a0d22f28ecde9d8eb8694922fdd5d6d19f82b8a64d2411f9206fd3236cd9b"
 dependencies = [
  "async-trait",
  "axum",
- "base64",
+ "base64 0.22.1",
  "chrono",
  "colored",
  "dotenvy",
@@ -1874,7 +1880,7 @@ version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "serde_core",
 ]
 
@@ -2187,7 +2193,7 @@ version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "cookie 0.18.1",
  "cookie_store",
@@ -2315,7 +2321,7 @@ version = "1.0.1"
 dependencies = [
  "async-lock",
  "async-trait",
- "base64",
+ "base64 0.23.0",
  "bytes",
  "http 1.4.2",
  "http-body",
@@ -2362,7 +2368,7 @@ name = "rust-mcp-sdk"
 version = "1.0.1"
 dependencies = [
  "async-trait",
- "base64",
+ "base64 0.23.0",
  "bytes",
  "colored",
  "futures",
@@ -3557,7 +3563,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08db1edfb05d9b3c1542e521aea074442088292f00b5f28e435c714a98f85031"
 dependencies = [
  "assert-json-diff",
- "base64",
+ "base64 0.22.1",
  "deadpool",
  "futures",
  "http 1.4.2",
