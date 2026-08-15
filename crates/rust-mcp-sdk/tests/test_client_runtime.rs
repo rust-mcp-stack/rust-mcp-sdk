@@ -10,7 +10,7 @@ use rust_mcp_sdk::{
 pub mod common;
 
 #[tokio::test]
-async fn tets_client_launch_npx_server() {
+async fn test_client_launch_npx_server() {
     // NPM based MCP servers should launch successfully using `npx`
     let transport = StdioTransport::create_with_server_launch(
         "npx",
@@ -41,12 +41,12 @@ async fn tets_client_launch_npx_server() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn tets_client_launch_uvx_server() {
+async fn test_client_launch_uvx_server() {
     // The Python-based MCP server should launch successfully
     // provided that `uvx` is installed and accessible in the system's PATH
     let transport = StdioTransport::create_with_server_launch(
         "uvx",
-        vec![UVX_SERVER_GIT.into()],
+        vec!["--with".into(), "mcp<2.0.0".into(), UVX_SERVER_GIT.into()],
         None,
         TransportOptions::default(),
     )
