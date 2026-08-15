@@ -277,7 +277,7 @@ pub fn join_url(base: &Url, segment: &str) -> Result<Url, url::ParseError> {
 mod tests {
     use super::*;
     #[test]
-    fn tets_remove_query_and_hash() {
+    fn test_remove_query_and_hash() {
         assert_eq!(remove_query_and_hash("/messages"), "/messages");
         assert_eq!(
             remove_query_and_hash("/messages?foo=bar&baz=qux"),
