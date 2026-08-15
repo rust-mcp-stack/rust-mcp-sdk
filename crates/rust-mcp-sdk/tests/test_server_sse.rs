@@ -1,6 +1,6 @@
 #[path = "common/common.rs"]
 pub mod common;
-mod tets_server_sse {
+mod test_server_sse {
     use std::{sync::Arc, time::Duration};
 
     use crate::common::{
@@ -18,7 +18,7 @@ mod tets_server_sse {
     use tokio::time::sleep;
 
     #[tokio::test]
-    async fn tets_sse_endpoint_event_default() {
+    async fn test_sse_endpoint_event_default() {
         let server_options = AxumServerOptions {
             port: random_port(),
             session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
@@ -77,7 +77,7 @@ mod tets_server_sse {
     }
 
     #[tokio::test]
-    async fn tets_sse_message_endpoint_query_hash() {
+    async fn test_sse_message_endpoint_query_hash() {
         let server_options = AxumServerOptions {
             port: random_port(),
             custom_messages_endpoint: Some(
@@ -143,7 +143,7 @@ mod tets_server_sse {
     }
 
     #[tokio::test]
-    async fn tets_sse_custom_message_endpoint() {
+    async fn test_sse_custom_message_endpoint() {
         let server_options = AxumServerOptions {
             port: random_port(),
             custom_messages_endpoint: Some(
