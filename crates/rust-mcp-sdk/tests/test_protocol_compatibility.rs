@@ -44,7 +44,7 @@ mod protocol_compatibility_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compatibility_equal() {
+    async fn test_protocol_compatibility_equal() {
         let result = handle_initialize_request("2025-03-26").await;
         assert!(result.is_ok());
         let protocol_version = result.unwrap().protocol_version;
@@ -52,7 +52,7 @@ mod protocol_compatibility_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compatibility_downgrade() {
+    async fn test_protocol_compatibility_downgrade() {
         let result = handle_initialize_request("2024_11_05").await;
         assert!(result.is_ok());
         let protocol_version = result.unwrap().protocol_version;
@@ -60,7 +60,7 @@ mod protocol_compatibility_on_server {
     }
 
     #[tokio::test]
-    async fn tets_protocol_compatibility_unsupported() {
+    async fn test_protocol_compatibility_unsupported() {
         let result = handle_initialize_request("2034_11_05").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(err) if err.code == INTERNAL_ERROR));
