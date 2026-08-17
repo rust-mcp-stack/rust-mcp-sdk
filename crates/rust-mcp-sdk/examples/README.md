@@ -28,6 +28,7 @@ This folder contains a variety of example programs demonstrating how to use the 
         - simple-mcp-client-sse-core 
     - **[Oauth Example](#%EF%B8%8F-mcp-client---oauth-example)**
         - mcp-client-with-oauth
+        - mcp-client-oauth-flow
 
 -----
 
@@ -228,10 +229,10 @@ A minimal MCP client example demonstrating **OAuth 2.0 client credentials flow**
 
 It features:
 - Automatic OAuth metadata discovery from the server's well-known endpoint
-- Dynamic Client Registration (DCR) — registers the client if no pre-registered credentials are provided
+- Dynamic Client Registration (DCR) - registers the client if no pre-registered credentials are provided
 - Token exchange via `client_credentials` grant
 - Automatic token refresh before expiry
-- Transport integration — injects `Authorization: Bearer <token>` into request headers
+- Transport integration - injects `Authorization: Bearer <token>` into request headers
 
 **Start the client:**
 
@@ -262,6 +263,34 @@ McpAuthConfig::builder()
 
 ---
 
+- [mcp-client-oauth-flow.rs](mcp-client-oauth-flow.rs)
+
+A minimal MCP client example demonstrating the **high-level OAuth flow helpers** from `rust_mcp_sdk::auth`. It composes the full flow a client needs to talk to a protected MCP server:
+
+- `discover_auth_server` - probe the 401 challenge, run RFC 9728 / RFC 8414 discovery, and select a scope (SEP-835)
+- `acquire_auth_headers` - PKCE authorization-code flow when the AS advertises it, otherwise `client_credentials`
+- Transport integration - injects `Authorization: Bearer <token>` into request headers
+- `escalate_auth_headers` - SEP-2350 scope step-up on a 403 `insufficient_scope`
+
+The only app-specific piece is `resolve_code`, which turns the `/authorize` URL into an authorization code. This example first tries to observe the redirect headlessly, then falls back to asking you to paste the code after approving access in a browser.
+
+**Start the client:**
+
+```bash
+cargo run --example mcp-client-oauth-flow
+```
+
+> 💡 Requires an MCP server with OAuth enabled running at `http://127.0.0.1:3001/mcp`. The PKCE path is exercised when the authorization server advertises the `authorization_code` grant.
+
+Optional environment variables for pre-registered credentials and scope:
+
+```bash
+MCP_CLIENT_ID=my-client-id MCP_CLIENT_SECRET=my-client-secret MCP_SCOPE="mcp tools" \
+  cargo run --example mcp-client-oauth-flow
+```
+
+---
+
 ## Actix-web Examples
 
 Examples for the `rust-mcp-actix` crate (Actix-web HTTP backend) live in a separate location:
@@ -270,8 +299,8 @@ Examples for the `rust-mcp-actix` crate (Actix-web HTTP backend) live in a separ
 crates/rust-mcp-actix/examples/
 ```
 
-- [`hello-world-server.rs`](../../../crates/rust-mcp-actix/examples/hello-world-server.rs) — Minimal Actix MCP server (Streamable HTTP + SSE)
-- [`byo-server.rs`](../../../crates/rust-mcp-actix/examples/byo-server.rs) — Mount MCP on an existing Actix-web app using `mcp_scope()`
+- [`hello-world-server.rs`](../../../crates/rust-mcp-actix/examples/hello-world-server.rs) - Minimal Actix MCP server (Streamable HTTP + SSE)
+- [`byo-server.rs`](../../../crates/rust-mcp-actix/examples/byo-server.rs) - Mount MCP on an existing Actix-web app using `mcp_scope()`
 
 To run them:
 ```bash
@@ -283,8 +312,8 @@ Similarly, Axum BYO-server examples live in:
 ```
 crates/rust-mcp-axum/examples/
 ```
-- [`hello-world-server.rs`](../../../crates/rust-mcp-axum/examples/hello-world-server.rs) — Minimal Axum MCP server
-- [`byo-server.rs`](../../../crates/rust-mcp-axum/examples/byo-server.rs) — Mount MCP on an existing Axum router using `mcp_routes()`
+- [`hello-world-server.rs`](../../../crates/rust-mcp-axum/examples/hello-world-server.rs) - Minimal Axum MCP server
+- [`byo-server.rs`](../../../crates/rust-mcp-axum/examples/byo-server.rs) - Mount MCP on an existing Axum router using `mcp_routes()`
 
 ```bash
 cargo run -p rust-mcp-axum --example hello-world-server
