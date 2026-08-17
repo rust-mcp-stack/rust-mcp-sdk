@@ -21,10 +21,7 @@ const AUDIO_BASE64: &str = "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0
     description = "Returns simple text content for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestSimpleText {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestSimpleText {}
 
 impl TestSimpleText {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -44,10 +41,7 @@ impl TestSimpleText {
     description = "Returns image content (base64 PNG) for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestImageContent {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestImageContent {}
 
 impl TestImageContent {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -68,10 +62,7 @@ impl TestImageContent {
     description = "Returns audio content (base64 WAV) for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestAudioContent {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestAudioContent {}
 
 impl TestAudioContent {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -92,10 +83,7 @@ impl TestAudioContent {
     description = "Returns embedded resource content for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestEmbeddedResource {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestEmbeddedResource {}
 
 impl TestEmbeddedResource {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -121,10 +109,7 @@ impl TestEmbeddedResource {
     description = "Returns multiple content types for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestMultipleContentTypes {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestMultipleContentTypes {}
 
 impl TestMultipleContentTypes {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -153,10 +138,7 @@ impl TestMultipleContentTypes {
     description = "Returns an error response for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestErrorHandling {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestErrorHandling {}
 
 impl TestErrorHandling {
     pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
@@ -179,10 +161,7 @@ impl TestErrorHandling {
     description = "Sends log messages during execution for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestToolWithLogging {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestToolWithLogging {}
 
 impl TestToolWithLogging {
     pub async fn call_tool(
@@ -224,10 +203,7 @@ impl TestToolWithLogging {
     description = "Reports progress notifications during execution for conformance testing."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestToolWithProgress {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestToolWithProgress {}
 
 impl TestToolWithProgress {
     pub async fn call_tool(
@@ -235,28 +211,29 @@ impl TestToolWithProgress {
         runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
         progress_token: Option<rust_mcp_sdk::schema::ProgressToken>,
     ) -> Result<CallToolResult, CallToolError> {
-        use rust_mcp_sdk::schema::ProgressToken;
+        // Only report progress when the client supplied a progress token. Per
+        // the spec, progress notifications are meaningful only for a token the
+        // caller attached to the request.
+        if let Some(token) = progress_token {
+            runtime
+                .report_progress(Some(token.clone()), 0.0, Some(100.0), None)
+                .await
+                .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
-        let token = Some(progress_token.unwrap_or(ProgressToken::String("progress-test-1".into())));
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        runtime
-            .report_progress(token.clone(), 0.0, Some(100.0), None)
-            .await
-            .map_err(|e| CallToolError::from_message(format!("{e}")))?;
+            runtime
+                .report_progress(Some(token.clone()), 50.0, Some(100.0), None)
+                .await
+                .map_err(|e| CallToolError::from_message(format!("{e}")))?;
 
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        runtime
-            .report_progress(token.clone(), 50.0, Some(100.0), None)
-            .await
-            .map_err(|e| CallToolError::from_message(format!("{e}")))?;
-
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        runtime
-            .report_progress(token, 100.0, Some(100.0), None)
-            .await
-            .map_err(|e| CallToolError::from_message(format!("{e}")))?;
+            runtime
+                .report_progress(Some(token), 100.0, Some(100.0), None)
+                .await
+                .map_err(|e| CallToolError::from_message(format!("{e}")))?;
+        }
 
         Ok(CallToolResult::text_content(vec![TextContent::new(
             "Progress test completed".into(),
@@ -296,18 +273,25 @@ impl TestSampling {
             });
         }
 
-        let params: rust_mcp_sdk::schema::CreateMessageRequestParams =
-            serde_json::from_value(serde_json::json!({
-                "messages": [{
-                    "role": "user",
-                    "content": {
-                        "type": "text",
-                        "text": self.prompt
-                    }
-                }],
-                "maxTokens": 100
-            }))
-            .map_err(|e| CallToolError::from_message(format!("Failed to build params: {e}")))?;
+        let params = rust_mcp_sdk::schema::CreateMessageRequestParams {
+            messages: vec![rust_mcp_sdk::schema::SamplingMessage {
+                role: rust_mcp_sdk::schema::Role::User,
+                content: rust_mcp_sdk::schema::TextContent::new(self.prompt.clone(), None, None)
+                    .into(),
+                meta: None,
+            }],
+            max_tokens: 100,
+            include_context: None,
+            meta: None,
+            metadata: None,
+            model_preferences: None,
+            stop_sequences: vec![],
+            system_prompt: None,
+            task: None,
+            temperature: None,
+            tool_choice: None,
+            tools: vec![],
+        };
 
         let response = runtime
             .request_message_creation(params)
@@ -406,10 +390,7 @@ impl TestElicitation {
     description = "Requests elicitation with default values for all primitive types (SEP-1034)."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestElicitationDefaults {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestElicitationDefaults {}
 
 impl TestElicitationDefaults {
     pub async fn call_tool(
@@ -516,10 +497,7 @@ impl TestElicitationDefaults {
     description = "Requests elicitation with all enum variants (SEP-1330)."
 )]
 #[derive(Debug, ::serde::Deserialize, ::serde::Serialize, JsonSchema)]
-pub struct TestElicitationEnums {
-    #[serde(default, skip_serializing)]
-    _dummy: Option<()>,
-}
+pub struct TestElicitationEnums {}
 
 impl TestElicitationEnums {
     pub async fn call_tool(

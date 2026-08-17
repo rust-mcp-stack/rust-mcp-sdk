@@ -1,3 +1,4 @@
+use rust_mcp_macros::mcp_prompt;
 use rust_mcp_sdk::schema::{
     ContentBlock, GetPromptResult, Prompt, PromptArgument, PromptMessage, Role,
 };
@@ -15,75 +16,31 @@ fn user_message(content: ContentBlock) -> PromptMessage {
 // ---------------
 // 1. test_simple_prompt
 // ---------------
-pub struct TestSimplePrompt;
-
-impl TestSimplePrompt {
-    pub fn prompt() -> Prompt {
-        Prompt {
-            name: "test_simple_prompt".into(),
-            description: Some("A simple prompt for conformance testing.".into()),
-            arguments: vec![],
-            icons: vec![],
-            meta: None,
-            title: None,
-        }
-    }
-
-    pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
-        Ok(GetPromptResult {
-            messages: vec![user_message(ContentBlock::text_content(
-                "This is a simple prompt for testing.".to_string(),
-            ))],
-            meta: None,
-            description: Some("This is a simple prompt for testing.".into()),
-        })
-    }
-}
+#[mcp_prompt(
+    name = "test_simple_prompt",
+    description = "A simple prompt for conformance testing.",
+    messages = [
+        (role = "user", content = "This is a simple prompt for testing."),
+    ]
+)]
+pub struct TestSimplePrompt {}
 
 // ---------------
 // 2. test_prompt_with_arguments
 // ---------------
-pub struct TestPromptWithArguments;
-
-impl TestPromptWithArguments {
-    pub fn prompt() -> Prompt {
-        Prompt {
-            name: "test_prompt_with_arguments".into(),
-            description: Some("A parameterized prompt for conformance testing.".into()),
-            arguments: vec![
-                PromptArgument {
-                    name: "arg1".into(),
-                    description: Some("First test argument".into()),
-                    required: Some(true),
-                    title: None,
-                },
-                PromptArgument {
-                    name: "arg2".into(),
-                    description: Some("Second test argument".into()),
-                    required: Some(true),
-                    title: None,
-                },
-            ],
-            icons: vec![],
-            meta: None,
-            title: None,
-        }
-    }
-
-    pub fn get_prompt(
-        arg1: &str,
-        arg2: &str,
-    ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
-        Ok(GetPromptResult {
-            messages: vec![user_message(ContentBlock::text_content(format!(
-                "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"
-            )))],
-            meta: None,
-            description: Some(format!(
-                "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"
-            )),
-        })
-    }
+#[mcp_prompt(
+    name = "test_prompt_with_arguments",
+    description = "A parameterized prompt for conformance testing.",
+    messages = [
+        (role = "user", content = "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"),
+    ]
+)]
+#[allow(dead_code)]
+pub struct TestPromptWithArguments {
+    #[prompt_argument(description = "First test argument")]
+    pub arg1: String,
+    #[prompt_argument(description = "Second test argument")]
+    pub arg2: String,
 }
 
 // ---------------

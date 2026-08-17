@@ -1,6 +1,7 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
+pub mod flow;
 pub mod in_memory_store;
 pub mod pkce;
 pub mod registration;
@@ -15,6 +16,11 @@ pub use discovery::{
     fetch_protected_resource_metadata, metadata_url_fallbacks, OauthServerInfo,
 };
 pub use error::{ClientError, ClientResult};
+pub use flow::{
+    acquire_auth_headers, bearer_headers, discover_auth_server, escalate_auth_headers,
+    probe_www_authenticate, ClientAuthFlowOptions, DiscoveredAuthServer, ScopeChallengeProbe,
+    WwwAuthenticateChallenge,
+};
 pub use in_memory_store::InMemoryTokenStore;
 pub use pkce::{generate_pkce_params, PkceParams};
 pub use registration::RegistrationResponse;

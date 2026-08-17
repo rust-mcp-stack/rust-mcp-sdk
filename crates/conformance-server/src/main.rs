@@ -56,13 +56,7 @@ async fn main() -> std::io::Result<()> {
                 }),
                 logging: Some(serde_json::Map::new()),
                 completions: Some(serde_json::Map::new()),
-                experimental: Some(
-                    [
-                        ("sampling".to_string(), serde_json::Map::new()),
-                        ("elicitation".to_string(), serde_json::Map::new()),
-                    ]
-                    .into(),
-                ),
+                experimental: None,
                 tasks: None,
             },
             meta: None,

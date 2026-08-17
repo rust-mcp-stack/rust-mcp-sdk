@@ -137,16 +137,9 @@ impl ServerHandler for ConformanceHandler {
         _runtime: Arc<dyn McpServer>,
     ) -> Result<GetPromptResult, RpcError> {
         match params.name.as_str() {
-            "test_simple_prompt" => prompts::TestSimplePrompt::get_prompt(),
+            "test_simple_prompt" => prompts::TestSimplePrompt::get_prompt_result(params),
             "test_prompt_with_arguments" => {
-                let args = params.arguments.as_ref().ok_or_else(|| {
-                    RpcError::invalid_params().with_message(
-                        "Arguments required for test_prompt_with_arguments".to_string(),
-                    )
-                })?;
-                let arg1 = args.get("arg1").map(String::as_str).unwrap_or("default1");
-                let arg2 = args.get("arg2").map(String::as_str).unwrap_or("default2");
-                prompts::TestPromptWithArguments::get_prompt(arg1, arg2)
+                prompts::TestPromptWithArguments::get_prompt_result(params)
             }
             "test_prompt_with_embedded_resource" => {
                 let args = params.arguments.as_ref().ok_or_else(|| {

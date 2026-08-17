@@ -6,6 +6,20 @@ use rust_mcp_sdk::schema::{
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
+#[derive(::serde::Serialize)]
+struct TemplateTestData {
+    id: String,
+    #[serde(rename = "templateTest")]
+    template_test: bool,
+    data: String,
+}
+
+#[derive(::serde::Serialize)]
+struct WatchedData {
+    watched: bool,
+    timestamp: String,
+}
+
 // ---------------
 // 1. test://static-text
 // ---------------
@@ -77,11 +91,12 @@ impl TemplateDataResource {
             .and_then(|s| s.strip_suffix("/data"))
             .unwrap_or("unknown");
 
-        let content = serde_json::json!({
-            "id": id,
-            "templateTest": true,
-            "data": format!("Data for ID: {}", id)
-        });
+        let content = serde_json::to_string(&TemplateTestData {
+            id: id.to_string(),
+            template_test: true,
+            data: format!("Data for ID: {}", id),
+        })
+        .unwrap_or_default();
 
         Ok(ReadResourceResult {
             contents: vec![
@@ -138,10 +153,11 @@ impl WatchedResource {
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .map(|d| d.as_secs().to_string())
             .unwrap_or_else(|_| "unknown".into());
-        let content = serde_json::json!({
-            "watched": true,
-            "timestamp": timestamp
-        });
+        let content = serde_json::to_string(&WatchedData {
+            watched: true,
+            timestamp,
+        })
+        .unwrap_or_default();
 
         Ok(ReadResourceResult {
             contents: vec![

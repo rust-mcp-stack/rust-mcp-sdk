@@ -25,21 +25,16 @@ pub async fn run(server_url: &str) {
         .find(|t| t.name.contains("elicitation"))
         .map(|t| t.name.clone());
 
-    if let Some(tool_name) = elicitation_tool {
-        let result = client
-            .request_tool_call(CallToolRequestParams {
-                name: tool_name,
-                arguments: None,
-                meta: None,
-                task: None,
-            })
-            .await
-            .expect("Failed to call elicitation tool");
-        assert!(
-            result.is_error != Some(true),
-            "Elicitation tool should return success"
-        );
-    }
+    let tool_name = elicitation_tool.expect("Expected an elicitation tool to be listed");
+
+    let result = client
+        .request_tool_call(CallToolRequestParams::new(&tool_name))
+        .await
+        .expect("Failed to call elicitation tool");
+    assert!(
+        result.is_error != Some(true),
+        "Elicitation tool should return success"
+    );
 
     client.shut_down().await.ok();
 }

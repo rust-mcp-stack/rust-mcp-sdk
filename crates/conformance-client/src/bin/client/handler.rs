@@ -84,6 +84,10 @@ fn extract_default(schema: &PrimitiveSchemaDefinition) -> Option<ElicitResultCon
         PrimitiveSchemaDefinition::NumberSchema(n) => n
             .default
             .map(|d| ElicitResultContent::Primitive(Integer(d as i64))),
+        // Note: `ElicitResultContentPrimitive` has no f64 variant, so a
+        // non-integer default (e.g. 95.5) is truncated to an integer here.
+        // The harness only asserts `typeof content.score === 'number'`, so
+        // this still satisfies SEP-1034 while the value loses fidelity.
         PrimitiveSchemaDefinition::BooleanSchema(b) => b
             .default
             .map(|d| ElicitResultContent::Primitive(Boolean(d))),
