@@ -1,9 +1,56 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    punctuated::Punctuated, token, Attribute, DeriveInput, GenericArgument, Lit, LitInt, LitStr,
-    Path, PathArguments, Type, TypePath,
+    punctuated::Punctuated, token, Attribute, DeriveInput, Expr, ExprLit, GenericArgument, Lit,
+    LitInt, LitStr, Path, PathArguments, Type, TypePath,
 };
+
+/// Extracts a string value from an expression that is either a string literal or a
+/// `concat!(...)` of string literals.
+///
+/// This mirrors the `concat!` handling used by `GenericMcpMacroAttributes` for the
+/// top-level macro attributes, but as a reusable helper so that nested attributes (such as
+/// prompt message `content` or field-level `#[prompt_argument(...)]` values) can support
+/// multi-line string literals too.
+pub fn string_literal_or_concat(expr: &Expr) -> syn::Result<String> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => Ok(lit_str.value()),
+        Expr::Macro(expr_macro) => {
+            let mac = &expr_macro.mac;
+            if mac.path.is_ident("concat") {
+                let args: crate::common::ExprList = syn::parse2(mac.tokens.clone())?;
+                let mut result = String::new();
+                for e in args.exprs {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Str(lit_str),
+                        ..
+                    }) = e
+                    {
+                        result.push_str(&lit_str.value());
+                    } else {
+                        return Err(syn::Error::new_spanned(
+                            e,
+                            "Only string literals are allowed inside concat!()",
+                        ));
+                    }
+                }
+                Ok(result)
+            } else {
+                Err(syn::Error::new_spanned(
+                    expr_macro,
+                    "Expected a string literal or concat!(...)",
+                ))
+            }
+        }
+        _ => Err(syn::Error::new_spanned(
+            expr,
+            "Expected a string literal or concat!(...)",
+        )),
+    }
+}
 
 pub fn base_crate() -> TokenStream {
     // At proc-macro *expansion* time, Cargo sets env vars for the **calling crate** (not for

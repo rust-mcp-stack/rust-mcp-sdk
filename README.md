@@ -58,6 +58,7 @@ Focus on your application logic , rust-mcp-sdk handles the protocol, transports,
   - [mcp_elicit](#-mcp_elicit)
   - [mcp_resource](#-mcp_resource)
   - [mcp_resource_template](#-mcp_resource_template)
+  - [mcp_prompt](#-mcp_prompt)
   - [mcp_icon](#-mcp_icon)
 - [Authentication](#authentication)
   - [RemoteAuthProvider](#remoteauthprovider)
@@ -458,12 +459,17 @@ println!("tags: {}", user_info.tags.join(","));
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
 ### ◾ [mcp_resource()](https://crates.io/crates/rust-mcp-macros)
-A procedural macro attribute that generates utility methods to create fully populated [Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instances from compile-time metadata , usually used for exposing static assets like files, images, or documents.
+A procedural macro attribute that generates utility methods to create fully populated [Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instances from compile-time metadata , usually used for exposing static assets like files, images, or documents. Also generates a `RESOURCE_URI` associated constant, usable in `match` patterns, and a `resource_mime_type()` accessor.
 
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
-### ◾ [mcp_resource_template()](https://crates.io/crates/rust-mcp-macros)
-A procedural macro attribute that generates utility methods to create fully populated [ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) instances from compile-time metadata for exposing parameterized server resources.
+ ### ◾ [mcp_resource_template()](https://crates.io/crates/rust-mcp-macros)
+A procedural macro attribute that generates utility methods to create fully populated [ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) instances from compile-time metadata for exposing parameterized server resources. Also generates a `RESOURCE_URI_TEMPLATE` associated constant, usable in `match` patterns, and a `resource_template_mime_type()` accessor.
+
+📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
+
+### ◾ [mcp_prompt()](https://crates.io/crates/rust-mcp-macros)
+A procedural macro attribute that generates utility methods to create fully populated [Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html) instances from compile-time metadata, and to render prompt messages for `prompts/get`. Struct fields become prompt arguments (`#[prompt_argument(...)]`), and the `messages` attribute declares the rendered message template(s).
 
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 

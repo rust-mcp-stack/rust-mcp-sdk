@@ -56,6 +56,7 @@ impl Parse for McpToolMacroAttributes {
             uri_template: _,
             uri: _,
             size: _,
+            messages: _,
             destructive_hint,
             idempotent_hint,
             open_world_hint,
