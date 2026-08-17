@@ -19,7 +19,7 @@ pub struct StaticTextResource;
 
 impl StaticTextResource {
     pub async fn get_resource() -> Result<ReadResourceResult, RpcError> {
-        let uri = Self::resource_uri().to_string();
+        let uri = Self::RESOURCE_URI.to_string();
         Ok(ReadResourceResult {
             contents: vec![TextResourceContents::new(
                 "This is the content of the static text resource.",
@@ -45,7 +45,7 @@ pub struct StaticBinaryResource;
 
 impl StaticBinaryResource {
     pub async fn get_resource() -> Result<ReadResourceResult, RpcError> {
-        let uri = Self::resource_uri().to_string();
+        let uri = Self::RESOURCE_URI.to_string();
         Ok(ReadResourceResult {
             contents: vec![BlobResourceContents::new(IMAGE_BASE64, &uri)
                 .with_mime_type("image/png")
@@ -107,7 +107,7 @@ pub struct EmbeddedTestResource;
 
 impl EmbeddedTestResource {
     pub async fn get_resource() -> Result<ReadResourceResult, RpcError> {
-        let uri = Self::resource_uri().to_string();
+        let uri = Self::RESOURCE_URI.to_string();
         Ok(ReadResourceResult {
             contents: vec![TextResourceContents::new(
                 "This is an embedded resource content.",
@@ -133,7 +133,7 @@ pub struct WatchedResource;
 
 impl WatchedResource {
     pub async fn get_resource() -> Result<ReadResourceResult, RpcError> {
-        let uri = Self::resource_uri().to_string();
+        let uri = Self::RESOURCE_URI.to_string();
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .map(|d| d.as_secs().to_string())

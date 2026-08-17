@@ -97,20 +97,20 @@ impl ServerHandler for ConformanceHandler {
         params: ReadResourceRequestParams,
         _runtime: Arc<dyn McpServer>,
     ) -> Result<ReadResourceResult, RpcError> {
-        let uri = &params.uri;
+        let uri = params.uri.as_str();
 
-        if uri == StaticTextResource::resource_uri() {
-            return StaticTextResource::get_resource().await;
+        match uri {
+            StaticTextResource::RESOURCE_URI => return StaticTextResource::get_resource().await,
+            StaticBinaryResource::RESOURCE_URI => {
+                return StaticBinaryResource::get_resource().await
+            }
+            EmbeddedTestResource::RESOURCE_URI => {
+                return EmbeddedTestResource::get_resource().await
+            }
+            WatchedResource::RESOURCE_URI => return WatchedResource::get_resource().await,
+            _ => {}
         }
-        if uri == StaticBinaryResource::resource_uri() {
-            return StaticBinaryResource::get_resource().await;
-        }
-        if uri == EmbeddedTestResource::resource_uri() {
-            return EmbeddedTestResource::get_resource().await;
-        }
-        if uri == WatchedResource::resource_uri() {
-            return WatchedResource::get_resource().await;
-        }
+
         if TemplateDataResource::matches_url(uri) {
             return TemplateDataResource::get_resource(uri).await;
         }
