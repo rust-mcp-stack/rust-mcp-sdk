@@ -141,7 +141,8 @@ impl ServerHandler for ConformanceHandler {
                 Ok(prompts::TestSimplePrompt::from_arguments(params.arguments.as_ref())?.render())
             }
             prompts::TestPromptWithArguments::PROMPT_NAME => Ok(
-                prompts::TestPromptWithArguments::from_arguments(params.arguments.as_ref())?.render(),
+                prompts::TestPromptWithArguments::from_arguments(params.arguments.as_ref())?
+                    .render(),
             ),
             prompts::TestPromptWithEmbeddedResource::PROMPT_NAME => {
                 let args = params.arguments.as_ref().ok_or_else(|| {

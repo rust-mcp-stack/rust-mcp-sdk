@@ -268,7 +268,9 @@ mod tests {
         };
         // Attach a default to `c` manually.
         let mut fields = fields;
-        fields.named[2].attrs.push(syn::parse_quote!(#[prompt_argument(default = "x")]));
+        fields.named[2]
+            .attrs
+            .push(syn::parse_quote!(#[prompt_argument(default = "x")]));
 
         let args = parse(fields).unwrap();
         assert_eq!(args.len(), 3);

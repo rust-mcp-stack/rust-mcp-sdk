@@ -252,7 +252,10 @@ fn prompt_name_const_title_and_meta_accessors() {
     assert_eq!(Accessors::PROMPT_NAME, "accessors");
     assert_eq!(Accessors::prompt_name(), "accessors");
     assert_eq!(Accessors::prompt_title(), Some("Accessors Title"));
-    assert_eq!(Accessors::prompt_description(), Some("Accessors description"));
+    assert_eq!(
+        Accessors::prompt_description(),
+        Some("Accessors description")
+    );
     assert_eq!(Accessors::prompt_meta(), Some("{\"k\": \"v\"}"));
 
     // PROMPT_NAME is a const and can be used directly in a match pattern.
