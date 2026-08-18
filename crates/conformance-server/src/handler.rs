@@ -137,11 +137,13 @@ impl ServerHandler for ConformanceHandler {
         _runtime: Arc<dyn McpServer>,
     ) -> Result<GetPromptResult, RpcError> {
         match params.name.as_str() {
-            "test_simple_prompt" => prompts::TestSimplePrompt::get_prompt_result(params),
-            "test_prompt_with_arguments" => {
-                prompts::TestPromptWithArguments::get_prompt_result(params)
+            prompts::TestSimplePrompt::PROMPT_NAME => {
+                Ok(prompts::TestSimplePrompt::from_arguments(params.arguments.as_ref())?.render())
             }
-            "test_prompt_with_embedded_resource" => {
+            prompts::TestPromptWithArguments::PROMPT_NAME => Ok(
+                prompts::TestPromptWithArguments::from_arguments(params.arguments.as_ref())?.render(),
+            ),
+            prompts::TestPromptWithEmbeddedResource::PROMPT_NAME => {
                 let args = params.arguments.as_ref().ok_or_else(|| {
                     RpcError::invalid_params().with_message(
                         "Arguments required for test_prompt_with_embedded_resource".to_string(),
@@ -153,7 +155,7 @@ impl ServerHandler for ConformanceHandler {
                     .unwrap_or("test://example-resource");
                 prompts::TestPromptWithEmbeddedResource::get_prompt(uri)
             }
-            "test_prompt_with_image" => prompts::TestPromptWithImage::get_prompt(),
+            prompts::TestPromptWithImage::PROMPT_NAME => prompts::TestPromptWithImage::get_prompt(),
             _ => Err(RpcError::invalid_params()
                 .with_message(format!("Unknown prompt: '{}'", params.name))),
         }

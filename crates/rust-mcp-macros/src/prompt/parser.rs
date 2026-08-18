@@ -4,8 +4,9 @@ use syn::{parse::Parse, Error};
 /// Represents the attributes for the `mcp_prompt` procedural macro.
 ///
 /// This struct parses and validates the attributes provided to the `mcp_prompt` macro.
-/// The `name` attribute is required and must not be empty. At least one `messages` entry
-/// is required so that the prompt can be rendered.
+/// The `name` attribute is required and must not be empty. `messages` is optional: when
+/// omitted the prompt is declaration-only and no rendering logic is generated. When
+/// provided it must contain at least one message.
 #[derive(Debug)]
 pub(crate) struct McpPromptMacroAttributes {
     pub name: Option<String>,
@@ -59,16 +60,13 @@ impl Parse for McpPromptMacroAttributes {
             ));
         }
 
-        if instance
-            .messages
-            .as_ref()
-            .map(|m| m.is_empty())
-            .unwrap_or(true)
-        {
-            return Err(Error::new(
-                attributes.span(),
-                "The 'messages' attribute is required and must contain at least one message.",
-            ));
+        if let Some(messages) = instance.messages.as_ref() {
+            if messages.is_empty() {
+                return Err(Error::new(
+                    attributes.span(),
+                    "The 'messages' attribute must contain at least one message when provided.",
+                ));
+            }
         }
 
         Ok(instance)
@@ -125,18 +123,16 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_messages() {
-        let err: syn::Error = parse_str::<McpPromptMacroAttributes>(
+    fn test_missing_messages_is_optional() {
+        let attrs: McpPromptMacroAttributes = parse_str(
             r#"
             name = "greeting"
         "#,
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert_eq!(
-            err.to_string(),
-            "The 'messages' attribute is required and must contain at least one message."
-        );
+        assert_eq!(attrs.name.as_deref(), Some("greeting"));
+        assert!(attrs.messages.is_none());
     }
 
     #[test]
@@ -151,7 +147,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "The 'messages' attribute is required and must contain at least one message."
+            "The 'messages' attribute must contain at least one message when provided."
         );
     }
 

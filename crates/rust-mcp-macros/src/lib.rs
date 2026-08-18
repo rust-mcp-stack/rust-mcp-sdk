@@ -354,33 +354,42 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 /// | `title`       | string literal             | No       | Display title for the prompt. |
 /// | `meta`        | JSON object string literal | No       | Arbitrary metadata as a valid JSON object. |
 /// | `icons`       | array of icon objects      | No       | Icons in the same format as web app manifests (supports `src`, `sizes`, `type`). |
-/// | `messages`    | array of `(role, content)` | Yes      | One or more message templates. `role` is `"user"` or `"assistant"`; `content` may reference arguments with `{name}` placeholders. |
+/// | `messages`    | array of `(role, content)` | No       | One or more message templates. `role` is `"user"` or `"assistant"`; `content` may reference arguments with `{name}` placeholders. When omitted, the prompt is declaration-only and no `render` method is generated. |
 ///
 /// String attributes (`name`, `description`, `title`, and message `content`) support
 /// `concat!(...)` with string literals for multi-line values.
 ///
 /// # Field attributes
 ///
-/// Each struct field may carry a `#[prompt_argument(...)]` attribute with:
+/// Each struct field becomes a prompt argument. A field's Rust type encodes whether it is
+/// required: `String` is required, `Option<String>` is optional, and `String` with a `default`
+/// is optional-with-fallback. Fields may carry a `#[prompt_argument(...)]` attribute with:
 /// - `title` — display title for the argument.
 /// - `description` — human-readable description of the argument.
-/// - `required` — whether the argument must be provided. Defaults to `true` for non-`Option`
-///   fields and `false` for `Option<T>` fields.
-/// - `default` — fallback value used when the argument is not supplied at render time.
+/// - `default` — fallback value used when the argument is not supplied (only on `String` fields).
 ///
 /// The `title`, `description`, and `default` field attributes support `concat!(...)` with
 /// string literals.
 ///
 /// # Generated methods
 ///
+/// - `PROMPT_NAME` → the prompt name as a `&'static str` const, usable in `match` patterns
 /// - `prompt_name()` → the prompt name as `&'static str`
+/// - `prompt_title()` → `Option<&'static str>` display title, if declared
+/// - `prompt_description()` → `Option<&'static str>` description, if declared
+/// - `prompt_meta()` → `Option<&'static str>` raw meta JSON string, if declared
 /// - `prompt_arguments()` → `Vec<PromptArgument>` derived from the struct fields
 /// - `prompt()` → a fully populated `Prompt` value
 /// - `request_params()` → a `GetPromptRequestParams` initialized with the prompt name
-/// - `render_prompt(Option<BTreeMap<String, String>>)` → renders the message templates,
-///   interpolating `{arg}` placeholders and applying defaults
-/// - `get_prompt_result(GetPromptRequestParams)` → validates the requested name and returns a
-///   `GetPromptResult`
+/// - `from_arguments(Option<&BTreeMap<String, String>>)` → parses and validates the raw
+///   arguments map into this typed prompt
+/// - `render(&self)` → renders this instance into a `GetPromptResult` (only generated when
+///   `messages` is provided)
+///
+/// The `prompts/get` handler itself is intentionally not generated: prompts that produce
+/// non-template content (images, embedded resources, dynamically-computed messages) can't be
+/// expressed as static templates, so the response is left to the user. For template prompts,
+/// dispatch on `PROMPT_NAME` in a `match` and call `from_arguments(...)?.render()`.
 ///
 /// # Example
 ///
@@ -404,6 +413,16 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 /// let prompt = FriendlyGreeting::prompt();
 /// assert_eq!(prompt.name, "friendly-greeting");
 /// assert_eq!(FriendlyGreeting::prompt_arguments().len(), 1);
+///
+/// // Dispatch in your handler and render from the parsed arguments.
+/// let params = rust_mcp_schema::GetPromptRequestParams {
+///     name: "friendly-greeting".into(),
+///     arguments: None,
+///     meta: None,
+/// };
+/// let result = FriendlyGreeting::from_arguments(params.arguments.as_ref())?.render();
+/// assert_eq!(result.messages.len(), 1);
+/// # Ok::<(), rust_mcp_schema::RpcError>(())
 /// ```
 #[proc_macro_attribute]
 pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
@@ -429,11 +448,14 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
         description,
         title,
         meta,
+        description_static,
+        title_static,
+        meta_static,
         icons,
         messages,
     } = generate_prompt_tokens(macro_attributes);
 
-    let (argument_metas, argument_exprs) = {
+    let argument_metas = {
         let fields_named = match &mut struct_item.fields {
             syn::Fields::Named(named) => named,
             _ => {
@@ -448,84 +470,139 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
             Ok(m) => m,
             Err(e) => return e.to_compile_error().into(),
         };
-        let exprs = match generate_prompt_argument_exprs(&fields_named.named, &base_crate) {
-            Ok(e) => e,
-            Err(e) => return e.to_compile_error().into(),
-        };
 
         for field in &mut fields_named.named {
             strip_prompt_argument_attrs(field);
         }
 
-        (metas, exprs)
+        metas
     };
 
-    // Apply defaults and validate required arguments before interpolation.
-    let default_and_validation: Vec<_> = argument_metas
+    let argument_exprs = generate_prompt_argument_exprs(&argument_metas, &base_crate);
+
+    // Per-field construction: parse the stringly-typed args map into the typed struct,
+    // applying defaults and validating required arguments.
+    let from_arguments_fields: Vec<_> = argument_metas
         .iter()
-        .map(|m| {
-            let arg_key = &m.name;
-            if let Some(default) = &m.default {
+        .map(|a| {
+            let field_ident = &a.field_ident;
+            let name = &a.name;
+            if let Some(default) = &a.default {
                 quote! {
-                    if !args.contains_key(#arg_key) {
-                        args.insert(#arg_key.to_string(), #default.to_string());
-                    }
+                    let #field_ident = args
+                        .and_then(|a| a.get(#name).cloned())
+                        .unwrap_or_else(|| #default.to_string());
                 }
-            } else if m.required {
+            } else if a.is_optional {
                 quote! {
-                    if !args.contains_key(#arg_key) {
-                        return Err(#base_crate::RpcError::invalid_params().with_message(
-                            format!(
-                                "Missing required argument '{}' for prompt '{}'",
-                                #arg_key,
-                                Self::prompt_name()
-                            )
-                        ));
-                    }
+                    let #field_ident = args.and_then(|a| a.get(#name).cloned());
                 }
             } else {
-                quote! {}
+                quote! {
+                    let #field_ident = args
+                        .and_then(|a| a.get(#name).cloned())
+                        .ok_or_else(|| #base_crate::RpcError::invalid_params().with_message(
+                            format!(
+                                "Missing required argument '{}' for prompt '{}'",
+                                #name,
+                                Self::PROMPT_NAME
+                            )
+                        ))?;
+                }
             }
         })
         .collect();
 
-    let message_renders: Vec<_> = messages
-        .iter()
-        .map(|msg| {
-            let role = &msg.role;
-            let template = &msg.content;
-            let replaces: Vec<_> = argument_metas
-                .iter()
-                .map(|m| {
-                    let placeholder = format!("{{{}}}", m.name);
-                    let arg_key = &m.name;
-                    quote! {
-                        __mcp_msg = __mcp_msg.replace(
-                            #placeholder,
-                            args.get(#arg_key).map(|s| s.as_str()).unwrap_or("")
-                        );
-                    }
-                })
-                .collect();
+    let field_idents: Vec<_> = argument_metas.iter().map(|a| &a.field_ident).collect();
 
-            quote! {
-                messages.push(#base_crate::PromptMessage {
-                    role: #role,
-                    content: #base_crate::ContentBlock::text_content({
-                        let mut __mcp_msg = #template.to_string();
-                        #(#replaces)*
-                        __mcp_msg
-                    }),
-                });
+    let from_arguments_method = quote! {
+        /// Parses and validates the raw arguments map into this typed prompt.
+        pub fn from_arguments(
+            args: Option<&std::collections::BTreeMap<String, String>>,
+        ) -> Result<Self, #base_crate::RpcError> {
+            #(#from_arguments_fields)*
+            Ok(Self { #(#field_idents),* })
+        }
+    };
+
+    let render_method = if messages.is_empty() {
+        quote! {}
+    } else {
+        let message_renders: Vec<_> = messages
+            .iter()
+            .map(|msg| {
+                let role = &msg.role;
+                let template = &msg.content;
+                let replaces: Vec<_> = argument_metas
+                    .iter()
+                    .map(|a| {
+                        let placeholder = format!("{{{}}}", a.name);
+                        let field_ident = &a.field_ident;
+                        if a.is_optional {
+                            quote! {
+                                __mcp_msg = __mcp_msg.replace(
+                                    #placeholder,
+                                    self.#field_ident.as_deref().unwrap_or("")
+                                );
+                            }
+                        } else {
+                            quote! {
+                                __mcp_msg = __mcp_msg.replace(#placeholder, &self.#field_ident);
+                            }
+                        }
+                    })
+                    .collect();
+
+                quote! {
+                    messages.push(#base_crate::PromptMessage {
+                        role: #role,
+                        content: #base_crate::ContentBlock::text_content({
+                            let mut __mcp_msg = #template.to_string();
+                            #(#replaces)*
+                            __mcp_msg
+                        }),
+                    });
+                }
+            })
+            .collect();
+
+        quote! {
+            /// Renders this prompt instance into a `GetPromptResult`.
+            pub fn render(&self) -> #base_crate::GetPromptResult {
+                let mut messages = Vec::new();
+                #(#message_renders)*
+                #base_crate::GetPromptResult {
+                    description: #description,
+                    messages,
+                    meta: #meta,
+                }
             }
-        })
-        .collect();
+        }
+    };
 
     let output = quote! {
         impl #ident {
+            /// The prompt name as a `&'static str` constant, usable in `match` patterns.
+            pub const PROMPT_NAME: &str = #name;
+
             /// Returns the name of the prompt as a `&'static str`.
             pub fn prompt_name() -> &'static str {
-                #name
+                Self::PROMPT_NAME
+            }
+
+            /// Returns the prompt title as an `Option<&'static str>`, if declared.
+            pub fn prompt_title() -> Option<&'static str> {
+                #title_static
+            }
+
+            /// Returns the prompt description as an `Option<&'static str>`, if declared.
+            pub fn prompt_description() -> Option<&'static str> {
+                #description_static
+            }
+
+            /// Returns the prompt meta as an `Option<&'static str>` (the raw JSON string), if declared.
+            pub fn prompt_meta() -> Option<&'static str> {
+                #meta_static
             }
 
             /// Returns the prompt arguments derived from the struct fields.
@@ -554,36 +631,9 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            /// Renders the prompt messages, interpolating `{arg}` placeholders and applying defaults.
-            pub fn render_prompt(
-                arguments: Option<std::collections::BTreeMap<String, String>>,
-            ) -> Result<Vec<#base_crate::PromptMessage>, #base_crate::RpcError> {
-                let mut args = arguments.unwrap_or_default();
+            #from_arguments_method
 
-                #(#default_and_validation)*
-
-                let mut messages = Vec::new();
-                #(#message_renders)*
-
-                Ok(messages)
-            }
-
-            /// Validates the requested prompt name and returns a `GetPromptResult`.
-            pub fn get_prompt_result(
-                params: #base_crate::GetPromptRequestParams,
-            ) -> Result<#base_crate::GetPromptResult, #base_crate::RpcError> {
-                if params.name != Self::prompt_name() {
-                    return Err(#base_crate::RpcError::invalid_params().with_message(
-                        format!("Unknown prompt: {}", params.name)
-                    ));
-                }
-                let messages = Self::render_prompt(params.arguments)?;
-                Ok(#base_crate::GetPromptResult {
-                    description: #description,
-                    messages,
-                    meta: #meta,
-                })
-            }
+            #render_method
         }
 
         // Retain the original struct with the `prompt_argument` helper attributes stripped.
