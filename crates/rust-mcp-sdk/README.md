@@ -468,7 +468,7 @@ A procedural macro attribute that generates utility methods to create fully popu
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 
 ### ◾ [mcp_prompt()](https://crates.io/crates/rust-mcp-macros)
-A procedural macro attribute that generates utility methods to create fully populated [Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html) instances from compile-time metadata, and to render prompt messages for `prompts/get`. Struct fields become prompt arguments (`#[prompt_argument(...)]`), and the `messages` attribute declares the rendered message template(s).
+A procedural macro attribute that generates utility methods to create fully populated [Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html) instances from compile-time metadata, and — when the optional `messages` attribute is provided — to parse request arguments (`from_arguments`) and render them into a `GetPromptResult` (`render`). Struct fields become typed prompt arguments (`String` = required, `Option<String>` = optional, `String` + `default` = fallback); the `prompts/get` handler itself is left to the user.
 
 📝 For complete documentation, example usage, and a list of all available attributes, please refer to https://crates.io/crates/rust-mcp-macros.
 

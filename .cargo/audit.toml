@@ -1,0 +1,10 @@
+[advisories]
+ignore = [
+    # h2 0.3.x is pulled in by actix-http / actix-web 4.x, which cannot upgrade
+    # to h2 0.4.x (http 0.2 vs http 1). No patched 0.3.x release exists. The
+    # h2 0.4 line used by reqwest/hyper is patched via `cargo update` (0.4.16).
+    "RUSTSEC-2026-0258",
+    # rsa (Marvin attack, timing side-channel) via oauth2-test-server, which is a
+    # dev-dependency of rust-mcp-extra. No fixed upgrade is available upstream.
+    "RUSTSEC-2023-0071",
+]

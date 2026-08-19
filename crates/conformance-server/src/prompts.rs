@@ -1,7 +1,5 @@
 use rust_mcp_macros::mcp_prompt;
-use rust_mcp_sdk::schema::{
-    ContentBlock, GetPromptResult, Prompt, PromptArgument, PromptMessage, Role,
-};
+use rust_mcp_sdk::schema::{ContentBlock, GetPromptResult, Prompt, PromptMessage, Role};
 
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
@@ -35,7 +33,6 @@ pub struct TestSimplePrompt {}
         (role = "user", content = "Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"),
     ]
 )]
-#[allow(dead_code)]
 pub struct TestPromptWithArguments {
     #[prompt_argument(description = "First test argument")]
     pub arg1: String,
@@ -46,25 +43,18 @@ pub struct TestPromptWithArguments {
 // ---------------
 // 3. test_prompt_with_embedded_resource
 // ---------------
-pub struct TestPromptWithEmbeddedResource;
+#[mcp_prompt(
+    name = "test_prompt_with_embedded_resource",
+    description = "A prompt with embedded resource for conformance testing."
+)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct TestPromptWithEmbeddedResource {
+    #[serde(rename = "resourceUri")]
+    #[prompt_argument(description = "URI of the resource to embed")]
+    pub resource_uri: String,
+}
 
 impl TestPromptWithEmbeddedResource {
-    pub fn prompt() -> Prompt {
-        Prompt {
-            name: "test_prompt_with_embedded_resource".into(),
-            description: Some("A prompt with embedded resource for conformance testing.".into()),
-            arguments: vec![PromptArgument {
-                name: "resourceUri".into(),
-                description: Some("URI of the resource to embed".into()),
-                required: Some(true),
-                title: None,
-            }],
-            icons: vec![],
-            meta: None,
-            title: None,
-        }
-    }
-
     pub fn get_prompt(
         resource_uri: &str,
     ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
@@ -80,7 +70,7 @@ impl TestPromptWithEmbeddedResource {
                 )),
             ],
             meta: None,
-            description: Some("A prompt with embedded resource for conformance testing.".into()),
+            description: Self::prompt_description().map(String::from),
         })
     }
 }
@@ -88,20 +78,13 @@ impl TestPromptWithEmbeddedResource {
 // ---------------
 // 4. test_prompt_with_image
 // ---------------
-pub struct TestPromptWithImage;
+#[mcp_prompt(
+    name = "test_prompt_with_image",
+    description = "A prompt with image content for conformance testing."
+)]
+pub struct TestPromptWithImage {}
 
 impl TestPromptWithImage {
-    pub fn prompt() -> Prompt {
-        Prompt {
-            name: "test_prompt_with_image".into(),
-            description: Some("A prompt with image content for conformance testing.".into()),
-            arguments: vec![],
-            icons: vec![],
-            meta: None,
-            title: None,
-        }
-    }
-
     pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
             messages: vec![
@@ -114,7 +97,7 @@ impl TestPromptWithImage {
                 )),
             ],
             meta: None,
-            description: Some("A prompt with image content for conformance testing.".into()),
+            description: Self::prompt_description().map(String::from),
         })
     }
 }

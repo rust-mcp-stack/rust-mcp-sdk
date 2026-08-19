@@ -104,6 +104,7 @@
       ]
     },
     "crates/rust-mcp-extra": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -116,6 +117,7 @@
       ]
     },
     "crates/rust-mcp-axum": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
@@ -132,6 +134,7 @@
       ]
     },
     "crates/rust-mcp-actix": {
+      "release-as": "1.0.0",
       "release-type": "rust",
       "draft": false,
       "prerelease": false,
