@@ -21,7 +21,7 @@ pub(crate) struct StreamableHttpStream {
     pub mcp_url: String,
     /// Maximum number of retry attempts for failed connections
     pub max_retries: usize,
-    /// Delay between retry attempts
+    /// Delay between retry attempts (overridden by SSE `retry:` field when present)
     pub retry_delay: Duration,
     /// Sender for transmitting received data to the readable channel
     pub read_tx: mpsc::Sender<Bytes>,
@@ -121,6 +121,14 @@ impl StreamableHttpStream {
 
         // Create a stream from the response bytes
         let mut stream = response.bytes_stream();
+        // SEP-1699: track priming events. If the server closes the POST→SSE
+        // gracefully without sending a JSON-RPC response but did send a priming
+        // event (id+retry), the response will arrive on the standalone GET
+        // stream. Reconnect via GET with Last-Event-ID after the server-provided
+        // retry delay.
+        let mut has_priming_event = false;
+        let mut received_response = false;
+        let mut sse_retry_delay: Option<Duration> = None;
 
         // Inner loop for processing stream chunks
         loop {
@@ -130,7 +138,27 @@ impl StreamableHttpStream {
                     match chunk {
                         Some(chunk) => chunk,
                         None => {
-                            // stream ended, unlike SSE, so no retry attempt here needed to reconnect
+                            // Stream gracefully ended. If we got a priming event
+                            // but no response, reconnect via GET to receive the
+                            // pending response (SEP-1699 resumability).
+                            if has_priming_event && !received_response {
+                                let delay = sse_retry_delay.unwrap_or(self.retry_delay);
+                                tracing::debug!(
+                                    "POST→SSE closed with priming only, reconnecting via GET (last_event_id={:?}, delay={:?})",
+                                    _last_event_id,
+                                    delay
+                                );
+                                time::sleep(delay).await;
+                                let reconnect_response = self
+                                    .make_standalone_stream_connection(
+                                        cancellation_token,
+                                        custom_headers,
+                                        _last_event_id.clone(),
+                                    )
+                                    .await?;
+                                stream = reconnect_response.bytes_stream();
+                                continue;
+                            }
                             return Err(TransportError::Internal("Stream has ended.".to_string()));
                         }
                     }
@@ -149,10 +177,15 @@ impl StreamableHttpStream {
 
                     if !events.is_empty() {
                         for event in events {
+                            if let Some(retry_ms) = event.retry {
+                                sse_retry_delay = Some(Duration::from_millis(retry_ms));
+                            }
+                            if event.id.is_some() {
+                                _last_event_id = event.id.clone();
+                                has_priming_event = true;
+                            }
                             if let Some(bytes) = event.data {
-                                if event.id.is_some() {
-                                    _last_event_id = event.id.clone();
-                                }
+                                received_response = true;
 
                                 if self.read_tx.send(bytes).await.is_err() {
                                     tracing::error!(
@@ -164,8 +197,10 @@ impl StreamableHttpStream {
                                 }
                             }
                         }
-                        // break after receiving the message(s)
-                        return Ok(());
+                        // Return once we've delivered a real response
+                        if received_response {
+                            return Ok(());
+                        }
                     }
                 }
                 Err(error) => {
@@ -273,6 +308,8 @@ impl StreamableHttpStream {
         let mut retry_count = 0;
         let mut stream_parser = SseParser::new();
         let mut _last_event_id: Option<EventId> = None;
+        // SSE `retry:` field overrides configured retry_delay (SEP-1699)
+        let mut sse_retry_delay: Option<Duration> = None;
 
         let mut response = Some(response);
 
@@ -315,8 +352,24 @@ impl StreamableHttpStream {
                         match chunk {
                             Some(chunk) => chunk,
                             None => {
-                                // stream ended, unlike SSE, so no retry attempt here needed to reconnect
-                                return Err(TransportError::Internal("Stream has ended.".to_string()));
+                                // Server gracefully closed the stream. SEP-1699: the
+                                // standalone SSE channel is long-lived, so we should
+                                // reconnect with Last-Event-ID for resumability rather
+                                // than terminate the channel.
+                                tracing::debug!(
+                                    "Standalone SSE stream closed by server, reconnecting (last_event_id={:?}, retry={:?})",
+                                    _last_event_id,
+                                    sse_retry_delay
+                                );
+                                if retry_count >= self.max_retries {
+                                    return Err(TransportError::Internal(
+                                        "Stream has ended; max reconnect retries reached".to_string()
+                                    ));
+                                }
+                                retry_count += 1;
+                                let delay = sse_retry_delay.unwrap_or(self.retry_delay);
+                                time::sleep(delay).await;
+                                break; // Break inner loop to reconnect
                             }
                         }
                     }
@@ -334,6 +387,9 @@ impl StreamableHttpStream {
 
                         if !events.is_empty() {
                             for event in events {
+                                if let Some(retry_ms) = event.retry {
+                                    sse_retry_delay = Some(Duration::from_millis(retry_ms));
+                                }
                                 if let Some(bytes) = event.data {
                                     if event.id.is_some() {
                                         _last_event_id = event.id.clone();
@@ -364,7 +420,9 @@ impl StreamableHttpStream {
                             error
                         );
                         retry_count += 1;
-                        time::sleep(self.retry_delay).await;
+                        // Honor SSE `retry:` field if present (SEP-1699)
+                        let delay = sse_retry_delay.unwrap_or(self.retry_delay);
+                        time::sleep(delay).await;
                         break; // Break inner loop to reconnect
                     }
                 }

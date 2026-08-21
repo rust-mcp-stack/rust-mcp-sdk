@@ -1,8 +1,8 @@
-#[cfg(feature = "hyper-server")]
 pub mod test_server_common {
     use crate::common::sample_tools::{DisplayAuthInfo, SayHelloTool, TaskAugmentedTool};
     use crate::common::task_runner::{McpTaskRunner, TaskJobInfo};
     use async_trait::async_trait;
+    use mcp_axum::{create_axum_server, AxumRuntime, AxumServer, AxumServerOptions};
     use rust_mcp_schema::schema_utils::{CallToolError, RequestFromClient};
     use rust_mcp_schema::{
         CallToolRequestParams, CallToolResult, CreateTaskResult, ListToolsResult,
@@ -12,16 +12,13 @@ pub mod test_server_common {
     use rust_mcp_sdk::event_store::EventStore;
     use rust_mcp_sdk::id_generator::IdGenerator;
     use rust_mcp_sdk::mcp_icon;
-    use rust_mcp_sdk::mcp_server::hyper_runtime::HyperRuntime;
     use rust_mcp_sdk::schema::{
         ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
         InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
     };
     use rust_mcp_sdk::task_store::{CreateTaskOptions, ServerTaskCreator};
     use rust_mcp_sdk::{
-        mcp_server::{
-            hyper_server, HyperServer, HyperServerOptions, ServerHandler, ToMcpServerHandler,
-        },
+        mcp_server::{ServerHandler, ToMcpServerHandler},
         McpServer, SessionId,
     };
     use serde_json::{Map, Value};
@@ -35,7 +32,7 @@ pub mod test_server_common {
     pub const INITIALIZE_RESPONSE: &str = r#"{"result":{"protocolVersion":"2025-11-25","capabilities":{"prompts":{},"resources":{"subscribe":true},"tools":{},"logging":{}},"serverInfo":{"name":"example-servers/everything","version":"1.0.0"}},"jsonrpc":"2.0","id":0}"#;
 
     pub struct LaunchedServer {
-        pub hyper_runtime: HyperRuntime,
+        pub axum_runtime: AxumRuntime,
         pub streamable_url: String,
         pub sse_url: String,
         pub sse_message_url: String,
@@ -172,8 +169,8 @@ pub mod test_server_common {
         }
     }
 
-    pub fn create_test_server(options: HyperServerOptions) -> HyperServer {
-        hyper_server::create_server(
+    pub fn create_test_server(options: AxumServerOptions) -> AxumServer {
+        create_axum_server(
             test_server_details(),
             TestServerHandler {
                 mcp_task_runner: McpTaskRunner::new(),
@@ -183,13 +180,13 @@ pub mod test_server_common {
         )
     }
 
-    pub async fn create_start_server(options: HyperServerOptions) -> LaunchedServer {
+    pub async fn create_start_server(options: AxumServerOptions) -> LaunchedServer {
         let streamable_url = options.streamable_http_url();
         let sse_url = options.sse_url();
         let sse_message_url = options.sse_message_url();
 
         let event_store_clone = options.event_store.clone();
-        let server = hyper_server::create_server(
+        let server = create_axum_server(
             test_server_details(),
             TestServerHandler {
                 mcp_task_runner: McpTaskRunner::new(),
@@ -198,12 +195,12 @@ pub mod test_server_common {
             options,
         );
 
-        let hyper_runtime = HyperRuntime::create(server).await.unwrap();
+        let axum_runtime = AxumRuntime::create(server).await.unwrap();
 
         tokio::time::sleep(Duration::from_millis(75)).await;
 
         LaunchedServer {
-            hyper_runtime,
+            axum_runtime,
             streamable_url,
             sse_url,
             sse_message_url,

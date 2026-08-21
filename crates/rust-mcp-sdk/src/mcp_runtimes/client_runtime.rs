@@ -4,7 +4,7 @@ use crate::error::{McpSdkError, SdkResult};
 use crate::id_generator::FastIdGenerator;
 use crate::mcp_traits::{McpClient, McpClientHandler};
 use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
-use crate::utils::ensure_server_protocole_compatibility;
+use crate::utils::ensure_server_protocol_compatibility;
 use crate::McpObserver;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use futures::future::{join_all, try_join_all};
+use futures::future::try_join_all;
 use futures::StreamExt;
 use rust_mcp_schema::schema_utils::ResultFromServer;
 use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
@@ -25,7 +25,7 @@ use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
 use rust_mcp_transport::{IoStream, SessionId, StreamId, TaskId, TransportDispatcher};
 use std::{sync::Arc, time::Duration};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, Lines};
 use tokio::sync::{watch, Mutex};
 
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
@@ -39,6 +39,13 @@ type TransportDispatcherType = dyn TransportDispatcher<
     ClientMessage,
 >;
 type TransportType = Arc<TransportDispatcherType>;
+
+async fn next_process_error<R>(reader: &mut Lines<BufReader<R>>) -> std::io::Result<Option<String>>
+where
+    R: AsyncRead + Unpin,
+{
+    reader.next_line().await
+}
 
 pub struct McpClientOptions<T>
 where
@@ -153,7 +160,7 @@ impl ClientRuntime {
             .await?;
 
         if let ResultFromServer::InitializeResult(initialize_result) = result {
-            ensure_server_protocole_compatibility(
+            ensure_server_protocol_compatibility(
                 &self.client_details.protocol_version,
                 &initialize_result.protocol_version,
             )?;
@@ -254,7 +261,6 @@ impl ClientRuntime {
         //TODO: improve the flow
         let mut stream = transport.start().await?;
 
-        let transport_clone = transport.clone();
         let mut error_io_stream = transport.error_stream().write().await;
         let error_io_stream = error_io_stream.take();
 
@@ -268,29 +274,20 @@ impl ClientRuntime {
             if let Some(IoStream::Readable(error_input)) = error_io_stream {
                 let mut reader = BufReader::new(error_input).lines();
                 loop {
-                    tokio::select! {
-                        should_break = transport_clone.is_shut_down() =>{
-                            if should_break {
-                                break;
-                            }
+                    match next_process_error(&mut reader).await {
+                        Ok(Some(error_message)) => {
+                            self_ref
+                                .handler
+                                .handle_process_error(error_message, self_ref)
+                                .await?;
                         }
-                        line = reader.next_line() =>{
-                            match line {
-                                Ok(Some(error_message)) => {
-                                    self_ref
-                                        .handler
-                                        .handle_process_error(error_message, self_ref)
-                                        .await?;
-                                }
-                                Ok(None) => {
-                                    // end of input
-                                    break;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error reading from std_err: {e}");
-                                    break;
-                                }
-                            }
+                        Ok(None) => {
+                            // Transport shutdown terminates the child and closes stderr.
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("Error reading from std_err: {e}");
+                            break;
                         }
                     }
                 }
@@ -392,7 +389,53 @@ impl ClientRuntime {
     #[cfg(feature = "streamable-http")]
     pub(crate) async fn create_sse_stream(self: Arc<Self>) -> SdkResult<()> {
         let stream_id: StreamId = DEFAULT_STREAM_ID.into();
-        let session_id = self.session_id.read().await.clone();
+        let retry_delay = self
+            .transport_options
+            .as_ref()
+            .and_then(|o| o.request_options.retry_delay)
+            .unwrap_or(Duration::from_secs(1));
+        let max_retries = self
+            .transport_options
+            .as_ref()
+            .and_then(|o| o.request_options.max_retries);
+
+        let self_ref = Arc::clone(&self);
+        let main_task = tokio::spawn(async move {
+            sse_reconnect_loop(self_ref, stream_id, retry_delay, max_retries).await
+        });
+
+        let mut lock = self.handlers.lock().await;
+        lock.push(main_task);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "streamable-http")]
+async fn sse_reconnect_loop(
+    runtime: Arc<ClientRuntime>,
+    stream_id: StreamId,
+    retry_delay: Duration,
+    max_retries: Option<usize>,
+) -> Result<(), McpSdkError> {
+    let mut reconnect_attempt: usize = 0;
+
+    loop {
+        if *runtime.is_shut_down.lock().await {
+            return Ok(());
+        }
+
+        let session_id = runtime.session_id.read().await.clone();
+        let transport = match runtime.new_transport(session_id, true).await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("SSE transport creation failed: {e}");
+                if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await
+                {
+                    return Ok(());
+                }
+                continue;
+            }
+        };
         let transport: Arc<
             dyn TransportDispatcher<
                 ServerMessages,
@@ -401,61 +444,94 @@ impl ClientRuntime {
                 ClientMessages,
                 ClientMessage,
             >,
-        > = Arc::new(self.new_transport(session_id, true).await?);
-        let mut stream = transport.start().await?;
-        self.store_transport(&stream_id, transport.clone()).await?;
+        > = Arc::new(transport);
+        let mut stream = match transport.start().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("SSE stream start failed: {e}");
+                if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await
+                {
+                    return Ok(());
+                }
+                continue;
+            }
+        };
+        runtime
+            .store_transport(&stream_id, transport.clone())
+            .await?;
 
-        let self_clone = Arc::clone(&self);
-
-        let main_task = tokio::spawn(async move {
-            loop {
-                if let Some(mcp_messages) = stream.next().await {
-                    match mcp_messages {
-                        ServerMessages::Single(server_message) => {
-                            let result = self.handle_message(server_message, &transport).await?;
-
-                            if let Some(result) = result {
-                                transport
-                                    .send_message(ClientMessages::Single(result), None)
-                                    .await?;
-                            }
-                        }
-                        ServerMessages::Batch(server_messages) => {
-                            let handling_tasks: Vec<_> = server_messages
-                                .into_iter()
-                                .map(|server_message| {
-                                    self.handle_message(server_message, &transport)
-                                })
-                                .collect();
-
-                            let results: Vec<_> = try_join_all(handling_tasks).await?;
-
-                            let results: Vec<_> = results.into_iter().flatten().collect();
-
-                            if !results.is_empty() {
-                                transport
-                                    .send_message(ClientMessages::Batch(results), None)
-                                    .await?;
-                            }
-                        }
+        loop {
+            if *runtime.is_shut_down.lock().await {
+                return Ok(());
+            }
+            match stream.next().await {
+                Some(ServerMessages::Single(server_message)) => {
+                    reconnect_attempt = 0;
+                    let result = runtime.handle_message(server_message, &transport).await?;
+                    if let Some(response) = result {
+                        transport
+                            .send_message(ClientMessages::Single(response), None)
+                            .await?;
                     }
-                    // close the stream after all messages are sent, unless it is a standalone stream
-                    if !stream_id.eq(DEFAULT_STREAM_ID) {
-                        return Ok::<_, McpSdkError>(());
+                }
+                Some(ServerMessages::Batch(server_messages)) => {
+                    reconnect_attempt = 0;
+                    let handling_tasks: Vec<_> = server_messages
+                        .into_iter()
+                        .map(|msg| runtime.handle_message(msg, &transport))
+                        .collect();
+                    let results = try_join_all(handling_tasks).await?;
+                    let responses: Vec<_> = results.into_iter().flatten().collect();
+                    if !responses.is_empty() {
+                        transport
+                            .send_message(ClientMessages::Batch(responses), None)
+                            .await?;
                     }
-                } else {
-                    // end of stream
-                    return Ok::<_, McpSdkError>(());
+                }
+                None => {
+                    break;
                 }
             }
-        });
+        }
 
-        let mut lock = self_clone.handlers.lock().await;
-        lock.push(main_task);
-
-        Ok(())
+        if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await {
+            return Ok(());
+        }
     }
+}
 
+/// Handles reconnect backoff and shutdown check.
+/// Returns true if the caller should continue retrying, false if it should stop.
+async fn try_reconnect(
+    reconnect_attempt: &mut usize,
+    max_retries: Option<usize>,
+    retry_delay: Duration,
+    runtime: &Arc<ClientRuntime>,
+) -> bool {
+    if *runtime.is_shut_down.lock().await {
+        return false;
+    }
+    *reconnect_attempt += 1;
+    if let Some(max) = max_retries {
+        if *reconnect_attempt > max {
+            tracing::warn!(
+                "SSE reconnect retries exhausted ({}/{})",
+                reconnect_attempt.saturating_sub(1),
+                max
+            );
+            return false;
+        }
+    }
+    tracing::debug!(
+        "SSE stream ended, reconnecting in {:?} (attempt {})",
+        retry_delay,
+        reconnect_attempt
+    );
+    tokio::time::sleep(retry_delay).await;
+    true
+}
+
+impl ClientRuntime {
     #[cfg(feature = "streamable-http")]
     pub(crate) async fn start_stream(
         &self,
@@ -790,10 +866,13 @@ impl McpClient for ClientRuntime {
             let _ = transport.shut_down().await;
         }
 
-        // wait for tasks
         let mut tasks_lock = self.handlers.lock().await;
         let join_handlers: Vec<_> = tasks_lock.drain(..).collect();
-        join_all(join_handlers).await;
+        drop(tasks_lock);
+
+        for handle in join_handlers {
+            handle.abort();
+        }
 
         Ok(())
     }
@@ -810,5 +889,47 @@ impl McpClient for ClientRuntime {
             }
         }
         let _ = self.shut_down().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::task::{Context, Poll};
+    use tokio::io::ReadBuf;
+
+    struct PendingReader {
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl AsyncRead for PendingReader {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.polls.fetch_add(1, Ordering::Relaxed);
+            Poll::Pending
+        }
+    }
+
+    #[tokio::test]
+    async fn process_error_reader_waits_without_busy_polling() {
+        let polls = Arc::new(AtomicUsize::new(0));
+        let input = PendingReader {
+            polls: Arc::clone(&polls),
+        };
+        let mut lines = BufReader::new(input).lines();
+
+        let result =
+            tokio::time::timeout(Duration::from_millis(25), next_process_error(&mut lines)).await;
+
+        assert!(result.is_err(), "pending stderr should remain pending");
+        assert!(
+            polls.load(Ordering::Relaxed) <= 2,
+            "idle stderr was polled repeatedly"
+        );
     }
 }

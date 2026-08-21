@@ -8,8 +8,8 @@ use crate::mcp_http::GenericBody;
 ///
 /// Many load balancers and proxies periodically send health check requests to determine if a backend is still alive.
 ///
-/// Custom path can be set in HyperServerOptions.
-/// • Set `HyperServerOptions.health_endpoint = None` to disable completely
+/// Custom path can be set in AxumServerOptions (rust-mcp-axum).
+/// • Set `AxumServerOptions.health_endpoint = None` to disable completely
 pub trait HealthHandler: Send + Sync + 'static {
     fn call(&self, _req: http::Request<&str>) -> http::Response<GenericBody>;
 }

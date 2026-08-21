@@ -1,4 +1,6 @@
+#[cfg(feature = "server")]
 use crate::mcp_traits::McpServerHandler;
+#[cfg(feature = "server")]
 use crate::session_store::SessionStore;
 use crate::task_store::{ClientTaskStore, ServerTaskStore};
 use crate::McpObserver;
@@ -14,10 +16,12 @@ use std::{sync::Arc, time::Duration};
 /// server details, handler, ping interval, and transport options.
 #[derive(Clone)]
 pub struct McpAppState {
+    #[cfg(feature = "server")]
     pub session_store: Arc<dyn SessionStore>,
     pub id_generator: Arc<dyn IdGenerator<SessionId>>,
     pub stream_id_gen: Arc<FastIdGenerator>,
     pub server_details: Arc<InitializeResult>,
+    #[cfg(feature = "server")]
     pub handler: Arc<dyn McpServerHandler>,
     pub ping_interval: Duration,
     pub transport_options: Arc<TransportOptions>,

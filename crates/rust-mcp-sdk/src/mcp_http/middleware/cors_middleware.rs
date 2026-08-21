@@ -10,9 +10,8 @@
 //! - Header/method validation
 //! - `Access-Control-Expose-Headers` support
 
-use crate::{
-    mcp_http::{types::GenericBody, GenericBodyExt, McpAppState, Middleware, MiddlewareNext},
-    mcp_server::error::TransportServerResult,
+use crate::mcp_http::{
+    types::GenericBody, GenericBodyExt, McpAppState, McpHttpResult, Middleware, MiddlewareNext,
 };
 use http::{
     header::{
@@ -265,7 +264,7 @@ impl Middleware for CorsMiddleware {
         req: Request<&'req str>,
         state: Arc<McpAppState>,
         next: MiddlewareNext<'req>,
-    ) -> TransportServerResult<Response<GenericBody>> {
+    ) -> McpHttpResult<Response<GenericBody>> {
         let origin = req
             .headers()
             .get(header::ORIGIN)

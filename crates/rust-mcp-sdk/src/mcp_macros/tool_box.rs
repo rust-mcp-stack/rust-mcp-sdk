@@ -67,12 +67,10 @@ macro_rules! tool_box {
 
             /// Attempts to convert a tool request into the appropriate tool variant
             fn try_from(value: rust_mcp_sdk::schema::CallToolRequestParams) -> Result<Self, Self::Error> {
-                let arguments = value
-                    .arguments
-                    .ok_or(rust_mcp_sdk::schema::schema_utils::CallToolError::invalid_arguments(
-                        &value.name,
-                        Some("Missing 'arguments' field in the request".to_string())
-                    ))?;
+                // The MCP spec allows callers to omit `arguments` entirely when a tool
+                // takes no arguments; treat a missing field as an empty object so
+                // parameter-less tools deserialize cleanly instead of erroring.
+                let arguments = value.arguments.unwrap_or_default();
 
                     let v = serde_json::to_value(arguments).map_err(|err| {
                         rust_mcp_sdk::schema::schema_utils::CallToolError::invalid_arguments(

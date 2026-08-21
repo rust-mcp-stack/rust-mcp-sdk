@@ -3,7 +3,6 @@ use crate::{
     error::McpSdkError,
     mcp_http::url_base,
 };
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
@@ -98,6 +97,12 @@ pub struct AuthorizationServerMetadata {
 
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub userinfo_endpoint: Option<String>,
+
+    /// MCP SEP-991 / IETF Client ID Metadata Documents (CIMD) support.
+    /// When `true`, clients may use an HTTPS URL pointing to a Client ID
+    /// Metadata Document as their `client_id` instead of registering via DCR.
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub client_id_metadata_document_supported: Option<bool>,
 }
 
 impl AuthorizationServerMetadata {
@@ -140,6 +145,7 @@ impl AuthorizationServerMetadata {
             introspection_endpoint_auth_signing_alg_values_supported: Default::default(),
             code_challenge_methods_supported: Default::default(),
             userinfo_endpoint: Default::default(),
+            client_id_metadata_document_supported: Default::default(),
         })
     }
 
@@ -151,7 +157,7 @@ impl AuthorizationServerMetadata {
     /// to RFC 8414 (OAuth 2.0 Authorization Server Metadata) or OpenID Connect Discovery 1.0.
     ///
     pub async fn from_discovery_url(discovery_url: &str) -> Result<Self, McpSdkError> {
-        let client = Client::new();
+        let client = crate::auth::shared_http_client();
         let metadata = client
             .get(discovery_url)
             .send()

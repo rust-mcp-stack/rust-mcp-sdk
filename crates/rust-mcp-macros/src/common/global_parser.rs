@@ -1,4 +1,4 @@
-use crate::common::{ExecutionSupportDsl, ExprList, IconDsl};
+use crate::common::{ExecutionSupportDsl, ExprList, IconDsl, PromptMessageDsl};
 use quote::ToTokens;
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};
 
@@ -16,6 +16,7 @@ pub(crate) struct GenericMcpMacroAttributes {
     pub uri: Option<String>,
     pub uri_template: Option<String>,
     pub audience: Option<Vec<String>>,
+    pub messages: Option<Vec<PromptMessageDsl>>,
 
     // tool specific
     pub destructive_hint: Option<bool>,
@@ -38,6 +39,7 @@ impl Parse for GenericMcpMacroAttributes {
             uri: None,
             uri_template: None,
             audience: None,
+            messages: None,
             destructive_hint: None,
             idempotent_hint: None,
             open_world_hint: None,
@@ -226,6 +228,26 @@ impl Parse for GenericMcpMacroAttributes {
                                 return Err(Error::new_spanned(
                                     &meta_name_value.value,
                                     "Expected an array for the 'icons' attribute",
+                                ));
+                            }
+                        }
+
+                        "messages" => {
+                            // Check if the value is an array (Expr::Array)
+                            if let Expr::Array(array_expr) = &meta_name_value.value {
+                                let message_list: Punctuated<PromptMessageDsl, Token![,]> =
+                                    array_expr
+                                        .elems
+                                        .iter()
+                                        .map(|elem| {
+                                            syn::parse2::<PromptMessageDsl>(elem.to_token_stream())
+                                        })
+                                        .collect::<Result<_, _>>()?;
+                                instance.messages = Some(message_list.into_iter().collect());
+                            } else {
+                                return Err(Error::new_spanned(
+                                    &meta_name_value.value,
+                                    "Expected an array for the 'messages' attribute",
                                 ));
                             }
                         }

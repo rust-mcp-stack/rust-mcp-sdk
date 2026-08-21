@@ -7,16 +7,14 @@
 pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandler};
+use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::mcp_http::{self, GenericBodyExt};
 use rust_mcp_sdk::schema::{
     Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
-    error::SdkResult,
-    event_store::InMemoryEventStore,
-    mcp_icon,
-    mcp_server::{hyper_server, HyperServerOptions, ToMcpServerHandler},
+    error::SdkResult, event_store::InMemoryEventStore, mcp_icon, mcp_server::ToMcpServerHandler,
     task_store::InMemoryTaskStore,
 };
 use serde_json::Map;
@@ -24,7 +22,7 @@ use std::sync::Arc;
 
 /// Custom health check handler.
 ///
-/// Use this with `HyperServerOptions.health_handler` to override the default
+/// Use this with `AxumServerOptions.health_handler` to override the default
 /// health endpoint behavior and return a custom response.
 struct CustomHealth {}
 impl mcp_http::HealthHandler for CustomHealth {
@@ -77,11 +75,11 @@ async fn main() -> SdkResult<()> {
     // STEP 2: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandler {};
 
-    // STEP 3: instantiate HyperServer, providing `server_details` , `handler` and HyperServerOptions
-    let server = hyper_server::create_server(
+    // STEP 3: instantiate AxumServer, providing `server_details` , `handler` and AxumServerOptions
+    let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
-        HyperServerOptions {
+        AxumServerOptions {
             host: "127.0.0.1".into(),
             event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
             task_store: Some(Arc::new(InMemoryTaskStore::new(None))),

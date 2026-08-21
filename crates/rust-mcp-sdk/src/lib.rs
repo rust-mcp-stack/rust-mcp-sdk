@@ -1,14 +1,12 @@
 pub mod error;
-#[cfg(feature = "hyper-server")]
-mod hyper_servers;
 mod mcp_handlers;
 
-#[cfg(any(feature = "hyper-server", feature = "auth"))]
+#[cfg(any(feature = "sse", feature = "streamable-http", feature = "auth"))]
 pub mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;
-#[cfg(any(feature = "server", feature = "hyper-server"))]
+#[cfg(feature = "server")]
 pub mod session_store;
 pub mod task_store;
 mod utils;
@@ -43,7 +41,7 @@ pub mod mcp_client {
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
     pub use super::mcp_runtimes::client_runtime::{ClientRuntime, McpClientOptions};
     pub use super::mcp_traits::{McpClientHandler, ToMcpClientHandler, ToMcpClientHandlerCore};
-    pub use super::utils::ensure_server_protocole_compatibility;
+    pub use super::utils::ensure_server_protocol_compatibility;
 }
 
 #[cfg(feature = "server")]
@@ -77,14 +75,10 @@ pub mod mcp_server {
     pub use super::mcp_runtimes::server_runtime::mcp_server_runtime_core as server_runtime_core;
     pub use super::mcp_runtimes::server_runtime::{McpServerOptions, ServerRuntime};
 
-    #[cfg(feature = "hyper-server")]
-    pub use super::hyper_servers::*;
     pub use super::utils::enforce_compatible_protocol_version;
     #[cfg(feature = "auth")]
     pub use super::utils::join_url;
 
-    #[cfg(feature = "hyper-server")]
-    pub use super::mcp_http::{McpAppState, McpHttpHandler};
     pub use super::mcp_traits::{McpServerHandler, ToMcpServerHandler, ToMcpServerHandlerCore};
 }
 

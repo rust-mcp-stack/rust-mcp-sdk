@@ -1,0 +1,25 @@
+[package]
+name = "conformance-server"
+version = "0.1.6"
+edition = "2021"
+rust-version = "1.80.0"
+description = "MCP conformance test server — implements all scenarios from the MCP conformance suite. Also serves as a reference implementation showing how to build a fully-featured MCP server with rust-mcp-sdk."
+publish = false
+
+[[bin]]
+name = "conformance-server"
+path = "src/main.rs"
+
+[dependencies]
+rust-mcp-sdk = { workspace = true, features = ["macros", "streamable-http"] }
+rust-mcp-axum = { workspace = true }
+rust-mcp-macros = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+axum = { workspace = true }
+axum-server = { workspace = true }

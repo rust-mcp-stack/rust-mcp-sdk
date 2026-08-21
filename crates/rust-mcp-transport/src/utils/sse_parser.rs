@@ -77,12 +77,16 @@ impl SseParser {
             }
         }
 
-        // Put back any incomplete message
+        // Put back any incomplete message, preserving partial bytes
+        // that were after the last \n (self.buffer after the while loop).
+        // this prevents data loss when data is received in multiple chunks (like from Cloudflare workers (Issue: #199))
         if !current_message_lines.is_empty() {
-            self.buffer.clear();
-            for line in current_message_lines {
-                self.buffer.extend_from_slice(&line);
+            let mut new_buf = BytesMut::new();
+            for line in current_message_lines.into_iter() {
+                new_buf.extend_from_slice(&line);
             }
+            new_buf.extend_from_slice(&self.buffer);
+            self.buffer = new_buf;
         }
 
         events
@@ -91,6 +95,9 @@ impl SseParser {
     fn parse_sse_message(&self, lines: &[Bytes]) -> Option<SseEvent> {
         let mut fields: HashMap<String, String> = HashMap::new();
         let mut data_parts: Vec<String> = Vec::new();
+        // Track whether we saw a `data:` line, even with an empty value, so we
+        // can distinguish "no data field at all" from "data: " (empty data).
+        let mut saw_data_line = false;
 
         for line_bytes in lines {
             let line_str = String::from_utf8_lossy(line_bytes);
@@ -100,8 +107,15 @@ impl SseParser {
                 continue;
             }
 
+            // Per the SSE spec, "data: " and "data:" are both valid; the value
+            // may be empty. We accept either form. The trailing newline is
+            // retained for backwards compatibility with existing consumers.
             let (key, value) = if let Some(value) = line_str.strip_prefix("data: ") {
-                ("data", value.trim_start().to_string())
+                ("data", value.to_string())
+            } else if line_str.trim_end_matches('\n') == "data:"
+                || line_str.trim_end_matches('\n').is_empty() && line_str.starts_with("data:")
+            {
+                ("data", String::new())
             } else if let Some(value) = line_str.strip_prefix("event: ") {
                 ("event", value.trim().to_string())
             } else if let Some(value) = line_str.strip_prefix("id: ") {
@@ -114,7 +128,12 @@ impl SseParser {
             };
 
             if key == "data" {
-                if !value.is_empty() {
+                saw_data_line = true;
+                // Skip empty data values. The legacy behavior preserves a
+                // trailing newline in the value (e.g. "hello\n" for the
+                // line "data: hello\n"), so a bare "\n" represents an
+                // empty data line and must not be pushed.
+                if !value.is_empty() && value != "\n" {
                     data_parts.push(value);
                 }
             } else {
@@ -130,9 +149,6 @@ impl SseParser {
             Some(Bytes::copy_from_slice(full_data.as_bytes())) // Use copy_from_slice for efficiency
         };
 
-        // Skip invalid message with no data
-        let data = data?;
-
         // Get event (default to None)
         let event = fields.get("event").cloned();
         let id = fields.get("id").cloned();
@@ -140,9 +156,16 @@ impl SseParser {
             .get("retry")
             .and_then(|r| r.trim().parse::<u64>().ok());
 
+        // Emit a priming event (no data) if it carries an `id` or `retry`
+        // (SEP-1699 resumability checkpoint / reconnection timing). Skip pure
+        // junk messages with no fields at all.
+        if data.is_none() && id.is_none() && retry.is_none() && event.is_none() && !saw_data_line {
+            return None;
+        }
+
         Some(SseEvent {
             event,
-            data: Some(data),
+            data,
             id,
             retry,
         })
@@ -209,11 +232,29 @@ mod tests {
 
     #[test]
     fn test_event_with_empty_data() {
+        // SEP-1699: A `data:` line with no value is a valid SSE field. When
+        // accompanied by `id` and/or `retry` it functions as a priming event
+        // for resumability and reconnection. Standalone `data:` with no other
+        // fields is preserved as an empty-data event.
         let mut parser = SseParser::new();
         let input = Bytes::from("data:\n\n");
         let events = parser.process_new_chunk(input);
-        // Your parser skips data lines with empty content
-        assert_eq!(events.len(), 0);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].data.is_none());
+        assert!(events[0].id.is_none());
+        assert!(events[0].retry.is_none());
+    }
+
+    #[test]
+    fn test_priming_event_with_id_and_retry() {
+        // SEP-1699 priming event: `id` + `retry` + empty `data` line, no result.
+        let mut parser = SseParser::new();
+        let input = Bytes::from("id: event-1\nretry: 500\ndata: \n\n");
+        let events = parser.process_new_chunk(input);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id.as_deref(), Some("event-1"));
+        assert_eq!(events[0].retry, Some(500));
+        assert!(events[0].data.is_none());
     }
 
     #[test]
@@ -231,6 +272,70 @@ mod tests {
         assert_eq!(
             events2[0].data.as_deref(),
             Some(Bytes::from("hello world\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_data_line_across_chunks_with_preceding_event_line() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("event: message\ndata: ");
+        let part2 = Bytes::from("hello\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 0);
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 1);
+        assert_eq!(events2[0].event.as_deref(), Some("message"));
+        assert_eq!(
+            events2[0].data.as_deref(),
+            Some(Bytes::from("hello\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_data_line_across_multiple_chunks_with_preceding_event() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("event: message\ndata: alpha bra");
+        let part2 = Bytes::from("vo charlie del");
+        let part3 = Bytes::from("ta echo foxtrot\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 0);
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 0);
+
+        let events3 = parser.process_new_chunk(part3);
+        assert_eq!(events3.len(), 1);
+        assert_eq!(events3[0].event.as_deref(), Some("message"));
+        assert_eq!(
+            events3[0].data.as_deref(),
+            Some(Bytes::from("alpha bravo charlie delta echo foxtrot\n").as_ref())
+        );
+    }
+
+    #[test]
+    fn test_multiple_events_split_across_chunks() {
+        let mut parser = SseParser::new();
+
+        let part1 = Bytes::from("data: one\n\ndata: t");
+        let part2 = Bytes::from("wo\n\n");
+
+        let events1 = parser.process_new_chunk(part1);
+        assert_eq!(events1.len(), 1);
+        assert_eq!(
+            events1[0].data.as_deref(),
+            Some(Bytes::from("one\n").as_ref())
+        );
+
+        let events2 = parser.process_new_chunk(part2);
+        assert_eq!(events2.len(), 1);
+        assert_eq!(
+            events2[0].data.as_deref(),
+            Some(Bytes::from("two\n").as_ref())
         );
     }
 

@@ -5,15 +5,14 @@ use crate::{
         OauthTokenVerifier, WELL_KNOWN_OAUTH_AUTHORIZATION_SERVER,
     },
     mcp_http::{
-        middleware::CorsMiddleware, url_base, GenericBody, GenericBodyExt, McpAppState, Middleware,
+        middleware::CorsMiddleware, url_base, GenericBody, GenericBodyExt, McpAppState,
+        McpHttpError, McpHttpResult, Middleware,
     },
-    mcp_server::error::{TransportServerError, TransportServerResult},
 };
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::{BodyExt, Full};
-use reqwest::Client;
 use std::{collections::HashMap, sync::Arc};
 
 /// Represents a **Remote OAuth authentication provider** integrated with the MCP server.
@@ -68,7 +67,7 @@ impl RemoteAuthProvider {
         token_verifier: Box<dyn OauthTokenVerifier>,
         required_scopes: Option<Vec<String>>,
     ) -> Result<Self, reqwest::Error> {
-        let client = Client::new();
+        let client = crate::auth::shared_http_client();
 
         let auth_server_meta = client
             .get(authorization_server_metadata_url)
@@ -87,30 +86,30 @@ impl RemoteAuthProvider {
 
     fn handle_authorization_server_metadata(
         response_str: String,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "application/json")
             .body(body)
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 
     fn handle_protected_resource_metadata(
         response_str: String,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         use http_body_util::BodyExt;
 
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "application/json")
             .body(body)
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 }
 
@@ -132,12 +131,12 @@ impl AuthProvider for RemoteAuthProvider {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> Result<http::Response<GenericBody>, TransportServerError> {
+    ) -> Result<http::Response<GenericBody>, McpHttpError> {
         let Some(endpoint) = self.endpoint_type(&request) else {
             return http::Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(GenericBody::empty())
-                .map_err(|err| TransportServerError::HttpError(err.to_string()));
+                .map_err(|err| McpHttpError::HttpError(err.to_string()));
         };
 
         // return early if method is not allowed
@@ -148,7 +147,7 @@ impl AuthProvider for RemoteAuthProvider {
         match endpoint {
             OauthEndpoint::AuthorizationServerMetadata => {
                 let json_payload = serde_json::to_string(&self.auth_server_meta)
-                    .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+                    .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
                 let cors = &CorsMiddleware::default();
                 cors.handle(
                     request,
@@ -163,7 +162,7 @@ impl AuthProvider for RemoteAuthProvider {
             }
             OauthEndpoint::ProtectedResourceMetadata => {
                 let json_payload = serde_json::to_string(&self.protected_resource_meta)
-                    .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+                    .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
 
                 let cors = &CorsMiddleware::default();
                 cors.handle(

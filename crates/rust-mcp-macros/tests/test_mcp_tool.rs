@@ -88,13 +88,14 @@ fn test_attributes() {
                 "minLength": 1,
                 "maxLength": 100
             },
+            // Emit JSON-Schema-canonical `["string", "null"]` type union,
+            // NOT the OpenAPI 3.0 `nullable: true` extension keyword.
             "email": {
-                "type": "string",
+                "type": ["string", "null"],
                 "title": "User Email",
                 "format": "email",
                 "minLength": 5,
-                "maxLength": 255,
-                "nullable": true
+                "maxLength": 255
             },
             "tags": {
                 "type": "array",

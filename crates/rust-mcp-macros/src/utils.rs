@@ -1,16 +1,80 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    punctuated::Punctuated, token, Attribute, DeriveInput, GenericArgument, Lit, LitInt, LitStr,
-    Path, PathArguments, Type, TypePath,
+    punctuated::Punctuated, token, Attribute, DeriveInput, Expr, ExprLit, GenericArgument, Lit,
+    LitInt, LitStr, Path, PathArguments, Type, TypePath,
 };
 
+/// Extracts a string value from an expression that is either a string literal or a
+/// `concat!(...)` of string literals.
+///
+/// This mirrors the `concat!` handling used by `GenericMcpMacroAttributes` for the
+/// top-level macro attributes, but as a reusable helper so that nested attributes (such as
+/// prompt message `content` or field-level `#[prompt_argument(...)]` values) can support
+/// multi-line string literals too.
+pub fn string_literal_or_concat(expr: &Expr) -> syn::Result<String> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => Ok(lit_str.value()),
+        Expr::Macro(expr_macro) => {
+            let mac = &expr_macro.mac;
+            if mac.path.is_ident("concat") {
+                let args: crate::common::ExprList = syn::parse2(mac.tokens.clone())?;
+                let mut result = String::new();
+                for e in args.exprs {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Str(lit_str),
+                        ..
+                    }) = e
+                    {
+                        result.push_str(&lit_str.value());
+                    } else {
+                        return Err(syn::Error::new_spanned(
+                            e,
+                            "Only string literals are allowed inside concat!()",
+                        ));
+                    }
+                }
+                Ok(result)
+            } else {
+                Err(syn::Error::new_spanned(
+                    expr_macro,
+                    "Expected a string literal or concat!(...)",
+                ))
+            }
+        }
+        _ => Err(syn::Error::new_spanned(
+            expr,
+            "Expected a string literal or concat!(...)",
+        )),
+    }
+}
+
 pub fn base_crate() -> TokenStream {
-    // Conditionally select the path for Tool
-    if cfg!(feature = "sdk") {
-        quote! { rust_mcp_sdk::schema }
-    } else {
+    // At proc-macro *expansion* time, Cargo sets env vars for the **calling crate** (not for
+    // the proc-macro binary itself). We use CARGO_PKG_NAME to identify the package that is
+    // expanding this macro and pick the correct schema path:
+    //
+    //  • When expanded inside `rust-mcp-sdk` itself → `rust_mcp_sdk::schema`
+    //  • When expanded in `rust-mcp-macros` test/doc binaries (which only depend on
+    //    `rust-mcp-schema`) → `rust_mcp_schema`
+    //  • When expanded in any other crate that depends on `rust-mcp-sdk` (e.g. rust-mcp-extra,
+    //    rust-mcp-axum, rust-mcp-actix, user code) → `rust_mcp_sdk::schema`
+    //
+    // Note: We assume the only consumers of these macros are the macro crate's own tests
+    // or crates going through the full SDK. Standalone usage is not supported.
+    //
+    // We identify "macros-only" usage by checking if the calling package
+    // is `rust-mcp-macros` itself (during its own test compilation).
+    let pkg_name = std::env::var("CARGO_PKG_NAME").unwrap_or_default();
+    if pkg_name == "rust-mcp-macros" {
+        // The macros crate's own tests: only rust-mcp-schema is available as a dev-dep.
         quote! { rust_mcp_schema }
+    } else {
+        // All other consumers go through rust-mcp-sdk, which re-exports schema.
+        quote! { rust_mcp_sdk::schema }
     }
 }
 
@@ -273,7 +337,54 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                                 return quote! {
                                     {
                                         let mut map = #inner_schema;
-                                        map.insert("nullable".to_string(), serde_json::Value::Bool(true));
+                                        // "nullable" is an OpenAPI 3.0 keyword that JSON Schema
+                                        // (Draft 7 / 2020-12, which MCP references for inputSchema)
+                                        // does not define. A conforming validator ignores it rather
+                                        // than rejecting it, which is exactly the problem: it asserts
+                                        // nothing, so the field still rejects the `null` that serde
+                                        // accepts for Option<T>. Encode nullability canonically instead.
+                                        //
+                                        // Widening `type` works whenever the inner schema has one:
+                                        // scalars, a Vec ("array") and a nested struct ("object") all
+                                        // do, and their type-specific keywords assert only against
+                                        // their own type, so `null` stays valid beside them. A derived
+                                        // enum emits `oneOf`/`enum` with no top-level `type`; there,
+                                        // widening is impossible and would be wrong anyway, since
+                                        // keywords in one schema object are conjunctive and a sibling
+                                        // `enum` would keep rejecting `null`. Wrap those in `anyOf` so
+                                        // the inner assertions stay intact.
+                                        match map.get("type").cloned() {
+                                            Some(serde_json::Value::String(t)) if t != "null" => {
+                                                map.insert(
+                                                    "type".to_string(),
+                                                    serde_json::Value::Array(vec![
+                                                        serde_json::Value::String(t),
+                                                        serde_json::Value::String("null".to_string()),
+                                                    ]),
+                                                );
+                                            }
+                                            Some(serde_json::Value::Array(mut arr)) => {
+                                                let null_v = serde_json::Value::String("null".to_string());
+                                                if !arr.iter().any(|v| v == &null_v) {
+                                                    arr.push(null_v);
+                                                    map.insert("type".to_string(), serde_json::Value::Array(arr));
+                                                }
+                                            }
+                                            _ => {
+                                                // No primitive `type` to extend — wrap in anyOf so the schema
+                                                // remains JSON-Schema-valid.
+                                                let inner = serde_json::Value::Object(map);
+                                                let mut wrapper = serde_json::Map::new();
+                                                wrapper.insert(
+                                                    "anyOf".to_string(),
+                                                    serde_json::Value::Array(vec![
+                                                        inner,
+                                                        serde_json::json!({ "type": "null" }),
+                                                    ]),
+                                                );
+                                                map = wrapper;
+                                            }
+                                        }
                                         #description_quote
                                         #title_quote
                                         #format_quote
@@ -342,6 +453,18 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                             #title_quote
                             #min_num_quote
                             #max_num_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
+                // Handle imported serde_json::Value (single-segment, mirroring the 2-segment case above)
+                else if ident == "Value" && segment.arguments.is_empty() {
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            #description_quote
+                            #title_quote
                             #default_quote
                             map
                         }
@@ -486,12 +609,29 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
                         }
                     };
                 }
+                // Handle serde_json::Value — any JSON value; emit empty schema {}
+                if seg0.ident == "serde_json"
+                    && seg0.arguments.is_empty()
+                    && seg1.ident == "Value"
+                    && seg1.arguments.is_empty()
+                {
+                    return quote! {
+                        {
+                            let mut map = serde_json::Map::new();
+                            #description_quote
+                            #title_quote
+                            #default_quote
+                            map
+                        }
+                    };
+                }
             }
-            // Fallback for unknown types
+            // Fallback for unknown types — emit empty schema {} (any value accepted).
+            // An empty schema is always valid JSON Schema; strict MCP clients reject
+            // non-standard type strings like "unknown".
             quote! {
                 {
                     let mut map = serde_json::Map::new();
-                    map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
                     #description_quote
                     #title_quote
                     #default_quote
@@ -502,7 +642,6 @@ pub fn type_to_json_schema(ty: &Type, attrs: &[Attribute]) -> proc_macro2::Token
         _ => quote! {
             {
                 let mut map = serde_json::Map::new();
-                map.insert("type".to_string(), serde_json::Value::String("unknown".to_string()));
                 #description_quote
                 #title_quote
                 #default_quote
@@ -645,11 +784,16 @@ mod tests {
 
     #[test]
     fn test_type_to_json_schema_option() {
+        // Emit JSON-Schema-canonical `["X", "null"]` type union, NOT the
+        // OpenAPI 3.0 `nullable: true` extension keyword.
         let ty: Type = parse_quote!(Option<i32>);
         let attrs: Vec<Attribute> = vec![];
         let tokens = type_to_json_schema(&ty, &attrs);
         let output = tokens.to_string();
-        assert!(output.contains("\"nullable\""));
+        // Must NOT emit the OpenAPI extension.
+        assert!(!output.contains("\"nullable\""));
+        // Must emit a `null` member that the type-union branch will append.
+        assert!(output.contains("\"null\""));
     }
 
     #[test]
@@ -864,12 +1008,26 @@ mod tests {
 
     #[test]
     fn test_json_schema_option_of_number() {
+        // Emit JSON-Schema-canonical `["integer", "null"]` type union, NOT
+        // the OpenAPI 3.0 `nullable: true` extension keyword.
         let ty: syn::Type = parse_quote!(Option<u64>);
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
-        assert!(output.contains("\"nullable\".to_string(),serde_json::Value::Bool(true)"));
-        assert!(output
-            .contains("\"type\".to_string(),serde_json::Value::String(\"integer\".to_string())"));
+        // Must NOT emit the OpenAPI extension.
+        assert!(
+            !output.contains("\"nullable\""),
+            "must not emit OpenAPI 3.0 nullable keyword (got: {output})"
+        );
+        // Must produce code that constructs the union — both "integer" and
+        // "null" string literals appear in the emitted token stream.
+        assert!(
+            output.contains("\"integer\""),
+            "expected inner type string literal in emitted tokens (got: {output})"
+        );
+        assert!(
+            output.contains("\"null\""),
+            "expected null string literal in emitted tokens (got: {output})"
+        );
     }
 
     #[test]
@@ -893,10 +1051,13 @@ mod tests {
 
     #[test]
     fn test_json_schema_fallback_unknown() {
+        // The fallback for unrecognised types now emits an empty schema {}
+        // (no type key), which is valid JSON Schema meaning "accept any value".
         let ty: syn::Type = parse_quote!((i32, i32));
         let tokens = type_to_json_schema(&ty, &[]);
         let output = render(tokens);
-        assert!(output
+        // Must NOT emit the invalid "unknown" type string
+        assert!(!output
             .contains("\"type\".to_string(),serde_json::Value::String(\"unknown\".to_string())"));
     }
 }

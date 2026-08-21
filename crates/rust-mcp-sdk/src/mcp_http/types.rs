@@ -1,7 +1,4 @@
-use crate::{
-    mcp_http::McpAppState,
-    mcp_server::error::{TransportServerError, TransportServerResult},
-};
+use crate::mcp_http::{McpAppState, McpHttpError, McpHttpResult};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use http::{
@@ -12,7 +9,7 @@ use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use serde_json::Value;
 use std::sync::Arc;
 
-pub type GenericBody = BoxBody<Bytes, TransportServerError>;
+pub type GenericBody = BoxBody<Bytes, McpHttpError>;
 
 pub trait GenericBodyExt {
     fn from_string(s: String) -> Self;
@@ -46,7 +43,7 @@ pub trait GenericBodyExt {
 impl GenericBodyExt for GenericBody {
     fn from_string(s: String) -> Self {
         Full::new(Bytes::from(s))
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed()
     }
 
@@ -56,13 +53,13 @@ impl GenericBodyExt for GenericBody {
             Err(_) => Bytes::from_static(b"{\"error\":\"internal_error\"}"),
         };
         Full::new(bytes)
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed()
     }
 
     fn empty() -> Self {
         Full::new(Bytes::new())
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed()
     }
 
@@ -160,9 +157,9 @@ impl RequestExt for http::Request<&str> {
     }
 }
 
-pub type BoxFutureResponse<'req> = BoxFuture<'req, TransportServerResult<Response<GenericBody>>>;
+pub type BoxFutureResponse<'req> = BoxFuture<'req, McpHttpResult<Response<GenericBody>>>;
 // pub type BoxFutureResponse<'req> =
-//     Pin<Box<dyn Future<Output = TransportServerResult<Response<GenericBody>>> + Send + 'req>>;
+//     Pin<Box<dyn Future<Output = McpHttpResult<Response<GenericBody>>> + Send + 'req>>;
 
 // Handler function type (can only be called once)
 pub type RequestHandlerFnOnce =

@@ -1,5 +1,4 @@
 use super::ServerRuntime;
-#[cfg(feature = "hyper-server")]
 use crate::{
     auth::AuthInfo,
     task_store::{ClientTaskStore, ServerTaskStore},
@@ -23,9 +22,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
-#[cfg(feature = "hyper-server")]
-use rust_mcp_transport::SessionId;
-use rust_mcp_transport::TransportDispatcher;
+use rust_mcp_transport::{SessionId, TransportDispatcher};
 use std::sync::Arc;
 
 /// Creates a new MCP server runtime with the specified configuration.
@@ -59,7 +56,6 @@ where
     ServerRuntime::new(options)
 }
 
-#[cfg(feature = "hyper-server")]
 pub(crate) fn create_server_instance(
     server_details: Arc<InitializeResult>,
     handler: Arc<dyn McpServerHandler>,
@@ -108,16 +104,7 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                     .with_message("The server is not configured with a task store.".to_string()));
             };
 
-            let session_id = {
-                #[cfg(feature = "hyper-server")]
-                {
-                    runtime.session_id()
-                }
-                #[cfg(not(feature = "hyper-server"))]
-                {
-                    None
-                }
-            };
+            let session_id = runtime.session_id();
 
             Some(TaskCreator {
                 request_id: client_jsonrpc_request.request_id().to_owned(),

@@ -15,8 +15,9 @@
 //! - If allowlist is `None` or empty → that check is skipped
 
 use crate::{
-    mcp_http::{error_response, types::GenericBody, McpAppState, Middleware, MiddlewareNext},
-    mcp_server::error::TransportServerResult,
+    mcp_http::{
+        error_response, types::GenericBody, McpAppState, McpHttpResult, Middleware, MiddlewareNext,
+    },
     schema::schema_utils::SdkError,
 };
 use async_trait::async_trait;
@@ -42,9 +43,11 @@ use std::sync::Arc;
 /// # Security Considerations
 /// - Always pin exact hostnames (e.g., `app.example.com:8443`)
 /// - Avoid wildcards or overly broad patterns
-/// - For local development, include `localhost:PORT` explicitly
+/// - For local development, the host is auto-derived from the bind address
+///   by default. When binding to a wildcard (`0.0.0.0`), configure
+///   `allowed_hosts` explicitly.
 /// - Never allow raw IP addresses in production allowlists
-pub(crate) struct DnsRebindProtector {
+pub struct DnsRebindProtector {
     /// List of allowed host header values for DNS rebinding protection.
     /// If not specified, host validation is disabled.
     pub allowed_hosts: Option<Vec<String>>,
@@ -72,7 +75,7 @@ impl Middleware for DnsRebindProtector {
         req: Request<&'req str>,
         state: Arc<McpAppState>,
         next: MiddlewareNext<'req>,
-    ) -> TransportServerResult<Response<GenericBody>> {
+    ) -> McpHttpResult<Response<GenericBody>> {
         if let Err(error) = self.protect_dns_rebinding(req.headers()).await {
             return error_response(StatusCode::FORBIDDEN, error);
         }

@@ -1,6 +1,6 @@
 [package]
 name = "rust-mcp-transport"
-version = "0.9.0"
+version = "1.0.0"
 authors = ["Ali Hashemi"]
 categories = ["data-structures"]
 description = "Transport implementations for the MCP (Model Context Protocol) within the rust-mcp-sdk ecosystem, enabling asynchronous data exchange and efficient message handling between MCP clients and servers."
@@ -34,7 +34,7 @@ reqwest = { workspace = true, default-features = false, features = [
 ], optional = true }
 
 [dev-dependencies]
-wiremock = "0.5"
+wiremock = "0.6"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures = { workspace = true }
 [lints]

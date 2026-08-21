@@ -1,0 +1,29 @@
+use crate::error::TransportServerResult;
+use crate::utils::remove_query_and_hash;
+use axum::{extract::State, response::IntoResponse, routing::post, Extension, Router};
+use http::{HeaderMap, Method, Uri};
+use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
+use std::sync::Arc;
+
+pub fn routes(sse_message_endpoint: &str) -> Router<Arc<McpAppState>> {
+    Router::new().route(
+        remove_query_and_hash(sse_message_endpoint).as_str(),
+        post(handle_messages),
+    )
+}
+
+pub async fn handle_messages(
+    uri: Uri,
+    headers: HeaderMap,
+    State(state): State<Arc<McpAppState>>,
+    Extension(http_handler): Extension<Arc<McpHttpHandler>>,
+    message: String,
+) -> TransportServerResult<impl IntoResponse> {
+    let request = McpHttpHandler::create_request(Method::POST, uri, headers, Some(&message));
+    let generic_response = http_handler
+        .handle_sse_message(request, state.clone())
+        .await?;
+    let (parts, body) = generic_response.into_parts();
+    let resp = axum::response::Response::from_parts(parts, axum::body::Body::new(body));
+    Ok(resp)
+}

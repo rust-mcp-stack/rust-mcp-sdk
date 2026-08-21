@@ -5,9 +5,6 @@ use rust_mcp_transport::error::TransportError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
-#[cfg(feature = "hyper-server")]
-use crate::hyper_servers::error::TransportServerError;
-
 pub type SdkResult<T> = core::result::Result<T, McpSdkError>;
 
 #[derive(Debug, Error)]
@@ -23,10 +20,6 @@ pub enum McpSdkError {
 
     #[error("{0}")]
     Join(#[from] JoinError),
-
-    #[cfg(feature = "hyper-server")]
-    #[error("{0}")]
-    HyperServer(#[from] TransportServerError),
 
     #[cfg(feature = "auth")]
     #[error("{0}")]

@@ -54,13 +54,26 @@ set -e
 
 cargo build --lib -p rust-mcp-sdk --no-default-features --features "client,stdio"
 cargo build --lib -p rust-mcp-sdk --no-default-features --features "server,stdio"
-cargo build --lib -p rust-mcp-sdk --no-default-features --features "hyper-server,streamable-http"
-cargo build --lib -p rust-mcp-sdk --no-default-features --features "hyper-server,sse"
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "server,streamable-http"
+cargo build --lib -p rust-mcp-sdk --no-default-features --features "server,sse"
 '''
 
 
 [tasks.check]
-dependencies = ["fmt", "clippy", "build-all-features", "test", "doc-strict", "doc-test"]
+dependencies = ["fmt", "clippy", "build-all-features", "test", "doc-strict", "doc-hidden-check", "doc-test"]
+
+[tasks.doc-hidden-check]
+workspace = false
+script = '''
+#!/bin/bash
+set -e
+# Fail if #[doc(hidden)] is used on a pub item (hides API surface)
+if git grep -n '^\s*#\[doc(hidden)\]' -- crates/*/src/ | grep -v 'test'; then
+  echo "ERROR: #[doc(hidden)] found on a public API item"
+  exit 1
+fi
+echo "#[doc(hidden)] check passed"
+'''
 
 [tasks.clippy-fix]
 command = "cargo"

@@ -188,7 +188,9 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
             IoStream::Writable(Box::pin(tokio::io::stderr())),
             self.pending_requests.clone(),
             self.options.timeout,
+            self.options.max_line_length,
             cancellation_token,
+            self.options.channel_capacity,
         );
 
         if let (Some(session_id), Some(stream_id), Some(event_store)) = (
@@ -274,11 +276,11 @@ impl Transport<ClientMessages, MessageFromServer, ClientMessage, ServerMessages,
                 if let Some(sender) = sender.as_ref() {
                     match sender.write_str("\n", true).await {
                         Ok(_) => {}
-                        Err(TransportError::Io(error)) => {
-                            if error.kind() == std::io::ErrorKind::BrokenPipe {
-                                let _ = disconnect_tx.send(());
-                                break;
-                            }
+                        Err(TransportError::Io(error))
+                            if error.kind() == std::io::ErrorKind::BrokenPipe =>
+                        {
+                            let _ = disconnect_tx.send(());
+                            break;
                         }
                         _ => {}
                     }

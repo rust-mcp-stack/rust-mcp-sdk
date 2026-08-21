@@ -2,12 +2,18 @@ extern crate proc_macro;
 
 mod common;
 mod elicit;
+mod prompt;
 mod resource;
 mod tool;
 mod utils;
 
 use crate::elicit::generator::{generate_form_schema, generate_from_impl};
 use crate::elicit::parser::{ElicitArgs, ElicitMode};
+use crate::prompt::generator::{
+    generate_prompt_argument_exprs, generate_prompt_tokens, parse_prompt_arguments,
+    strip_prompt_argument_attrs, PromptTokens,
+};
+use crate::prompt::parser::McpPromptMacroAttributes;
 use crate::resource::generator::{
     generate_resource_template_tokens, generate_resource_tokens, ResourceTemplateTokens,
     ResourceTokens,
@@ -333,6 +339,310 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// A procedural macro attribute to generate `rust_mcp_schema::Prompt` related utility methods for a struct.
+///
+/// The `mcp_prompt` macro turns a struct into a fully declared MCP prompt. Each struct field
+/// becomes a prompt argument, and the `messages` attribute declares the rendered message
+/// template(s) returned by `prompts/get`.
+///
+/// # Attributes
+///
+/// | Attribute     | Type                       | Required | Description |
+/// |---------------|----------------------------|----------|-------------|
+/// | `name`        | string literal             | Yes      | Unique name of the prompt. |
+/// | `description` | string literal             | No       | Human-readable description of the prompt. |
+/// | `title`       | string literal             | No       | Display title for the prompt. |
+/// | `meta`        | JSON object string literal | No       | Arbitrary metadata as a valid JSON object. |
+/// | `icons`       | array of icon objects      | No       | Icons in the same format as web app manifests (supports `src`, `sizes`, `type`). |
+/// | `messages`    | array of `(role, content)` | No       | One or more message templates. `role` is `"user"` or `"assistant"`; `content` may reference arguments with `{name}` placeholders. When omitted, the prompt is declaration-only and no `render` method is generated. |
+///
+/// String attributes (`name`, `description`, `title`, and message `content`) support
+/// `concat!(...)` with string literals for multi-line values.
+///
+/// # Field attributes
+///
+/// Each struct field becomes a prompt argument. A field's Rust type encodes whether it is
+/// required: `String` is required, `Option<String>` is optional, and `String` with a `default`
+/// is optional-with-fallback. Fields may carry a `#[prompt_argument(...)]` attribute with:
+/// - `title` — display title for the argument.
+/// - `description` — human-readable description of the argument.
+/// - `default` — fallback value used when the argument is not supplied (only on `String` fields).
+///
+/// The `title`, `description`, and `default` field attributes support `concat!(...)` with
+/// string literals.
+///
+/// # Generated methods
+///
+/// - `PROMPT_NAME` → the prompt name as a `&'static str` const, usable in `match` patterns
+/// - `prompt_name()` → the prompt name as `&'static str`
+/// - `prompt_title()` → `Option<&'static str>` display title, if declared
+/// - `prompt_description()` → `Option<&'static str>` description, if declared
+/// - `prompt_meta()` → `Option<&'static str>` raw meta JSON string, if declared
+/// - `prompt_arguments()` → `Vec<PromptArgument>` derived from the struct fields
+/// - `prompt()` → a fully populated `Prompt` value
+/// - `request_params()` → a `GetPromptRequestParams` initialized with the prompt name
+/// - `from_arguments(Option<&BTreeMap<String, String>>)` → parses and validates the raw
+///   arguments map into this typed prompt
+/// - `render(&self)` → renders this instance into a `GetPromptResult` (only generated when
+///   `messages` is provided)
+///
+/// The `prompts/get` handler itself is intentionally not generated: prompts that produce
+/// non-template content (images, embedded resources, dynamically-computed messages) can't be
+/// expressed as static templates, so the response is left to the user. For template prompts,
+/// dispatch on `PROMPT_NAME` in a `match` and call `from_arguments(...)?.render()`.
+///
+/// # Example
+///
+/// ```rust
+/// use rust_mcp_macros::mcp_prompt;
+///
+/// #[mcp_prompt(
+///     name = "friendly-greeting",
+///     title = "Friendly Greeting",
+///     description = "Generate a warm, personalized greeting",
+///     messages = [
+///         (role = "user",
+///          content = "Write a short, warm greeting for {name}. Mention one thing that makes them awesome."),
+///     ]
+/// )]
+/// struct FriendlyGreeting {
+///     #[prompt_argument(description = "Who to greet", default = "friend")]
+///     name: String,
+/// }
+///
+/// let prompt = FriendlyGreeting::prompt();
+/// assert_eq!(prompt.name, "friendly-greeting");
+/// assert_eq!(FriendlyGreeting::prompt_arguments().len(), 1);
+///
+/// // Dispatch in your handler and render from the parsed arguments.
+/// let params = rust_mcp_schema::GetPromptRequestParams {
+///     name: "friendly-greeting".into(),
+///     arguments: None,
+///     meta: None,
+/// };
+/// let result = FriendlyGreeting::from_arguments(params.arguments.as_ref())?.render();
+/// assert_eq!(result.messages.len(), 1);
+/// # Ok::<(), rust_mcp_schema::RpcError>(())
+/// ```
+#[proc_macro_attribute]
+pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
+    let input_item: syn::Item = parse_macro_input!(input as syn::Item);
+
+    let mut struct_item = match input_item {
+        syn::Item::Struct(s) => s,
+        _ => {
+            return quote! {
+                compile_error!("#[mcp_prompt] can only be applied to structs");
+            }
+            .into();
+        }
+    };
+
+    let ident = struct_item.ident.clone();
+
+    let macro_attributes = parse_macro_input!(attributes as McpPromptMacroAttributes);
+
+    let PromptTokens {
+        base_crate,
+        name,
+        description,
+        title,
+        meta,
+        description_static,
+        title_static,
+        meta_static,
+        icons,
+        messages,
+    } = generate_prompt_tokens(macro_attributes);
+
+    let argument_metas = {
+        let fields_named = match &mut struct_item.fields {
+            syn::Fields::Named(named) => named,
+            _ => {
+                return quote! {
+                    compile_error!("#[mcp_prompt] only supports structs with named fields");
+                }
+                .into();
+            }
+        };
+
+        let metas = match parse_prompt_arguments(&fields_named.named) {
+            Ok(m) => m,
+            Err(e) => return e.to_compile_error().into(),
+        };
+
+        for field in &mut fields_named.named {
+            strip_prompt_argument_attrs(field);
+        }
+
+        metas
+    };
+
+    let argument_exprs = generate_prompt_argument_exprs(&argument_metas, &base_crate);
+
+    // Per-field construction: parse the stringly-typed args map into the typed struct,
+    // applying defaults and validating required arguments.
+    let from_arguments_fields: Vec<_> = argument_metas
+        .iter()
+        .map(|a| {
+            let field_ident = &a.field_ident;
+            let name = &a.name;
+            if let Some(default) = &a.default {
+                quote! {
+                    let #field_ident = args
+                        .and_then(|a| a.get(#name).cloned())
+                        .unwrap_or_else(|| #default.to_string());
+                }
+            } else if a.is_optional {
+                quote! {
+                    let #field_ident = args.and_then(|a| a.get(#name).cloned());
+                }
+            } else {
+                quote! {
+                    let #field_ident = args
+                        .and_then(|a| a.get(#name).cloned())
+                        .ok_or_else(|| #base_crate::RpcError::invalid_params().with_message(
+                            format!(
+                                "Missing required argument '{}' for prompt '{}'",
+                                #name,
+                                Self::PROMPT_NAME
+                            )
+                        ))?;
+                }
+            }
+        })
+        .collect();
+
+    let field_idents: Vec<_> = argument_metas.iter().map(|a| &a.field_ident).collect();
+
+    let from_arguments_method = quote! {
+        /// Parses and validates the raw arguments map into this typed prompt.
+        pub fn from_arguments(
+            args: Option<&std::collections::BTreeMap<String, String>>,
+        ) -> Result<Self, #base_crate::RpcError> {
+            #(#from_arguments_fields)*
+            Ok(Self { #(#field_idents),* })
+        }
+    };
+
+    let render_method = if messages.is_empty() {
+        quote! {}
+    } else {
+        let message_renders: Vec<_> = messages
+            .iter()
+            .map(|msg| {
+                let role = &msg.role;
+                let template = &msg.content;
+                let replaces: Vec<_> = argument_metas
+                    .iter()
+                    .map(|a| {
+                        let placeholder = format!("{{{}}}", a.name);
+                        let field_ident = &a.field_ident;
+                        if a.is_optional {
+                            quote! {
+                                __mcp_msg = __mcp_msg.replace(
+                                    #placeholder,
+                                    self.#field_ident.as_deref().unwrap_or("")
+                                );
+                            }
+                        } else {
+                            quote! {
+                                __mcp_msg = __mcp_msg.replace(#placeholder, &self.#field_ident);
+                            }
+                        }
+                    })
+                    .collect();
+
+                quote! {
+                    messages.push(#base_crate::PromptMessage {
+                        role: #role,
+                        content: #base_crate::ContentBlock::text_content({
+                            let mut __mcp_msg = #template.to_string();
+                            #(#replaces)*
+                            __mcp_msg
+                        }),
+                    });
+                }
+            })
+            .collect();
+
+        quote! {
+            /// Renders this prompt instance into a `GetPromptResult`.
+            pub fn render(&self) -> #base_crate::GetPromptResult {
+                let mut messages = Vec::new();
+                #(#message_renders)*
+                #base_crate::GetPromptResult {
+                    description: #description,
+                    messages,
+                    meta: #meta,
+                }
+            }
+        }
+    };
+
+    let output = quote! {
+        impl #ident {
+            /// The prompt name as a `&'static str` constant, usable in `match` patterns.
+            pub const PROMPT_NAME: &str = #name;
+
+            /// Returns the name of the prompt as a `&'static str`.
+            pub fn prompt_name() -> &'static str {
+                Self::PROMPT_NAME
+            }
+
+            /// Returns the prompt title as an `Option<&'static str>`, if declared.
+            pub fn prompt_title() -> Option<&'static str> {
+                #title_static
+            }
+
+            /// Returns the prompt description as an `Option<&'static str>`, if declared.
+            pub fn prompt_description() -> Option<&'static str> {
+                #description_static
+            }
+
+            /// Returns the prompt meta as an `Option<&'static str>` (the raw JSON string), if declared.
+            pub fn prompt_meta() -> Option<&'static str> {
+                #meta_static
+            }
+
+            /// Returns the prompt arguments derived from the struct fields.
+            pub fn prompt_arguments() -> Vec<#base_crate::PromptArgument> {
+                #argument_exprs
+            }
+
+            /// Constructs and returns a `Prompt` instance.
+            pub fn prompt() -> #base_crate::Prompt {
+                #base_crate::Prompt {
+                    name: Self::prompt_name().to_string(),
+                    title: #title,
+                    description: #description,
+                    icons: #icons,
+                    arguments: Self::prompt_arguments(),
+                    meta: #meta,
+                }
+            }
+
+            /// Returns a `GetPromptRequestParams` initialized with the prompt name.
+            pub fn request_params() -> #base_crate::GetPromptRequestParams {
+                #base_crate::GetPromptRequestParams {
+                    name: Self::prompt_name().to_string(),
+                    arguments: None,
+                    meta: None,
+                }
+            }
+
+            #from_arguments_method
+
+            #render_method
+        }
+
+        // Retain the original struct with the `prompt_argument` helper attributes stripped.
+        #struct_item
+    };
+
+    TokenStream::from(output)
+}
+
 /// Derives a JSON Schema representation for a struct.
 ///
 /// This procedural macro generates a `json_schema()` method for the annotated struct, returning a
@@ -342,7 +652,17 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Features
 /// - **Basic Types:** Maps `String` to `"string"`, `i32` to `"integer"`, `bool` to `"boolean"`, etc.
-/// - **`Option<T>`:** Adds `"nullable": true` to the schema of the inner type, indicating the field is optional.
+/// - **`Option<T>`:** Encodes nullability the JSON-Schema-canonical way. When the inner schema
+///   has a string `type` — `"string"` and `"integer"`, but equally `"object"` for a nested
+///   struct and `"array"` for a `Vec` — it is widened to a type union `["X", "null"]`.
+///   Type-specific keywords (`properties`, `items`, `minLength`, `format`, …) only assert
+///   against their own type, so `null` remains valid alongside them. When the inner schema
+///   already has an array `type`, `"null"` is appended. When it has no `type` at all — the
+///   shape a derived enum emits, using `oneOf`/`enum` — the inner schema is wrapped in
+///   `{"anyOf": [<inner>, {"type": "null"}]}`, which keeps the inner assertions intact rather
+///   than widening past them. The OpenAPI 3.0 keyword `"nullable": true` is not emitted: it
+///   carries no meaning in JSON Schema, so it never actually permitted `null` in the first
+///   place.
 /// - **`Vec<T>`:** Generates an `"array"` schema with an `"items"` field describing the inner type.
 /// - **Nested Structs:** Recursively includes the schema of nested structs (assumed to derive `JsonSchema`),
 ///   embedding their `"properties"` and `"required"` fields.
@@ -357,7 +677,7 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 /// # Limitations
 /// - Supports only structs with named fields (e.g., `struct S { field: Type }`).
 /// - Nested structs must also derive `JsonSchema`, or compilation will fail.
-/// - Unknown types are mapped to `{"type": "unknown"}`.
+/// - Unrecognised types emit an empty schema `{}` (any value accepted).
 /// - Type paths must be in scope (e.g., fully qualified paths like `my_mod::InnerStruct` work if imported).
 ///
 /// # Panics
@@ -595,7 +915,12 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 /// Generated methods:
 /// - `resource_name()` → returns the resource name as `&'static str`
 /// - `resource_uri()` → returns the resource URI as `&'static str`
+/// - `resource_mime_type()` → returns the resource MIME type as `Option<&'static str>`
 /// - `resource()` → constructs and returns a complete `rust_mcp_schema::Resource` value
+///
+/// Generated associated constant:
+/// - `RESOURCE_URI` → the resource URI as `&'static str`, usable as a `match` pattern
+///   (e.g. `match uri { CompanyLogo::RESOURCE_URI => ... }`).
 ///
 /// # Attributes
 ///
@@ -652,6 +977,10 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 /// assert_eq!(resource.mime_type.unwrap(), "image/png");
 /// assert_eq!(resource.size.unwrap(), 102400);
 /// assert!(resource.icons.len() == 2);
+///
+/// // Usable as a match pattern:
+/// let uri = "https://example.com/assets/logo.png";
+/// assert!(matches!(uri, CompanyLogo::RESOURCE_URI));
 /// ```
 pub fn mcp_resource(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -669,19 +998,28 @@ pub fn mcp_resource(attributes: TokenStream, input: TokenStream) -> TokenStream 
         mime_type,
         size,
         uri,
+        uri_const,
     } = generate_resource_tokens(macro_attributes);
 
     quote! {
          impl #input_ident {
 
+            /// The resource URI as an associated constant, usable in `match` patterns.
+            pub const RESOURCE_URI: &'static str = #uri_const;
+
             /// returns the Resource uri
             pub fn resource_uri()->&'static str{
-                #uri
+                Self::RESOURCE_URI
             }
 
             /// returns the Resource name
             pub fn resource_name()->&'static str{
                 #name
+            }
+
+            /// returns the Resource mime type, if set
+            pub fn resource_mime_type()->Option<&'static str>{
+                #mime_type
             }
 
             /// Constructs and returns a `rust_mcp_schema::Resource` instance.
@@ -713,7 +1051,11 @@ pub fn mcp_resource(attributes: TokenStream, input: TokenStream) -> TokenStream 
 /// Generated methods:
 /// - `resource_name()` → returns the resource name as `&'static str`
 /// - `resource_uri_template()` → returns the resource template URI as `&'static str`
+/// - `resource_template_mime_type()` → returns the resource template MIME type as `Option<&'static str>`
 /// - `resource()` → constructs and returns a complete `rust_mcp_schema::Resource` value
+///
+/// Generated associated constant:
+/// - `RESOURCE_URI_TEMPLATE` → the resource template URI as `&'static str`, usable as a `match` pattern.
 ///
 /// # Attributes
 ///
@@ -770,6 +1112,10 @@ pub fn mcp_resource(attributes: TokenStream, input: TokenStream) -> TokenStream 
 /// assert_eq!(resource_template.name, "company-logos");
 /// assert_eq!(resource_template.mime_type.unwrap(), "image/png");
 /// assert!(resource_template.icons.len() == 2);
+///
+/// // Usable as a match pattern:
+/// let uri = "https://example.com/assets/{file_path}";
+/// assert!(matches!(uri, CompanyLogo::RESOURCE_URI_TEMPLATE));
 /// ```
 pub fn mcp_resource_template(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -786,19 +1132,28 @@ pub fn mcp_resource_template(attributes: TokenStream, input: TokenStream) -> Tok
         annotations,
         mime_type,
         uri_template,
+        uri_template_const,
     } = generate_resource_template_tokens(macro_attributes);
 
     quote! {
          impl #input_ident {
 
+            /// The resource template URI as an associated constant, usable in `match` patterns.
+            pub const RESOURCE_URI_TEMPLATE: &'static str = #uri_template_const;
+
             /// returns the Resource Template uri
             pub fn resource_template_uri()->&'static str{
-                #uri_template
+                Self::RESOURCE_URI_TEMPLATE
             }
 
             /// returns the Resource Template name
             pub fn resource_template_name()->&'static str{
                 #name
+            }
+
+            /// returns the Resource Template mime type, if set
+            pub fn resource_template_mime_type()->Option<&'static str>{
+                #mime_type
             }
 
             /// Constructs and returns a `rust_mcp_schema::Resource` instance.

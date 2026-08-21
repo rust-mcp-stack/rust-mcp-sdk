@@ -26,6 +26,7 @@ fn full_annotated_resource() {
     assert_eq!(resource.description.unwrap(), "Important document");
     assert_eq!(resource.title.unwrap(), "My Document");
     assert_eq!(resource.mime_type.unwrap(), "application/pdf");
+    assert_eq!(MyResource::resource_mime_type(), Some("application/pdf"));
     assert_eq!(resource.size.unwrap(), 1024);
     assert_eq!(
         resource.annotations.unwrap().audience,
@@ -37,6 +38,54 @@ fn full_annotated_resource() {
     assert_eq!(icon.src, "icon.png");
     assert_eq!(icon.theme, None);
     assert_eq!(icon.sizes, vec!["48x48"]);
+}
+
+#[test]
+fn resource_uri_const_usable_in_match() {
+    #[mcp_resource(
+        name = "my-resource",
+        uri = "https://example.com/file.pdf",
+        description = "Important document"
+    )]
+    struct MyResource;
+
+    assert_eq!(MyResource::RESOURCE_URI, "https://example.com/file.pdf");
+    assert_eq!(MyResource::resource_uri(), MyResource::RESOURCE_URI);
+    assert_eq!(MyResource::resource_mime_type(), None);
+
+    let uri = "https://example.com/file.pdf";
+    let matched = match uri {
+        MyResource::RESOURCE_URI => "logo",
+        _ => "other",
+    };
+    assert_eq!(matched, "logo");
+}
+
+#[test]
+fn resource_uri_template_const_usable_in_match() {
+    #[mcp_resource_template(
+        name = "my-resource-template",
+        uri_template = "https://example.com/{path}",
+        description = "Important document"
+    )]
+    struct MyTemplate;
+
+    assert_eq!(
+        MyTemplate::RESOURCE_URI_TEMPLATE,
+        "https://example.com/{path}"
+    );
+    assert_eq!(
+        MyTemplate::resource_template_uri(),
+        MyTemplate::RESOURCE_URI_TEMPLATE
+    );
+    assert_eq!(MyTemplate::resource_template_mime_type(), None);
+
+    let uri = "https://example.com/{path}";
+    let matched = match uri {
+        MyTemplate::RESOURCE_URI_TEMPLATE => "template",
+        _ => "other",
+    };
+    assert_eq!(matched, "template");
 }
 
 #[test]
@@ -63,6 +112,10 @@ fn full_annotated_resource_template() {
     assert_eq!(resource.description.unwrap(), "Important document");
     assert_eq!(resource.title.unwrap(), "My Document");
     assert_eq!(resource.mime_type.unwrap(), "application/pdf");
+    assert_eq!(
+        MyResource::resource_template_mime_type(),
+        Some("application/pdf")
+    );
     assert_eq!(
         resource.annotations.unwrap().audience,
         vec![Role::User, Role::Assistant]

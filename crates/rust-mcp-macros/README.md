@@ -7,6 +7,9 @@ The available macros are:
 
 [mcp_tool](#mcp_tool-macro): Generates a [rust_mcp_schema::Tool](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Tool.html) instance from a struct.
 [mcp_elicit](#mcp_elicit): Generates elicitation logic for gathering user input based on a struct's schema, supporting [Form](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ElicitRequestFormParams.html) and [URL](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ElicitRequestUrlParams.html) modes.
+[mcp_resource](#mcp_resource-macro): Generates a [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) instance from compile-time metadata.
+[mcp_resource_template](#mcp_resource_template-macro): Generates a [rust_mcp_schema::ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) instance for parameterized resources.
+[mcp_prompt](#mcp_prompt-macro): Generates a [rust_mcp_schema::Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html) instance plus prompt rendering logic from a struct.
 [derive(JsonSchema)]: Derives a JSON Schema representation for structs and enums, used by the other macros for schema generation.
 
 These macros rely on [rust_mcp_schema](https://crates.io/crates/rust-mcp-schema) and serde_json for schema handling.
@@ -178,7 +181,7 @@ The `mcp_elicit` macro generates implementations for eliciting user input based 
     
     println!("name: {}", user_info.name);
     println!("age: {}", user_info.age);
-    println!("email: {}", user_info.email.unwrap_or_default();
+    println!("email: {}", user_info.email.unwrap_or_default());
     println!("tags: {}", user_info.tags.join(","));     
 ```
 
@@ -192,7 +195,12 @@ Generated methods
 
 - `resource_name()` → &'static str: Returns the resource name.
 - `resource_uri()` → &'static str: Returns the resource URI.
+- `resource_mime_type()` → Option<&'static str>: Returns the resource MIME type, if set.
 - `resource()` → [rust_mcp_schema::Resource](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Resource.html) Constructs and returns the complete Resource struct.
+
+Generated associated constant
+
+- `RESOURCE_URI` → &'static str: The resource URI as an associated constant, usable in `match` patterns.
 
 ### Attributes
 
@@ -249,6 +257,12 @@ let res = CompanyLogo::resource();
 assert_eq!(res.mime_type.unwrap(), "image/png");
 assert_eq!(res.size.unwrap(), 1024);
 assert!(res.icons.len() == 2);
+
+// The URI is also available as a constant for use in match patterns:
+match uri {
+    CompanyLogo::RESOURCE_URI => { /* handle the logo */ }
+    _ => {}
+}
 ```
 👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and blob resources.
 
@@ -262,7 +276,12 @@ Generated methods
 
 - `resource_template_name()` → &'static str: Returns the resource template name.
 - `resource_template_uri()` → &'static str: Returns the resource template URI .
+- `resource_template_mime_type()` → Option<&'static str>: Returns the resource template MIME type, if set.
 - `resource_template()` → [rust_mcp_schema::ResourceTemplate](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.ResourceTemplate.html) Constructs and returns the complete ResourceTemplate struct.
+
+Generated associated constant
+
+- `RESOURCE_URI_TEMPLATE` → &'static str: The resource template URI as an associated constant, usable in `match` patterns.
 
 ### Attributes
 
@@ -277,6 +296,75 @@ Generated methods
 
 
 👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example showing Pokémon sprites exposed as a dynamic resource.
+
+## ➡️ mcp_prompt Macro
+
+A procedural macro attribute that generates utility methods for declaring a reusable, parameterized prompt. It produces a fully populated [rust_mcp_schema::Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html) instance plus the typed parsing and message-rendering logic used by `prompts/get`.
+
+Generated methods
+
+- `PROMPT_NAME` → `&'static str`: The prompt name as a const, usable in `match` patterns.
+- `prompt_name()` → `&'static str`: Returns the prompt name.
+- `prompt_title()` → `Option<&'static str>`: Returns the declared title, if any.
+- `prompt_description()` → `Option<&'static str>`: Returns the declared description, if any.
+- `prompt_meta()` → `Option<&'static str>`: Returns the raw declared meta JSON string, if any.
+- `prompt_arguments()` → `Vec<PromptArgument>`: Returns the prompt arguments derived from the struct fields.
+- `prompt()` → [rust_mcp_schema::Prompt](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.Prompt.html): Constructs and returns the complete Prompt struct.
+- `request_params()` → [rust_mcp_schema::GetPromptRequestParams](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/struct.GetPromptRequestParams.html): Returns request params pre-initialized with the prompt name.
+- `from_arguments(Option<&BTreeMap<String, String>>)` → `Result<Self, RpcError>`: Parses and validates the raw arguments map into this typed prompt.
+- `render(&self)` → `GetPromptResult`: Renders this instance into the result. Only generated when `messages` is provided.
+
+> The `prompts/get` handler is intentionally **not** generated. Prompts that produce non-template content (images, embedded resources, dynamically-computed messages) can't be expressed as static templates. For template prompts, dispatch on `PROMPT_NAME` in a `match` and call `from_arguments(...)?.render()`.
+
+### Attributes
+
+- `name` : Unique identifier for the prompt. Must be non-empty.
+- `description` : Human-readable description of what the prompt provides.
+- `title` : Display title.
+- `meta` : Arbitrary metadata. Must be a valid JSON object string.
+- `icons` : Icons (same format as mcp_tool icons ^^).
+- `messages` : Optional. One or more message templates, written as `(role = "user"|"assistant", content = "…")`. The `content` may reference arguments with `{arg}` placeholders. When omitted, the prompt is declaration-only and no `render` method is generated.
+
+### Field attributes
+
+Each struct field becomes a prompt argument. A field's Rust type encodes whether it is required: `String` is required, `Option<String>` is optional, and `String` with a `default` is optional-with-fallback. Fields may carry `#[prompt_argument(...)]`:
+
+- `title` : Display title for the argument.
+- `description` : Human-readable description of the argument.
+- `default` : Fallback value used when the argument is not supplied (only on `String` fields).
+
+### Example
+
+```rust
+use rust_mcp_macros::mcp_prompt;
+
+#[mcp_prompt(
+    name = "friendly-greeting",
+    title = "Friendly Greeting",
+    description = "Generate a warm, personalized greeting",
+    messages = [
+        (role = "user",
+         content = "Write a short, warm greeting for {name}. Mention one thing that makes them awesome."),
+    ]
+)]
+struct FriendlyGreeting {
+    #[prompt_argument(description = "Who to greet", default = "friend")]
+    name: String,
+}
+
+let prompt = FriendlyGreeting::prompt();
+assert_eq!(prompt.name, "friendly-greeting");
+assert_eq!(FriendlyGreeting::prompt_arguments().len(), 1);
+
+// Dispatch in your handler and render from the parsed arguments.
+let params = rust_mcp_schema::GetPromptRequestParams {
+    name: "friendly-greeting".into(),
+    arguments: None,
+    meta: None,
+};
+let result = FriendlyGreeting::from_arguments(params.arguments.as_ref())?.render();
+# Ok::<(), rust_mcp_schema::RpcError>(())
+```
 
 ---
 

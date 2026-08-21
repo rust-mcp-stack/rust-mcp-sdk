@@ -23,6 +23,12 @@ pub enum IoStream {
     Writable(Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>),
 }
 
+/// Maximum size (in bytes) of a single newline-delimited incoming message
+/// for all transports (stdio, SSE, streamable HTTP). Messages exceeding
+/// this limit are dropped silently; increase this value if you expect
+/// large tool results or responses.
+pub const DEFAULT_MAX_LINE_LENGTH: usize = 16 * 1024 * 1024;
+
 /// Configuration for the transport layer
 #[derive(Debug, Clone)]
 pub struct TransportOptions {
@@ -31,11 +37,26 @@ pub struct TransportOptions {
     /// This value defines the maximum amount of time to wait for a response before
     /// considering the request as timed out.
     pub timeout: Duration,
+    /// Maximum size (in bytes) of a single newline-delimited incoming message.
+    ///
+    /// Messages exceeding this limit are dropped and logged with a warning;
+    /// the stream stays alive and resumes on the next line. If you expect
+    /// large tool results or responses, increase this value.
+    /// Default: 16 MiB.
+    pub max_line_length: usize,
+
+    /// Capacity of the incoming-message channel buffer.
+    ///
+    /// A larger value smooths out head-of-line jitter under bursty traffic at
+    /// the cost of more buffered memory. Defaults to 36.
+    pub channel_capacity: usize,
 }
 impl Default for TransportOptions {
     fn default() -> Self {
         Self {
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MSEC),
+            max_line_length: DEFAULT_MAX_LINE_LENGTH,
+            channel_capacity: crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY,
         }
     }
 }
@@ -161,25 +182,24 @@ where
 {
 }
 
-// pub trait IntoClientTransport {
-//     type TransportType: Transport<
-//         ServerMessages,
-//         MessageFromClient,
-//         ServerMessage,
-//         ClientMessages,
-//         ClientMessage,
-//     >;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     fn into_transport(self, session_id: Option<SessionId>) -> TransportResult<Self::TransportType>;
-// }
+    #[test]
+    fn default_channel_capacity_matches_constant() {
+        assert_eq!(
+            TransportOptions::default().channel_capacity,
+            crate::mcp_stream::DEFAULT_MESSAGE_CHANNEL_CAPACITY
+        );
+    }
 
-// impl<T> IntoClientTransport for T
-// where
-//     T: Transport<ServerMessages, MessageFromClient, ServerMessage, ClientMessages, ClientMessage>,
-// {
-//     type TransportType = T;
-
-//     fn into_transport(self, _: Option<SessionId>) -> TransportResult<Self::TransportType> {
-//         Ok(self)
-//     }
-// }
+    #[test]
+    fn channel_capacity_is_overridable() {
+        let options = TransportOptions {
+            channel_capacity: 256,
+            ..Default::default()
+        };
+        assert_eq!(options.channel_capacity, 256);
+    }
+}

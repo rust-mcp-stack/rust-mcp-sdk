@@ -22,10 +22,10 @@ jobs:
       fail-fast: false # Continue testing other OSes even if one fails
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Cache Rust
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -74,12 +74,11 @@ jobs:
         uses: actions-rust-lang/audit@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          ignore: RUSTSEC-2023-0071
         if: matrix.os == 'ubuntu-latest' # Run audit only on Linux
 
       # install nodejs that is required for tests
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24" # Stable Node.js version
         # Verify npx is available
@@ -93,7 +92,7 @@ jobs:
 
       # install Python and uvx that is required for tests
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11" # Stable Python version
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.1...rust-mcp-macros-v1.0.0) (2026-07-25)
+
+
+### 🐛 Bug Fixes
+
+* **macros:** Emit Option&lt;T&gt; as a JSON Schema type union instead of the OpenAPI nullable keyword ([#200](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/200)) ([4444c6c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4444c6cd381822b83b7fa0d7f21d77e1d6fdc9a4))
+* **macros:** Emit valid schemas for unrestricted JSON values ([#218](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/218)) ([e4f0af8](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/e4f0af8f8d1eff458386fc9b63e8fcae5370043a))
+
+## [0.9.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.0...rust-mcp-macros-v0.9.1) (2026-06-24)
+
+
+### 📚 Documentation
+
+* Documentation audit, examples upgrade, and test stabilization ([#174](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/174)) ([667e522](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/667e522f407291b34ec16b8fbd4068586207f2b6))
+* Prepare v0.10.0 release ,upgrading.md, and migration guide ([#175](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/175)) ([4086a08](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/4086a08742b1d46ff8abb17ce3796727de8e6ec3))
+
 ## [0.9.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.8.1...rust-mcp-macros-v0.9.0) (2026-03-13)
 
 

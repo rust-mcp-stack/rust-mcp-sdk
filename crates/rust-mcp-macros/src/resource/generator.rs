@@ -15,6 +15,7 @@ pub struct ResourceTokens {
     pub mime_type: TokenStream,
     pub size: TokenStream,
     pub uri: TokenStream,
+    pub uri_const: TokenStream,
 }
 
 pub struct ResourceTemplateTokens {
@@ -27,6 +28,7 @@ pub struct ResourceTemplateTokens {
     pub annotations: TokenStream,
     pub mime_type: TokenStream,
     pub uri_template: TokenStream,
+    pub uri_template_const: TokenStream,
 }
 
 pub fn generate_resource_tokens(macro_attributes: McpResourceMacroAttributes) -> ResourceTokens {
@@ -42,6 +44,12 @@ pub fn generate_resource_tokens(macro_attributes: McpResourceMacroAttributes) ->
         .uri
         .as_ref()
         .map(|v| quote! {#v.into() })
+        .expect("'uri' is a required attribute!");
+
+    let uri_const = macro_attributes
+        .uri
+        .as_ref()
+        .map(|v| quote! {#v})
         .expect("'uri' is a required attribute!");
 
     let size = macro_attributes
@@ -82,6 +90,7 @@ pub fn generate_resource_tokens(macro_attributes: McpResourceMacroAttributes) ->
         mime_type,
         size,
         uri,
+        uri_const,
     }
 }
 
@@ -100,6 +109,12 @@ pub fn generate_resource_template_tokens(
         .uri_template
         .as_ref()
         .map(|v| quote! {#v.into() })
+        .expect("'uri_template' is a required attribute!");
+
+    let uri_template_const = macro_attributes
+        .uri_template
+        .as_ref()
+        .map(|v| quote! {#v})
         .expect("'uri_template' is a required attribute!");
 
     let mime_type = macro_attributes
@@ -134,6 +149,7 @@ pub fn generate_resource_template_tokens(
         description,
         mime_type,
         uri_template,
+        uri_template_const,
     }
 }
 

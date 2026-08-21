@@ -5,6 +5,10 @@ members = [
     "crates/rust-mcp-sdk",
     "crates/rust-mcp-transport",
     "crates/rust-mcp-extra",
+    "crates/rust-mcp-axum",
+    "crates/rust-mcp-actix",
+    "crates/conformance-server",
+    "crates/conformance-client",
 ]
 
 [workspace.package]
@@ -12,13 +16,15 @@ rust-version = "1.80.0"
 
 [workspace.dependencies]
 # Workspace member crates
-rust-mcp-transport = { version = "0.9.0", path = "crates/rust-mcp-transport", default-features = false }
-rust-mcp-sdk = { path = "crates/rust-mcp-sdk", default-features = false }
-rust-mcp-macros = { version = "0.9.0", path = "crates/rust-mcp-macros", default-features = false }
-rust-mcp-extra = { version="0.1.0", path = "crates/rust-mcp-extra", default-features = false }
+rust-mcp-transport = { version = "1.0.0", path = "crates/rust-mcp-transport", default-features = false }
+rust-mcp-sdk = { version = "1.0.1", path = "crates/rust-mcp-sdk", default-features = false }
+rust-mcp-macros = { version = "1.0.0", path = "crates/rust-mcp-macros", default-features = false }
+rust-mcp-extra = { version = "1.0.1", path = "crates/rust-mcp-extra", default-features = false }
+rust-mcp-axum = { version = "1.0.1", path = "crates/rust-mcp-axum" }
+rust-mcp-actix = { version = "1.0.1", path = "crates/rust-mcp-actix" }
 
 # External crates
-rust-mcp-schema = { version="0.10",  default-features = false }
+rust-mcp-schema = { version="1.0",  default-features = false }
 
 futures = { version = "0.3" }
 tokio = { version = "1.4", features = ["full"] }
@@ -35,11 +41,11 @@ tracing-subscriber = { version = "0.3", features = [
     "std",
     "fmt",
 ] }
-base64 = "0.22"
+base64 = "0.23"
 axum = "0.8"
 rustls = "0.23"
 tokio-rustls = "0.26"
-axum-server = { version = "0.7" }
+axum-server = { version = "0.8" }
 reqwest = { version = "0.12", default-features = false, features = [
     "stream",
     "rustls-tls",

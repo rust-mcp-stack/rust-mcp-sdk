@@ -13,7 +13,6 @@ use rust_mcp_sdk::mcp_client::ClientHandler;
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::schema::{ClientCapabilities, Implementation, InitializeRequestParams};
 use std::collections::HashMap;
-use std::process;
 use std::sync::Once;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
@@ -37,7 +36,10 @@ pub fn init_tracing() {
             .or_else(|_| EnvFilter::try_new("tracing"))
             .unwrap();
 
-        tracing_subscriber::fmt().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .try_init()
+            .ok();
     });
 }
 #[mcp_tool(
@@ -176,7 +178,7 @@ use futures::stream::Stream;
 // stream: &mut impl Stream<Item = Result<hyper::body::Bytes, hyper::Error>>,
 /// reads sse events and return them as (id, event, data) tuple
 pub async fn read_sse_event_from_stream(
-    stream: &mut (impl Stream<Item = Result<hyper::body::Bytes, reqwest::Error>> + Unpin),
+    stream: &mut (impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin),
     event_count: usize,
 ) -> Option<Vec<(Option<String>, Option<String>, String)>> {
     let mut buffer = String::new();
@@ -273,69 +275,15 @@ pub fn sse_data(sse_raw: &str) -> String {
     sse_raw.replace("data: ", "")
 }
 
-// Simple Xorshift PRNG struct
-struct Xorshift {
-    state: u64,
-}
-
-impl Xorshift {
-    // Initialize with a seed based on system time and process ID
-    fn new() -> Self {
-        // Get nanoseconds since UNIX epoch
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("System time error")
-            .as_nanos() as u64;
-        // Get process ID for additional entropy
-        let pid = process::id() as u64;
-        // Combine nanos and pid with a simple mix
-        let seed = nanos ^ (pid << 32) ^ (nanos.rotate_left(17));
-        Xorshift { state: seed | 1 } // Ensure non-zero seed
-    }
-
-    // Generate the next random u64 using Xorshift
-    fn next_u64(&mut self) -> u64 {
-        let mut x = self.state;
-        self.state = x.wrapping_add(0x9E3779B97F4A7C15);
-        x = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        x = (x ^ (x >> 27)).wrapping_mul(0x94D049BB133111EB);
-        x ^ (x >> 31)
-    }
-
-    // Generate a random u16 within a range [min, max]
-    fn next_u16_range(&mut self, min: u16, max: u16) -> u16 {
-        assert!(max >= min, "max must be greater than or equal to min");
-        let range = (max - min + 1) as u64;
-        min + (self.next_u64() % range) as u16
-    }
-}
-
-// Generate a random port number in the range [8081, 15000]
+/// Picks a free ephemeral port by binding to port 0 and reading the OS-assigned port.
+///
+/// The port is released immediately after discovery. Because `TcpListener::bind` creates
+/// a listening socket (not a connection), no `TIME_WAIT` state is involved — the port
+/// is immediately reusable by the server.
 pub fn random_port() -> u16 {
-    const MIN_PORT: u16 = 8081;
-    const MAX_PORT: u16 = 15000;
-
-    let mut rng = Xorshift::new();
-    rng.next_u16_range(MIN_PORT, MAX_PORT)
-}
-
-pub fn random_port_old() -> u16 {
-    let min: u16 = 8081;
-    let max: u16 = 15000;
-    let range = max - min + 1;
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("systime error!");
-
-    // Combine seconds and nanoseconds for better entropy
-    let nanos = now.subsec_nanos() as u64;
-    let secs = now.as_secs();
-
-    // Simple hash-like mix
-    let mixed = (nanos ^ (secs << 16)) ^ (nanos.rotate_left(13));
-
-    min + ((mixed as u16) % range)
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr().map(|a| a.port()))
+        .expect("random_port: failed to bind to ephemeral port")
 }
 
 pub mod sample_tools {

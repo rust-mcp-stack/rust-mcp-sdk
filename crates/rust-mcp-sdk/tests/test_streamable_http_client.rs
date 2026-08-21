@@ -12,7 +12,8 @@ use crate::common::{
     wait_for_n_requests, wiremock_request, MockBuilder, SimpleMockServer, SseEvent,
 };
 use common::test_client_common::create_client;
-use hyper::{Method, StatusCode};
+use http::{Method, StatusCode};
+use mcp_axum::AxumServerOptions;
 use rust_mcp_schema::{
     schema_utils::{
         ClientJsonrpcRequest, ClientMessage, CustomRequest, MessageFromServer, RequestFromClient,
@@ -20,14 +21,11 @@ use rust_mcp_schema::{
     },
     RequestId,
 };
-use rust_mcp_sdk::{
-    error::McpSdkError, mcp_server::HyperServerOptions, McpClient, TransportError,
-    MCP_LAST_EVENT_ID_HEADER,
-};
+use rust_mcp_sdk::{error::McpSdkError, McpClient, TransportError, MCP_LAST_EVENT_ID_HEADER};
 use serde_json::{json, Map, Value};
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 use wiremock::{
-    http::{HeaderName, HeaderValue},
+    http::HeaderName,
     matchers::{body_json_string, header, method, path},
     Mock, MockServer, ResponseTemplate,
 };
@@ -70,10 +68,12 @@ async fn should_send_json_rpc_messages_via_post() {
     let header_values = received_request
         .headers
         .get(&HeaderName::from_str("accept").unwrap())
+        .unwrap()
+        .to_str()
         .unwrap();
 
-    assert!(header_values.contains(&HeaderValue::from_str("application/json").unwrap()));
-    assert!(header_values.contains(&HeaderValue::from_str("text/event-stream").unwrap()));
+    assert!(header_values.contains("application/json"));
+    assert!(header_values.contains("text/event-stream"));
 
     wait_for_n_requests(&mock_server, 2, None).await;
 }
@@ -176,10 +176,12 @@ async fn should_store_session_id_received_during_initialization() {
     let header_values = received_request
         .headers
         .get(&HeaderName::from_str("accept").unwrap())
+        .unwrap()
+        .to_str()
         .unwrap();
 
-    assert!(header_values.contains(&HeaderValue::from_str("application/json").unwrap()));
-    assert!(header_values.contains(&HeaderValue::from_str("text/event-stream").unwrap()));
+    assert!(header_values.contains("application/json"));
+    assert!(header_values.contains("text/event-stream"));
 
     wait_for_n_requests(&mock_server, 2, None).await;
 }
@@ -338,14 +340,14 @@ async fn should_handle_successful_initial_get_connection_for_sse() {
     let requests = mock_server.received_requests().await.unwrap();
     let get_request = requests
         .iter()
-        .find(|r| r.method == wiremock::http::Method::Get);
+        .find(|r| r.method == wiremock::http::Method::GET);
 
     assert!(get_request.is_some())
 }
 
 #[tokio::test]
 async fn should_receive_server_initiated_messaged() {
-    let server_options = HyperServerOptions {
+    let server_options = AxumServerOptions {
         port: random_port(),
         session_id_generator: Some(Arc::new(TestIdGenerator::new(vec![
             "AAA-BBB-CCC".to_string()
@@ -354,7 +356,7 @@ async fn should_receive_server_initiated_messaged() {
         ..Default::default()
     };
     let LaunchedServer {
-        hyper_runtime,
+        axum_runtime,
         streamable_url,
         sse_url,
         sse_message_url,
@@ -367,7 +369,7 @@ async fn should_receive_server_initiated_messaged() {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let result = hyper_runtime
+    let result = axum_runtime
         .ping(&"AAA-BBB-CCC".to_string(), None, None)
         .await
         .unwrap();
@@ -446,7 +448,7 @@ async fn should_attempt_initial_get_connection_and_handle_405_gracefully() {
     let requests = mock_server.received_requests().await.unwrap();
     let get_request = requests
         .iter()
-        .find(|r| r.method == wiremock::http::Method::Get);
+        .find(|r| r.method == wiremock::http::Method::GET);
 
     assert!(get_request.is_some());
 
@@ -624,7 +626,7 @@ async fn should_always_send_specified_custom_headers() {
     assert_eq!(requests.len(), 4);
     assert!(requests
         .iter()
-        .all(|r| r.headers.get(&"X-Custom-Header".into()).unwrap().as_str() == "CustomValue"));
+        .all(|r| r.headers.get("X-Custom-Header").unwrap().to_str().unwrap() == "CustomValue"));
 
     debug_wiremock(&mock_server).await
 }
@@ -690,6 +692,12 @@ async fn should_reconnect_a_get_initiated_notification_stream_that_fails() {
     let (client, _) = create_client(&mcp_url, None).await;
 
     client.clone().start().await.unwrap();
+
+    // The standalone SSE GET is opened from a background task that retries on
+    // HTTP errors with a 1s default backoff. Wait long enough for the retry
+    // to fire so the second GET mock has a chance to match before the mock
+    // server is dropped (and its verifications run).
+    tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
 //****************** Resumability ******************
@@ -752,9 +760,7 @@ async fn should_pass_last_event_id_when_reconnecting() {
     let last_event_id = last_get_request
         .0
         .headers
-        .get(axum::http::HeaderName::from_static(
-            MCP_LAST_EVENT_ID_HEADER,
-        ));
+        .get(http::HeaderName::from_static(MCP_LAST_EVENT_ID_HEADER));
 
     // last-event-id should be sent
     assert!(
@@ -765,7 +771,7 @@ async fn should_pass_last_event_id_when_reconnecting() {
     assert!(get_requests.iter().all(|r| r
         .0
         .headers
-        .get(axum::http::HeaderName::from_str("X-Custom-Header").unwrap())
+        .get(http::HeaderName::from_str("X-Custom-Header").unwrap())
         .unwrap()
         .to_str()
         .unwrap()

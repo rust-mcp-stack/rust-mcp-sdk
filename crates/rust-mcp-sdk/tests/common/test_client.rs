@@ -17,7 +17,6 @@ use tokio::sync::RwLock;
 
 use crate::common::task_runner::{McpTaskRunner, TaskJobInfo};
 
-#[cfg(feature = "hyper-server")]
 pub mod test_client_common {
     use rust_mcp_schema::{
         schema_utils::MessageFromServer, ClientCapabilities, ClientElicitation, ClientRoots,
@@ -94,7 +93,8 @@ pub mod test_client_common {
                     .unwrap_or_else(|_| "info".into()),
             )
             .with(tracing_subscriber::fmt::layer())
-            .init();
+            .try_init()
+            .ok();
 
         let client_details: InitializeRequestParams = test_client_details();
 

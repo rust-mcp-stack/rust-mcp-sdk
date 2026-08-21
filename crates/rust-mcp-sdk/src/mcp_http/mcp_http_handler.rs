@@ -1,4 +1,4 @@
-#[cfg(feature = "sse")]
+#[cfg(all(feature = "sse", feature = "server"))]
 use super::http_utils::handle_sse_connection;
 use super::http_utils::{
     accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
@@ -7,22 +7,22 @@ use super::types::GenericBody;
 use crate::auth::AuthInfo;
 #[cfg(feature = "auth")]
 use crate::auth::AuthProvider;
+#[cfg(all(feature = "server", any(feature = "sse", feature = "streamable-http")))]
+use crate::mcp_http::http_utils::{
+    create_standalone_stream, delete_session, process_incoming_message,
+    process_incoming_message_return, start_new_session,
+};
+use crate::mcp_http::McpHttpError;
 use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, HealthHandler, RequestExt};
-use crate::mcp_server::error::TransportServerError;
 use crate::schema::schema_utils::SdkError;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::{
     error::McpSdkError,
     mcp_http::{
-        http_utils::{
-            acceptable_content_type, create_standalone_stream, delete_session,
-            process_incoming_message, process_incoming_message_return, start_new_session,
-            valid_streaming_http_accept_header,
-        },
-        McpAppState,
+        http_utils::{acceptable_content_type, valid_streaming_http_accept_header},
+        McpAppState, McpHttpResult,
     },
-    mcp_server::error::TransportServerResult,
     utils::valid_initialize_method,
 };
 use http::{self, HeaderMap, Method, StatusCode, Uri};
@@ -135,7 +135,7 @@ impl McpHttpHandler {
 // auth related methods
 #[cfg(feature = "auth")]
 impl McpHttpHandler {
-    pub fn oauth_endppoints(&self) -> Option<Vec<&String>> {
+    pub fn oauth_endpoints(&self) -> Option<Vec<&String>> {
         self.auth
             .as_ref()
             .and_then(|a| a.auth_endpoints().map(|e| e.keys().collect::<Vec<_>>()))
@@ -145,9 +145,9 @@ impl McpHttpHandler {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let Some(auth_provider) = self.auth.as_ref() else {
-            return Err(TransportServerError::HttpError(
+            return Err(McpHttpError::HttpError(
                 "Authentication is not supported by this server.".to_string(),
             ));
         };
@@ -187,7 +187,7 @@ impl McpHttpHandler {
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         sse_message_endpoint: Option<&str>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         use crate::auth::AuthInfo;
         use crate::mcp_http::RequestExt;
 
@@ -214,7 +214,7 @@ impl McpHttpHandler {
     /// * `state` - Shared application state, including access to the session store.
     ///
     /// # Returns
-    /// * `TransportServerResult<http::Response<GenericBody>>`:
+    /// * `McpHttpResult<http::Response<GenericBody>>`:
     ///   - Returns a `202 Accepted` HTTP response if the message is successfully forwarded.
     ///   - Returns an error if the session ID is missing, invalid, or if any I/O issues occur while processing the message.
     ///
@@ -228,7 +228,7 @@ impl McpHttpHandler {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let handle = with_middlewares!(self, Self::internal_handle_sse_message);
         handle(request, state).await
     }
@@ -236,7 +236,7 @@ impl McpHttpHandler {
     pub async fn handle_health(
         &self,
         request: http::Request<&str>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         if let Some(health_handler) = self.health_handler.as_ref() {
             Ok(health_handler.call(request))
         } else {
@@ -269,28 +269,31 @@ impl McpHttpHandler {
     /// - Returns `405 Method Not Allowed` for unsupported methods.
     ///
     /// # Returns
-    /// * A `TransportServerResult` wrapping an HTTP response indicating success or failure of the operation.
+    /// * A `McpHttpResult` wrapping an HTTP response indicating success or failure of the operation.
     ///
     pub async fn handle_streamable_http(
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let handle = with_middlewares!(self, Self::internal_handle_streamable_http);
         handle(request, state).await
     }
 
+    #[cfg(feature = "server")]
     async fn internal_handle_sse_message(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let session_id =
-            query_param(&request, "sessionId").ok_or(TransportServerError::SessionIdMissing)?;
+            query_param(&request, "sessionId").ok_or(McpHttpError::SessionIdMissing)?;
 
         // transmit to the readable stream, that transport is reading from
-        let transmit = state.session_store.get(&session_id).await.ok_or(
-            TransportServerError::SessionIdInvalid(session_id.to_string()),
-        )?;
+        let transmit = state
+            .session_store
+            .get(&session_id)
+            .await
+            .ok_or(McpHttpError::SessionIdInvalid(session_id.to_string()))?;
 
         let message = request.body();
 
@@ -299,27 +302,63 @@ impl McpHttpHandler {
             .await
             .map_err(|err| {
                 tracing::trace!("{}", err);
-                TransportServerError::StreamIoError(err.to_string())
+                McpHttpError::StreamIoError(err.to_string())
             })?;
 
         http::Response::builder()
             .status(StatusCode::ACCEPTED)
             .body(GenericBody::empty())
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 
     async fn internal_handle_streamable_http(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let (request, auth_info) = request.take::<AuthInfo>();
 
         let method = request.method();
 
         let response = match method {
-            &http::Method::GET => return Self::handle_http_get(request, state, auth_info).await,
-            &http::Method::POST => return Self::handle_http_post(request, state, auth_info).await,
-            &http::Method::DELETE => return Self::handle_http_delete(request, state).await,
+            &http::Method::GET => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_get(request, state, auth_info).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
+            &http::Method::POST => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_post(request, state, auth_info).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
+            &http::Method::DELETE => {
+                #[cfg(feature = "server")]
+                {
+                    return Self::handle_http_delete(request, state).await;
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        SdkError::internal_error(),
+                    );
+                }
+            }
             other => {
                 let error = SdkError::bad_request().with_message(&format!(
                     "'{other}' is not a valid HTTP method for StreamableHTTP transport."
@@ -332,11 +371,12 @@ impl McpHttpHandler {
     }
 
     /// Processes POST requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_post(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         auth_info: Option<AuthInfo>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if !valid_streaming_http_accept_header(headers) {
@@ -357,10 +397,14 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
+            Ok(id) => id,
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let payload = request.body();
 
@@ -389,11 +433,12 @@ impl McpHttpHandler {
     }
 
     /// Processes GET requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_get(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
         auth_info: Option<AuthInfo>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if !accepts_event_stream(headers) {
@@ -408,15 +453,23 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
+            Ok(id) => id,
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
-        let last_event_id: Option<SessionId> = headers
-            .get(MCP_LAST_EVENT_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let last_event_id = match parse_session_id_header(headers, MCP_LAST_EVENT_ID_HEADER) {
+            Ok(id) => id,
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Last-Event-Id header: {msg}").as_str());
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let response = match session_id {
             Some(session_id) => {
@@ -434,10 +487,11 @@ impl McpHttpHandler {
     }
 
     /// Processes DELETE requests for the Streamable HTTP Protocol
+    #[cfg(feature = "server")]
     async fn handle_http_delete(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let headers = request.headers();
 
         if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
@@ -446,10 +500,14 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id: Option<SessionId> = headers
-            .get(MCP_SESSION_ID_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .map(|s| s.to_string());
+        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
+            Ok(id) => id,
+            Err(msg) => {
+                let error = SdkError::bad_request()
+                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
+                return error_response(StatusCode::BAD_REQUEST, error);
+            }
+        };
 
         let response = match session_id {
             Some(id) => delete_session(id, state).await,
@@ -460,5 +518,154 @@ impl McpHttpHandler {
         };
 
         response
+    }
+}
+
+/// Maximum accepted length (in bytes) of the `Mcp-Session-Id`
+/// and `Mcp-Last-Event-Id` headers.
+const MAX_SESSION_ID_LEN: usize = 128;
+
+/// Returns `Ok(())` if the session ID is non-empty, within the length cap,
+/// and contains only printable ASCII non-whitespace characters.
+fn is_valid_session_id(value: &str) -> Result<(), &'static str> {
+    if value.is_empty() {
+        return Err("session ID must not be empty");
+    }
+    if value.len() > MAX_SESSION_ID_LEN {
+        return Err("session ID exceeds maximum length of 128 bytes");
+    }
+    if !value.bytes().all(|b| b.is_ascii_graphic() && b != b' ') {
+        return Err("session ID contains invalid characters");
+    }
+    Ok(())
+}
+
+/// Extracts and validates a session-id-like header.
+///
+/// Returns `Ok(None)` when the header is absent, `Ok(Some(id))` when present
+/// and valid, and `Err(msg)` when present but invalid. Validating up front
+/// avoids unbounded allocations and map lookups from a hostile value.
+fn parse_session_id_header(
+    headers: &HeaderMap,
+    header_name: &str,
+) -> Result<Option<SessionId>, &'static str> {
+    match headers.get(header_name) {
+        None => Ok(None),
+        Some(value) => {
+            let s = value
+                .to_str()
+                .map_err(|_| "session ID is not valid UTF-8")?;
+            is_valid_session_id(s)?;
+            Ok(Some(s.to_string()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod session_id_tests {
+    use super::*;
+    use http::HeaderValue;
+
+    // ── valid IDs ──
+
+    #[test]
+    fn accepts_uuid() {
+        assert!(is_valid_session_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
+    }
+
+    #[test]
+    fn accepts_prefixed_ids() {
+        assert!(is_valid_session_id("tsk_abcDEF123").is_ok());
+        assert!(is_valid_session_id("s_0001").is_ok());
+    }
+
+    #[test]
+    fn accepts_dot_and_tilde() {
+        assert!(is_valid_session_id("session.id").is_ok());
+        assert!(is_valid_session_id("session~id").is_ok());
+    }
+
+    #[test]
+    fn accepts_base64url() {
+        assert!(is_valid_session_id("aGVsbG8td29ybGQ").is_ok());
+    }
+
+    #[test]
+    fn accepts_exact_max_length() {
+        let id = "a".repeat(MAX_SESSION_ID_LEN);
+        assert!(is_valid_session_id(&id).is_ok());
+    }
+
+    // ── invalid IDs ──
+
+    #[test]
+    fn rejects_empty() {
+        let err = is_valid_session_id("").unwrap_err();
+        assert!(err.contains("must not be empty"));
+    }
+
+    #[test]
+    fn rejects_oversized() {
+        let id = "a".repeat(MAX_SESSION_ID_LEN + 1);
+        let err = is_valid_session_id(&id).unwrap_err();
+        assert!(err.contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn rejects_whitespace() {
+        let err = is_valid_session_id("has space").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_control_chars() {
+        let err = is_valid_session_id("tab\there").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_newline() {
+        let err = is_valid_session_id("line\nbreak").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_non_ascii() {
+        let err = is_valid_session_id("naïve").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_null_byte() {
+        let err = is_valid_session_id("bad\0id").unwrap_err();
+        assert!(err.contains("invalid characters"));
+    }
+
+    // ── header-level parsing ──
+
+    #[test]
+    fn parse_session_id_absent_returns_none() {
+        let headers = HeaderMap::new();
+        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_session_id_valid_returns_some() {
+        let mut headers = HeaderMap::new();
+        headers.insert("mcp-session-id", "test-session".parse().unwrap());
+        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
+        assert_eq!(result, Some("test-session".to_string()));
+    }
+
+    #[test]
+    fn parse_session_id_invalid_returns_err() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "mcp-session-id",
+            HeaderValue::from_bytes(b"\xFF\xFE").unwrap(),
+        );
+        let err = parse_session_id_header(&headers, "mcp-session-id").unwrap_err();
+        assert!(err.contains("not valid UTF-8"));
     }
 }

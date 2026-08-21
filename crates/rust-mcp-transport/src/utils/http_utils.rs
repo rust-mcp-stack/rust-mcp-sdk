@@ -1,7 +1,7 @@
 use crate::error::{TransportError, TransportResult};
 use crate::{SessionId, MCP_SESSION_ID_HEADER};
 
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CONTENT_TYPE};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::{Client, Response};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,12 +129,6 @@ pub async fn http_delete(
         return Err(TransportError::Http(status_code));
     }
     Ok(response)
-}
-
-#[allow(unused)]
-pub fn get_header_value(response: &Response, header_name: HeaderName) -> Option<String> {
-    let content_type = response.headers().get(header_name)?.to_str().ok()?;
-    Some(content_type.to_string())
 }
 
 pub fn extract_origin(url: &str) -> Option<String> {

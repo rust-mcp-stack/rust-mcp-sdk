@@ -1,3 +1,4 @@
+use super::resolve_audience;
 use crate::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
@@ -7,16 +8,16 @@ use http::{header::CONTENT_TYPE, StatusCode};
 use http_body_util::{BodyExt, Full};
 use rust_mcp_sdk::{
     auth::{
-        create_discovery_endpoints, AuthInfo, AuthMetadataBuilder, AuthProvider,
+        create_discovery_endpoints, Audience, AuthInfo, AuthMetadataBuilder, AuthProvider,
         AuthenticationError, AuthorizationServerMetadata, OauthEndpoint,
         OauthProtectedResourceMetadata, OauthTokenVerifier,
     },
     error::McpSdkError,
-    mcp_http::{middleware::CorsMiddleware, GenericBody, GenericBodyExt, Middleware},
-    mcp_server::{
-        error::{TransportServerError, TransportServerResult},
-        join_url, McpAppState,
+    mcp_http::{
+        middleware::CorsMiddleware, GenericBody, GenericBodyExt, McpAppState, McpHttpError,
+        McpHttpResult, Middleware,
     },
+    mcp_server::join_url,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -55,6 +56,13 @@ pub struct KeycloakAuthOptions<'a> {
     pub resource_name: Option<String>,
     /// Documentation URL for this resource (optional)
     pub resource_documentation: Option<String>,
+    /// Audience to validate the token's `aud` claim against.
+    /// When `None`, the audience defaults to `mcp_server_url` (the resource
+    /// identifier), unless `disable_audience_validation` is set.
+    pub validate_audience: Option<Audience>,
+    /// Disables audience validation entirely. Strongly discouraged: without it a
+    /// token issued for another resource can be replayed against this server.
+    pub disable_audience_validation: bool,
 }
 
 /// Keycloak integration implementing `AuthProvider` for MCP servers.
@@ -118,7 +126,7 @@ impl KeycloakAuthProvider {
             matches!(required_scopes.as_ref(), Some(scopes) if scopes.contains(&"openid"));
 
         if let Some(scopes) = required_scopes {
-            builder = builder.reqquired_scopes(scopes)
+            builder = builder.required_scopes(scopes)
         }
         if let Some(resource_name) = options.resource_name.as_ref() {
             builder = builder.resource_name(resource_name)
@@ -165,11 +173,17 @@ impl KeycloakAuthProvider {
             tracing::warn!("Keycloak token verification is missing both Introspection and UserInfo strategies. Please provide client_id and client_secret, or ensure openid is included as a required scope.")
         };
 
+        let validate_audience = resolve_audience(
+            options.disable_audience_validation,
+            options.validate_audience.take(),
+            &options.mcp_server_url,
+        );
+
         let token_verifier: Box<dyn OauthTokenVerifier> = match options.token_verifier {
             Some(verifier) => verifier,
             None => Box::new(GenericOauthTokenVerifier::new(TokenVerifierOptions {
                 strategies,
-                validate_audience: None,
+                validate_audience,
                 validate_issuer: Some(options.keycloak_base_url.clone()),
                 cache_capacity: None,
             })?),
@@ -187,31 +201,31 @@ impl KeycloakAuthProvider {
     /// Helper to build JSON response for authorization server metadata with CORS.
     fn handle_authorization_server_metadata(
         response_str: String,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "application/json")
             .body(body)
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 
     /// Helper to build JSON response for protected resource metadata with permissive CORS.
     fn handle_protected_resource_metadata(
         response_str: String,
-    ) -> TransportServerResult<http::Response<GenericBody>> {
+    ) -> McpHttpResult<http::Response<GenericBody>> {
         use http_body_util::BodyExt;
 
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "application/json")
             .body(body)
-            .map_err(|err| TransportServerError::HttpError(err.to_string()))
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))
     }
 }
 
@@ -227,12 +241,12 @@ impl AuthProvider for KeycloakAuthProvider {
         &self,
         request: http::Request<&str>,
         state: Arc<McpAppState>,
-    ) -> Result<http::Response<GenericBody>, TransportServerError> {
+    ) -> Result<http::Response<GenericBody>, McpHttpError> {
         let Some(endpoint) = self.endpoint_type(&request) else {
             return http::Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(GenericBody::empty())
-                .map_err(|err| TransportServerError::HttpError(err.to_string()));
+                .map_err(|err| McpHttpError::HttpError(err.to_string()));
         };
 
         // return early if method is not allowed
@@ -243,7 +257,7 @@ impl AuthProvider for KeycloakAuthProvider {
         match endpoint {
             OauthEndpoint::AuthorizationServerMetadata => {
                 let json_payload = serde_json::to_string(&self.auth_server_meta)
-                    .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+                    .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
                 let cors = &CorsMiddleware::default();
                 cors.handle(
                     request,
@@ -258,7 +272,7 @@ impl AuthProvider for KeycloakAuthProvider {
             }
             OauthEndpoint::ProtectedResourceMetadata => {
                 let json_payload = serde_json::to_string(&self.protected_resource_meta)
-                    .map_err(|err| TransportServerError::HttpError(err.to_string()))?;
+                    .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
 
                 let cors = &CorsMiddleware::default();
                 cors.handle(
