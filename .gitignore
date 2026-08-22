@@ -9,3 +9,5 @@ settings.json
 *.lcov
 # *.profraw
 target/**
+
+/docs-site
