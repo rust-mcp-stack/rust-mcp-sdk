@@ -584,7 +584,7 @@ impl ServerRuntime {
         Ok(())
     }
 
-    pub(crate) async fn shutdown(&self) {
+    pub async fn shutdown(&self) {
         let mut transport_map = self.transport_map.write().await;
         let transport_option = transport_map.take();
         drop(transport_map);
