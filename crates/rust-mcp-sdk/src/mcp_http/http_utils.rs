@@ -57,7 +57,15 @@ fn initial_sse_event(endpoint: &str) -> Result<Bytes, McpHttpError> {
 
 #[cfg(feature = "auth")]
 pub fn url_base(url: &url::Url) -> String {
-    format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default())
+    match url.port() {
+        Some(port) => format!(
+            "{}://{}:{}",
+            url.scheme(),
+            url.host_str().unwrap_or_default(),
+            port
+        ),
+        None => format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default()),
+    }
 }
 
 /// Remove the `Bearer` prefix from a `WWW-Authenticate` or `Authorization` header.
