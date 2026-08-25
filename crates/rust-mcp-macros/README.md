@@ -2,6 +2,8 @@
 
 `rust-mcp-macros` provides procedural macros for the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem. These macros simplify the generation of `tools` and `elicitation` schemas compatible with the latest MCP protocol specifications.
 
+> 📚 Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — see the [full documentation, guides & tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/).
+
 
 The available macros are:
 

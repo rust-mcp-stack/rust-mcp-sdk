@@ -1,8 +1,10 @@
 <p align="center">
-  <img width="200" src="assets/rust-mcp-sdk.png" alt="Description" width="300">
+  <img width="200" src="assets/rust-mcp-sdk.png" alt="Rust MCP SDK" width="300">
 </p>
 
-# Rust MCP SDK
+
+
+<div align="center">
 
 [<img alt="crates.io" src="https://img.shields.io/crates/v/rust-mcp-sdk?style=for-the-badge&logo=rust&color=FE965D" height="22">](https://crates.io/crates/rust-mcp-sdk)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs" height="22">](https://docs.rs/rust-mcp-sdk)
@@ -11,6 +13,11 @@
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
 ](examples/hello-world-mcp-server-stdio)
 
+
+[Documentation](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/1.x/getting-started/welcome) · [Tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/1.x/tutorials/build-your-first-mcp-server) · [Examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) · [Upgrade Guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/UPGRADING.md) · [Changelog](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/CHANGELOG.md) <br/>
+[Contributing](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/CONTRIBUTING.md) · [Report a bug](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=bug_report.md) · [Request a Feature](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=feature_request.md)
+
+</div>
 
 A high-performance, asynchronous Rust toolkit for building MCP servers and clients.  
 
@@ -37,10 +44,10 @@ Focus on your application logic , rust-mcp-sdk handles the protocol, transports,
 - ✅ Message Observer (Telemetry & Monitoring)
 - ✅ HTTP Health Checks (for load balancers & container orchestration)
 - ✅ OAuth Authentication for MCP Servers
-  - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
-    - ✅ **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
-    - ✅ **WorkOS** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#workos-authkit))
-    - ✅ **Scalekit** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#scalekit))
+  - ✅ [Remote Oauth Provider](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs) (for any provider with DCR support)
+    - ✅ **Keycloak** Provider (via [rust-mcp-extra](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#keycloak))
+    - ✅ **WorkOS** Authkit Provider (via [rust-mcp-extra](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#workos-authkit))
+    - ✅ **Scalekit** Authkit Provider (via [rust-mcp-extra](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#scalekit))
 - ✅ OAuth Authentication for MCP Clients (metadata discovery, DCR, PKCE, token refresh, pluggable storage)
 
 **✅** v1.0.0 — stable and production-ready.
@@ -245,18 +252,18 @@ Both backends support a **BYO-server** (Bring Your Own Server) mode, letting you
 
 | Backend | Function | Docs |
 |---|---|---|
-| Axum | `mcp_routes(state, &mount_opts, http_handler)` | [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) |
-| Actix-web | `mcp_scope(state, http_handler, &mount_opts)` | [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) |
+| Axum | `mcp_routes(state, &mount_opts, http_handler)` | [`rust-mcp-axum` README](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-axum/README.md) |
+| Actix-web | `mcp_scope(state, http_handler, &mount_opts)` | [`rust-mcp-actix` README](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-actix/README.md) |
 
 Both functions take a pre-built `McpAppState` and `McpMountOptions`, and produce routes/scopes you can merge directly into your existing router.
 
-👉 See [`examples/byo-server.rs`](crates/rust-mcp-axum/examples/byo-server.rs) (Axum) and [`examples/byo-server.rs`](crates/rust-mcp-actix/examples/byo-server.rs) (Actix) for working examples.
+👉 See [`examples/byo-server.rs`](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-axum/examples/byo-server.rs) (Axum) and [`examples/byo-server.rs`](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-actix/examples/byo-server.rs) (Actix) for working examples.
 
 ### Custom HTTP Framework Integrations
 
 While we provide native Axum and Actix integrations, the SDK is completely framework-agnostic. If you are using a different HTTP framework (like Rocket, Salvo, or Warp), you can build a custom integration by adapting your framework's native Request/Response types to the SDK's core HTTP handling logic.
 
-👉 See the [Custom HTTP Framework Integration Guide](../../doc/custom-http-framework-integration.md) for architectural details and implementation steps.
+👉 See the [Custom HTTP Framework Integration Guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/doc/custom-http-framework-integration.md) for architectural details and implementation steps.
 
 ### AxumServerOptions
 
@@ -280,7 +287,7 @@ let server = create_axum_server(
 server.start().await?;
 ```
 
-📝 Refer to [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) or the [`rust-mcp-axum` README](crates/rust-mcp-axum/README.md) for a complete field reference.
+📝 Refer to [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) or the [`rust-mcp-axum` README](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-axum/README.md) for a complete field reference.
 
 ### ActixServerOptions
 
@@ -304,7 +311,7 @@ let server = create_actix_server(
 server.start().await?;
 ```
 
-📝 Refer to [`ActixServerOptions`](https://docs.rs/rust-mcp-actix/latest/rust_mcp_actix/struct.ActixServerOptions.html) or the [`rust-mcp-actix` README](crates/rust-mcp-actix/README.md) for a complete field reference.
+📝 Refer to [`ActixServerOptions`](https://docs.rs/rust-mcp-actix/latest/rust_mcp_actix/struct.ActixServerOptions.html) or the [`rust-mcp-actix` README](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-actix/README.md) for a complete field reference.
 
 Following is implementation of an MCP client that starts the [@modelcontextprotocol/server-everything](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server, displays the server's name, version, and list of tools provided by the server.
 
@@ -376,11 +383,11 @@ async fn main() -> SdkResult<()> {
 
 👉 For more examples (stdio, Streamable HTTP, clients, auth, etc.), see the [examples/](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) directory.
 
-👉 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)  
+👉 For step-by-step tutorials (server, client, HTTP deployment, OAuth, and more), see the [documentation site](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/1.x/tutorials/build-your-first-mcp-server).
 
 See [hello-world-mcp-server-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 
-<img src="assets/examples/hello-world-mcp-server.gif" alt="hello world mcp server in rust" width="800" />
+<img src="https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/examples/hello-world-mcp-server.gif" alt="hello world mcp server in rust" width="800" />
 
 
 
@@ -489,13 +496,13 @@ let icon: crate::schema::Icon = mcp_icon!(
 MCP server can verify tokens issued by other systems, integrate with external identity providers, or manage the entire authentication process itself. Each option offers a different balance of simplicity, security, and control.
 
  ### RemoteAuthProvider
-  [RemoteAuthProvider](src/mcp_http/auth/auth_provider/remote_auth_provider.rs) RemoteAuthProvider enables authentication with identity providers that support Dynamic Client Registration (DCR) such as KeyCloak and WorkOS AuthKit, letting MCP clients auto-register and obtain credentials without manual setup.
+  [RemoteAuthProvider](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_http/auth/auth_provider/remote_auth_provider.rs) RemoteAuthProvider enables authentication with identity providers that support Dynamic Client Registration (DCR) such as KeyCloak and WorkOS AuthKit, letting MCP clients auto-register and obtain credentials without manual setup.
   
-👉 See the [server-oauth-remote](examples/auth/server-oauth-remote) example for how to use RemoteAuthProvider with a DCR-capable remote provider. 
+👉 See the [server-oauth-remote](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/mcp-server-oauth-remote.rs) example for how to use RemoteAuthProvider with a DCR-capable remote provider. 
 
 👉 [rust-mcp-extra](https://crates.io/crates/rust-mcp-extra) also offers drop-in auth providers for common identity platforms, working seamlessly with rust-mcp-sdk:
- - [Keycloack auth example](crates/rust-mcp-extra/README.md#keycloak)
- - [WorkOS autn example](crates/rust-mcp-extra/README.md#workos-authkit)
+ - [Keycloack auth example](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#keycloak)
+ - [WorkOS autn example](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#workos-authkit)
  
 
  ### OAuthProxy  
@@ -661,9 +668,9 @@ let server = server_runtime::create_server_with_options(ServerOptions {
 });
 ```
 
-👉 See [server_observer.rs](crates/rust-mcp-sdk/examples/common/server_observer.rs) and [client_observer.rs](crates/rust-mcp-sdk/examples/common/client_observer.rs) for example implementations that log messages to a remote HTTP endpoint.
+👉 See [server_observer.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/server_observer.rs) and [client_observer.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/client_observer.rs) for example implementations that log messages to a remote HTTP endpoint.
 
-These observers are utilized in the [hello-world-mcp-server-stdio](crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) and [simple-mcp-client-streamable-http](crates/rust-mcp-sdk/examples/simple-mcp-client-streamable-http.rs) examples. You can monitor the generated logs in real-time at [https://app.beeceptor.com/console/rustmcp](https://app.beeceptor.com/console/rustmcp).
+These observers are utilized in the [hello-world-mcp-server-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) and [simple-mcp-client-streamable-http](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/simple-mcp-client-streamable-http.rs) examples. You can monitor the generated logs in real-time at [https://app.beeceptor.com/console/rustmcp](https://app.beeceptor.com/console/rustmcp).
 
 ## Health Check Endpoint
 
@@ -686,7 +693,7 @@ let server = create_axum_server(
 );
 ```
 
-👉 See the [streamable_http_healthcheck.rs](crates/rust-mcp-sdk/examples/streamable_http_healthcheck.rs) example for a complete implementation demonstrating a custom JSON health handler.
+👉 See the [streamable_http_healthcheck.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/streamable_http_healthcheck.rs) example for a complete implementation demonstrating a custom JSON health handler.
 
 ## Projects using Rust MCP SDK
 
@@ -723,9 +730,9 @@ Below is a list of projects that utilize the `rust-mcp-sdk`, showcasing their na
 
 ## Contributing
 
-We welcome everyone who wishes to contribute! Please refer to the [contributing](CONTRIBUTING.md) guidelines for more details.
+We welcome everyone who wishes to contribute! Please refer to the [contributing](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/CONTRIBUTING.md) guidelines for more details.
 
-Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
+Check out our [development guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
 
 All contributions, including issues and pull requests, must follow
 Rust's Code of Conduct.
@@ -734,8 +741,8 @@ Unless explicitly stated otherwise, any contribution you submit for inclusion in
 
 ## Development
 
-Check out our [development guide](development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
+Check out our [development guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/development.md) for instructions on setting up, building, testing, formatting, and trying out example projects.
 
 ## License
 
-This project is licensed under the MIT License. see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. see the [LICENSE](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/LICENSE) file for details.
