@@ -538,7 +538,7 @@ mod tests {
         assert!(header_value.contains(r#"Bearer error="invalid_token""#));
 
         assert!(header_value.contains(
-            r#"resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource/mcp"#
+            r#"resource_metadata="http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp"#
         ));
     }
 }
