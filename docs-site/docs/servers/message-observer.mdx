@@ -1,0 +1,46 @@
+---
+id: message-observer
+title: Message Observer
+description: Telemetry and monitoring for MCP messages
+---
+
+The `McpObserver` trait provides a non-blocking hook for intercepting all MCP messages flowing through a server or client.
+
+```rust
+use std::sync::Arc;
+use rust_mcp_sdk::{
+    McpObserver,
+    mcp_server::{McpServerOptions, server_runtime},
+    schema::schema_utils::{ClientMessage, ServerMessage},
+};
+
+struct SimpleObserver;
+
+impl McpObserver<ClientMessage, ServerMessage> for SimpleObserver {
+    fn on_receive(&self, message: &ClientMessage) {
+        println!("→ received: {message:?}");
+    }
+
+    fn on_send(&self, message: &ServerMessage) {
+        println!("← sent: {message:?}");
+    }
+}
+```
+
+Both callbacks are **synchronous** and run in the critical message path - keep them fast (a few milliseconds at most) and non-blocking. For slow work such as network calls, spawn a task instead.
+
+Attach the observer during server creation:
+
+```rust
+let server = server_runtime::create_server(McpServerOptions {
+    server_details,
+    transport,
+    handler: handler.to_mcp_server_handler(),
+    task_store: None,
+    client_task_store: None,
+    // stored as Arc<dyn McpObserver<ClientMessage, ServerMessage>>
+    message_observer: Some(Arc::new(SimpleObserver)),
+});
+```
+
+See example implementations in `examples/common/server_observer.rs` and `client_observer.rs`.

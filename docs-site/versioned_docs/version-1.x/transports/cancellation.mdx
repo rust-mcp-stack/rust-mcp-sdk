@@ -1,0 +1,43 @@
+---
+id: cancellation
+title: Request Cancellation
+description: Cancelling in-flight requests
+---
+
+MCP supports cancelling in-flight requests using the `notifications/cancelled` notification.
+
+## Client cancels a request
+
+A client notifies the server that a request is cancelled via `notify_cancellation()`:
+
+```rust
+use rust_mcp_sdk::schema::CancelledNotificationParams;
+
+client
+    .notify_cancellation(CancelledNotificationParams {
+        request_id: Some(request_id),
+        reason: Some("User cancelled".into()),
+        meta: None,
+    })
+    .await?;
+```
+
+## Server handles cancellation
+
+The `ServerHandler` has a default handler for cancellation notifications that you can override:
+
+```rust
+async fn handle_cancelled_notification(
+    &self,
+    params: CancelledNotificationParams,
+    _runtime: Arc<dyn McpServer>,
+) -> Result<(), RpcError> {
+    println!(
+        "Request {:?} cancelled: {:?}",
+        params.request_id, params.reason
+    );
+    Ok(())
+}
+```
+
+Cancellation is cooperative - the server receives the notification and should stop processing if possible.

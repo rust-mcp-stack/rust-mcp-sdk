@@ -1,0 +1,50 @@
+---
+id: mcp-elicit
+title: mcp_elicit
+description: Type-safe user input elicitation
+---
+
+The `mcp_elicit` macro generates type-safe elicitation request and response handling.
+
+```rust
+#[macros::mcp_elicit(message = "Please enter your info", mode = form)]
+#[derive(JsonSchema)]
+pub struct UserInfo {
+    #[json_schema(title = "Name", min_length = 5, max_length = 100)]
+    pub name: String,
+    #[json_schema(title = "Email", format = "email")]
+    pub email: Option<String>,
+    #[json_schema(title = "Age", minimum = 15, maximum = 125)]
+    pub age: i32,
+}
+```
+
+Generated methods:
+- `UserInfo::elicit_request_params()` - creates `ElicitRequestParams`
+- `UserInfo::from_elicit_result_content(content)` - parses the response
+
+## Modes
+
+- **`form`** - Client shows a structured form (default)
+- **`url`** - Client shows a URL for the user to visit; requires a companion `url = "https://..."` attribute
+
+## Usage
+
+For `form` mode, `elicit_request_params()` takes no arguments:
+
+```rust
+let result: ElicitResult = server.request_elicitation(UserInfo::elicit_request_params()).await?;
+let user = UserInfo::from_elicit_result_content(result.content)?;
+println!("Hello, {}!", user.name);
+```
+
+For `url` mode, `elicit_request_params()` requires the elicitation ID from the server:
+
+```rust
+#[macros::mcp_elicit(message = "Please authorize access", mode = url, url = "https://example.com/authorize")]
+#[derive(JsonSchema)]
+pub struct AuthConfirmation { /* ... */ }
+
+let params = AuthConfirmation::elicit_request_params(elicitation_id);
+let result: ElicitResult = server.request_elicitation(params).await?;
+```

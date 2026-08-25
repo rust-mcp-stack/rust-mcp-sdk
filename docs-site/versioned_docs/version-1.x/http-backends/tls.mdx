@@ -1,0 +1,51 @@
+---
+id: tls
+title: TLS/SSL
+description: Enabling TLS for HTTP MCP servers
+---
+
+TLS can be enabled via the `ssl` feature on `rust-mcp-axum` or `rust-mcp-actix`, or at the reverse proxy level.
+
+## Using rust-mcp-axum with SSL
+
+```toml
+[dependencies]
+rust-mcp-axum = { version = "1.0", features = ["ssl"] }
+```
+
+```rust
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        enable_ssl: true,
+        ssl_cert_path: Some("/path/to/cert.pem".into()),
+        ssl_key_path: Some("/path/to/key.pem".into()),
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+The same fields (`enable_ssl`, `ssl_cert_path`, `ssl_key_path`) exist on `ActixServerOptions`. Both cert and key paths are required when `enable_ssl` is `true`.
+
+## Using a Reverse Proxy
+
+For production, it's recommended to terminate TLS at a reverse proxy (NGINX, Caddy, Cloudflare) and forward plain HTTP to the MCP server:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name mcp.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/mcp.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```

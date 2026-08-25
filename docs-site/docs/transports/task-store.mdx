@@ -1,0 +1,40 @@
+---
+id: task-store
+title: Task Store
+description: Persistent task state for MCP Tasks
+---
+
+Task stores provide persistence for MCP Tasks, allowing the client to poll for completion.
+
+## InMemoryTaskStore
+
+```rust
+use rust_mcp_sdk::task_store::InMemoryTaskStore;
+
+let task_store = Arc::new(InMemoryTaskStore::new(None)); // None = default page size (50)
+```
+
+## Using Task Stores
+
+Task stores are configured in the server options:
+
+```rust
+use rust_mcp_sdk::{
+    mcp_server::{server_runtime, McpServerOptions},
+    ToMcpServerHandler,
+};
+
+let server = server_runtime::create_server(McpServerOptions {
+    server_details,
+    transport,
+    handler: handler.to_mcp_server_handler(),
+    task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+    client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+    message_observer: None,
+});
+```
+
+- `task_store` - for tasks initiated by the client (server processes, client polls)
+- `client_task_store` - for tasks initiated by the server (server polls for result)
+
+For production, implement `ServerTaskStore` and `ClientTaskStore` traits with a persistent backend.

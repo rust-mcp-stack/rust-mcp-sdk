@@ -1,0 +1,35 @@
+---
+id: middleware
+title: Middleware
+description: Adding HTTP middleware to MCP servers
+---
+
+When using BYO-server mode, you can add any middleware supported by the framework.
+
+## Axum Example
+
+```rust
+use tower_http::cors::CorsLayer;
+
+let app = Router::new()
+    .merge(mcp_routes(state, &mount_opts, http_handler))
+    .layer(CorsLayer::permissive())
+    .layer(TraceLayer::new_for_http());
+```
+
+## Actix Example
+
+```rust
+use actix_cors::Cors;
+
+HttpServer::new(move || {
+    App::new()
+        .wrap(Cors::permissive())
+        .service(mcp_scope(state.clone(), http_handler.clone(), &mount_opts))
+})
+.bind("127.0.0.1:8080")?
+.run()
+.await?;
+```
+
+When using `create_axum_server()` (non BYO-server), the SDK creates its own router internally. For custom middleware, use BYO-server mode.

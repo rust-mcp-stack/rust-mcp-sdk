@@ -1,0 +1,32 @@
+---
+id: overview
+title: Macros Overview
+description: Procedural macros for MCP development
+---
+
+The `macros` feature provides procedural macros that simplify common MCP tasks.
+
+Enable with:
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", features = ["macros"] }
+```
+
+## Available Macros
+
+| Macro | Purpose |
+|-------|---------|
+| `mcp_tool` | Generate `Tool` from a struct |
+| `mcp_prompt` | Generate `Prompt` from a struct with message templates |
+| `mcp_elicit` | Generate elicitation schemas |
+| `mcp_resource` | Generate static `Resource` definitions |
+| `mcp_resource_template` | Generate parameterized `ResourceTemplate` definitions |
+| `JsonSchema` | Derive macro for JSON Schema generation |
+
+The `tool_box!` and `mcp_icon!` macros are plain `macro_rules!` exported from the SDK crate root - they are always available and do not require the `macros` feature.
+
+| Macro | Purpose |
+|-------|---------|
+| `tool_box!` | Generate an enum from multiple tools |
+| `mcp_icon!` | Convenient `Icon` builder |

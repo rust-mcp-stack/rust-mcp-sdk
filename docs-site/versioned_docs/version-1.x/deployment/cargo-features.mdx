@@ -1,0 +1,49 @@
+---
+id: cargo-features
+title: Cargo Features Selection
+description: Optimize dependencies for deployment
+---
+
+## Server Only
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["server", "macros", "stdio", "streamable-http"] }
+```
+
+## Client Only
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["client", "stdio"] }
+```
+
+## Minimal HTTP Server
+
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["server", "macros"] }
+rust-mcp-axum = "1.0"
+```
+
+## Features Reference
+
+| Feature | Transitive Dependencies |
+|---------|----------------------|
+| `server` | Core MCP types, handler traits |
+| `client` | Core MCP types, handler traits |
+| `macros` | `rust-mcp-macros` proc macros |
+| `stdio` | Stdio transport |
+| `streamable-http` | HTTP transport types |
+| `sse` | SSE transport types |
+| `auth` | OAuth provider traits, DCR, PKCE |
+
+Note that the HTTP backend crates define their own features - for example, `rust-mcp-axum` provides `ssl` (TLS with rustls crypto provider) and `tls-no-provider` (TLS without a installed crypto provider).
+
+## Release Build
+
+```bash
+cargo build --release
+```
+
+Use `--release` for production builds. The release binary is significantly smaller and faster.

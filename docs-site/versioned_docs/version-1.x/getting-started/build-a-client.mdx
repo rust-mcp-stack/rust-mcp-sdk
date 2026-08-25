@@ -1,0 +1,283 @@
+---
+id: build-a-client
+title: Build a Client
+description: Connect to your server programmatically - step 4 of the guided path
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Build a Client
+
+Final step: write an MCP **client** that connects to your own server, discovers its capabilities, and calls the `say_hello` tool - all from Rust code.
+
+**Prerequisites:** completed the [Quickstart](/docs/getting-started/quickstart).
+
+:::tip[Any MCP server works]
+This client isn't tied to `hello-mcp`. It speaks standard MCP, so point it at **any** MCP server out there: launch an npm-based one over stdio with `StdioTransport::create_with_server_launch("npx", ...)`, or swap in a remote `mcp_url` - tool discovery and calls work exactly the same.
+:::
+
+The client speaks whatever transport your server uses - pick the tab that matches how you built the `hello-mcp` server in the [Quickstart](/docs/getting-started/quickstart):
+
+<Tabs groupId="transport">
+  <TabItem value="stdio" label="Stdio" default>
+
+If you selected **Stdio** in the previous step, your client launches the `hello-mcp` binary itself and talks to it over stdin/stdout - no separate server process to manage.
+
+  </TabItem>
+  <TabItem value="http" label="Streamable HTTP">
+
+If you selected **Streamable HTTP** (Axum or Actix) in the previous step, your client connects to the running server at `http://127.0.0.1:8080/mcp`.
+
+  </TabItem>
+</Tabs>
+
+## Step 1 - Create the client project
+
+```bash
+cargo new hello-client && cd hello-client
+cargo add rust-mcp-sdk@1 async-trait serde_json tokio
+```
+
+## Step 2 - Write the client
+
+<Tabs groupId="transport">
+<TabItem value="stdio" label="Stdio" default>
+
+First, make sure the server binary exists:
+
+```bash
+cd /path/to/hello-mcp && cargo build --release
+```
+
+Then write the client. Replace the binary path below with the **absolute path** of your own `hello-mcp` build:
+
+```rust title="src/main.rs"
+use async_trait::async_trait;
+use rust_mcp_sdk::{
+    error::SdkResult,
+    mcp_client::{client_runtime, ClientHandler, McpClientOptions},
+    schema::{
+        CallToolRequestParams, ClientCapabilities, ContentBlock, Implementation,
+        InitializeRequestParams, ProtocolVersion,
+    },
+    McpClient, StdioTransport, ToMcpClientHandler, TransportOptions,
+};
+
+// Clients need a handler too - defaults are fine for now
+struct MyClientHandler;
+
+#[async_trait]
+impl ClientHandler for MyClientHandler {}
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // client name, version and capabilities
+    let client_details = InitializeRequestParams {
+        capabilities: ClientCapabilities::default(),
+        client_info: Implementation {
+            name: "hello-client".into(),
+            version: "0.1.0".into(),
+            description: Some("My first MCP client".into()),
+            icons: vec![],
+            website_url: None,
+            title: Some("Hello MCP Client!".into()),
+        },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        meta: None,
+    };
+
+    // Launch our hello-mcp server and connect to it over stdio.
+    // Use the absolute path of the binary built in the Quickstart.
+    let transport = StdioTransport::create_with_server_launch(
+        "/hello-mcp/target/release/hello-mcp",
+        vec![],
+        None,
+        TransportOptions::default(),
+    )?;
+
+    // create the MCP client
+    let client = client_runtime::create_client(McpClientOptions {
+        client_details,
+        transport,
+        handler: MyClientHandler {}.to_mcp_client_handler(),
+        task_store: None,
+        server_task_store: None,
+        message_observer: None,
+    });
+
+    // start the client
+    client.clone().start().await?;
+
+    // Discover what the server offers
+    let info = client.server_version().unwrap();
+    println!("Connected to {}@{}", info.name, info.version);
+
+    let tools = client.request_tool_list(None).await?;
+    println!(
+        "Tools: {:?}",
+        tools.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+    );
+
+    // Call the say_hello tool
+    let result = client
+        .request_tool_call(CallToolRequestParams {
+            name: "say_hello".into(),
+            arguments: Some(
+                serde_json::json!({ "name": "from my client" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+            meta: None,
+            task: None,
+        })
+        .await?;
+
+    if let Some(ContentBlock::TextContent(text)) = result.content.first() {
+        println!("Server says: {}", text.text);
+    }
+
+    client.shut_down().await?;
+    Ok(())
+}
+```
+
+</TabItem>
+<TabItem value="http" label="Streamable HTTP">
+
+Keep the `hello-mcp` server running in another terminal (`cargo run` inside the `hello-mcp` project), then write the client:
+
+```rust title="src/main.rs"
+use async_trait::async_trait;
+use rust_mcp_sdk::{
+    error::SdkResult,
+    mcp_client::{client_runtime, ClientHandler},
+    schema::{
+        CallToolRequestParams, ClientCapabilities, ContentBlock, Implementation,
+        InitializeRequestParams, ProtocolVersion,
+    },
+    McpClient, RequestOptions, StreamableTransportOptions,
+};
+
+// Clients need a handler too - defaults are fine for now
+struct MyClientHandler;
+
+#[async_trait]
+impl ClientHandler for MyClientHandler {}
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // client name, version and capabilities
+    let client_details = InitializeRequestParams {
+        capabilities: ClientCapabilities::default(),
+        client_info: Implementation {
+            name: "hello-client".into(),
+            version: "0.1.0".into(),
+            description: Some("My first MCP client".into()),
+            icons: vec![],
+            website_url: None,
+            title: Some("Hello MCP Client!".into()),
+        },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        meta: None,
+    };
+
+    // Connect to the running hello-mcp server over Streamable HTTP
+    let transport_options = StreamableTransportOptions {
+        mcp_url: "http://127.0.0.1:8080/mcp".into(),
+        request_options: RequestOptions {
+            ..Default::default()
+        },
+    };
+
+    // create the MCP client
+    let client = client_runtime::with_transport_options(
+        client_details,
+        transport_options,
+        MyClientHandler {},
+        None,
+        None,
+        None,
+    );
+
+    // start the client
+    client.clone().start().await?;
+
+    // Discover what the server offers
+    let info = client.server_version().unwrap();
+    println!("Connected to {}@{}", info.name, info.version);
+
+    let tools = client.request_tool_list(None).await?;
+    println!(
+        "Tools: {:?}",
+        tools.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+    );
+
+    // Call the say_hello tool
+    let result = client
+        .request_tool_call(CallToolRequestParams {
+            name: "say_hello".into(),
+            arguments: Some(
+                serde_json::json!({ "name": "from my client" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+            meta: None,
+            task: None,
+        })
+        .await?;
+
+    if let Some(ContentBlock::TextContent(text)) = result.content.first() {
+        println!("Server says: {}", text.text);
+    }
+
+    client.shut_down().await?;
+    Ok(())
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Step 3 - Run it
+
+<Tabs groupId="transport">
+<TabItem value="stdio" label="Stdio" default>
+
+Nothing else to run - the client spawns the server process itself:
+
+```bash
+cargo run
+```
+
+</TabItem>
+<TabItem value="http" label="Streamable HTTP">
+
+Make sure your HTTP server is still running, then:
+
+```bash
+cargo run
+```
+
+</TabItem>
+</Tabs>
+
+```text
+Connected to hello-mcp@0.1.0
+Tools: ["say_hello"]
+Server says: Hello, from my client! 👋
+```
+
+## You did it 🎉
+
+You've built a full MCP loop: **server → tool/resource/prompt → programmatic client**.
+
+And since the client only speaks standard MCP, it can connect to *any* MCP server out there - swap the transport (or URL) and it will discover that server's tools, resources, and prompts just the same.
+
+**Where next?**
+
+- 🧠 Understand what you built → [Core Concepts](/docs/core-concepts/how-it-works)
+- 🎓 Real-world scenarios → [Tutorials](/docs/tutorials/build-your-first-mcp-server)
+- 🔐 Add authentication → [Add OAuth to Your Server](/docs/tutorials/add-oauth-to-your-server)

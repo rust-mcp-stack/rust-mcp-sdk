@@ -1,0 +1,55 @@
+---
+id: axum
+title: Axum Backend
+description: Using rust-mcp-axum for HTTP servers
+---
+
+Add `rust-mcp-axum` to your dependencies:
+
+```toml
+[dependencies]
+rust-mcp-axum = "1.0"
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["server", "macros"] }
+```
+
+## Creating an Axum MCP Server
+
+```rust
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
+
+let server = create_axum_server(
+    server_info,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        host: "127.0.0.1".into(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())),
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+        auth: None, // or Some(Arc::new(auth_provider))
+        health_endpoint: Some("/health".into()),
+        sse_support: true,
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+## AxumServerOptions
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `host` | `String` | `"127.0.0.1"` | Bind address |
+| `port` | `u16` | `8080` | Port number |
+| `event_store` | `Option<Arc<dyn EventStore>>` | `None` | For resumability |
+| `task_store` | `Option<Arc<ServerTaskStore>>` | `None` | Server-side tasks |
+| `client_task_store` | `Option<Arc<ClientTaskStore>>` | `None` | Client-side tasks |
+| `auth` | `Option<Arc<dyn AuthProvider>>` | `None` | OAuth provider |
+| `health_endpoint` | `Option<String>` | `None` | Health check path |
+| `health_handler` | `Option<Arc<dyn HealthHandler>>` | `None` | Custom health handler |
+| `max_request_body_size` | `Option<usize>` | `None` (4 MiB) | Max request body size in bytes |
+| `session_store` | `Option<Arc<dyn SessionStore>>` | `None` | Custom session backend |
+| `enable_ssl` / `ssl_cert_path` / `ssl_key_path` | see [TLS/SSL](/docs/http-backends/tls) | disabled | TLS configuration |
+| `dns_rebinding` | `DnsRebindingOptions` | enabled | DNS rebinding protection (`allowed_hosts`, `allowed_origins`) |
+| `sse_support` | `bool` | `true` | Enable SSE fallback |
+
+See [`AxumServerOptions`](https://docs.rs/rust-mcp-axum/latest/rust_mcp_axum/struct.AxumServerOptions.html) for all fields.

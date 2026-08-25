@@ -1,0 +1,66 @@
+---
+id: prompts
+title: Prompts
+description: Define reusable prompt templates
+---
+
+Prompts allow the client to request predefined prompt templates from your server.
+
+## Handler Methods
+
+```rust
+async fn handle_list_prompts_request(
+    &self, _params: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+) -> Result<ListPromptsResult, RpcError> {
+    Ok(ListPromptsResult {
+        prompts: vec![Prompt {
+            name: "greeting".into(),
+            description: Some("A friendly greeting".into()),
+            title: None,
+            arguments: vec![PromptArgument {
+                name: "name".into(),
+                description: Some("Who to greet".into()),
+                required: Some(true),
+                title: None,
+            }],
+            icons: vec![],
+            meta: None,
+        }],
+        meta: None, next_cursor: None,
+    })
+}
+
+async fn handle_get_prompt_request(
+    &self, params: GetPromptRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<GetPromptResult, RpcError> {
+    if params.name == "greeting" {
+        let name = params.arguments.and_then(|a| a.get("name").cloned())
+            .unwrap_or("world".into());
+        Ok(GetPromptResult {
+            description: None,
+            messages: vec![PromptMessage {
+                role: Role::User,
+                content: ContentBlock::TextContent(TextContent::new(
+                    format!("Hello, {name}!"),
+                    None,
+                    None,
+                )),
+            }],
+            meta: None,
+        })
+    } else {
+        Err(RpcError::invalid_params().with_message("unknown prompt"))
+    }
+}
+```
+
+## Advertise the Capability
+
+Add the `prompts` capability to `ServerCapabilities` in your `InitializeResult` (see [Quickstart](/docs/getting-started/quickstart) for the full setup):
+
+```rust
+capabilities: ServerCapabilities {
+    prompts: Some(ServerCapabilitiesPrompts::default()),
+    ..Default::default()
+},
+```

@@ -1,0 +1,71 @@
+---
+id: how-it-works
+title: How It Works
+description: Understand the architecture, protocol flow, and components
+---
+
+# How It Works
+
+Before diving into reference docs, understand the big picture.
+
+## Architecture
+
+```
+┌──────────────┐     JSON-RPC over      ┌──────────────────┐
+│              │ ◄─── transport ──────► │                  │
+│  MCP Client  │     (stdio / HTTP /    │   MCP Server     │
+│  (LLM host)  │      Streamable HTTP)  │  (your code)     │
+│              │                        │                  │
+└──────────────┘                        └──────────────────┘
+       │                                        │
+       │  "List tools?"                         │  "2 tools: say_hello, add"
+       │──────────────────────────────────────► │
+       │                                        │
+       │  "Call say_hello({name: World})"       │
+       │──────────────────────────────────────► │
+       │                                        │
+       │                 "Hello, World! 👋"     │
+       │ ◄──────────────────────────────────────│
+```
+
+**The client** (Claude, ChatGPT, your own code) sends JSON-RPC requests over a transport. **The server** handles them and returns responses. The SDK manages the protocol layer - you write the handler methods.
+
+## Key components
+
+| Component | What it does |
+|-----------|-------------|
+| **Transport** | How messages travel: stdio (child process), Streamable HTTP (remote), or SSE (legacy) |
+| **Protocol** | JSON-RPC 2.0 over the transport - requests, responses, notifications, errors |
+| **Handler** | Your code: `ServerHandler` / `ClientHandler` trait implementations |
+| **Macros** | `mcp_tool`, `tool_box!`, `mcp_elicit` - generate MCP schemas from Rust structs |
+| **McpServer / McpClient** | Traits injected into handlers - gives access to server/client capabilities |
+
+## The initialization handshake
+
+Every MCP connection starts with a two-step handshake:
+
+1. **`initialize`** - client sends its identity and capabilities; server responds with its identity, capabilities, and protocol version
+2. **`initialized`** - client acknowledges; server's `on_initialized()` hook fires
+
+After initialization, the client and server know what each other supports and can exchange requests freely.
+
+## Server vs Client roles
+
+| | Server | Client |
+|---|---|---|
+| **Provides** | Tools, resources, prompts | LLM, user interaction, filesystem roots |
+| **Requests** | List/read resources, elicitation, sampling | Call tools, read resources, get prompts |
+| **Notifies** | Resource/tool/prompt list changed | Logging level, cancellation, initialized |
+| **Implement** | `ServerHandler` / `ServerHandlerCore` | `ClientHandler` / `ClientHandlerCore` |
+
+## Transports at a glance
+
+| Transport | Clients | Resumable | Health checks | Best for |
+|-----------|---------|-----------|---------------|----------|
+| **Stdio** | 1 | No | No | Local tools, desktop clients |
+| **Streamable HTTP** | Many | Yes | Yes | Services, agents, production |
+| **SSE** | Many | No | No | Legacy compatibility only |
+
+## Next
+
+Dive into [Server Essentials](/docs/core-concepts/server-essentials) or [Client Essentials](/docs/core-concepts/client-essentials), or jump to the reference sections for detailed API docs.

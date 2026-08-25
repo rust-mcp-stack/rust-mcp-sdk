@@ -1,0 +1,36 @@
+---
+id: roots
+title: Client Roots
+description: Providing filesystem roots to the server
+---
+
+If the client wants to expose filesystem roots, declare the `roots` capability and handle the request:
+
+```rust
+let client_details = InitializeRequestParams {
+    capabilities: ClientCapabilities {
+        roots: Some(ClientRoots::default()),
+        ..Default::default()
+    },
+    // client_info: Implementation { name: "my-client".into(), version: "0.1.0".into(), .. },
+    // protocol_version: "2025-11-25".into(),
+    ..Default::default()
+};
+```
+
+```rust
+async fn handle_list_roots_request(
+    &self, params: Option<RequestParams>, _runtime: &dyn McpClient,
+) -> Result<ListRootsResult, RpcError> {
+    Ok(ListRootsResult {
+        roots: vec![Root {
+            uri: "file:///home/user/projects".into(),
+            name: Some("My Projects".into()),
+            meta: None,
+        }],
+        meta: None,
+    })
+}
+```
+
+Notify the server when roots change with `client.notify_roots_list_changed().await?`.

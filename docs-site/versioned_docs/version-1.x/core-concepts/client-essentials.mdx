@@ -1,0 +1,112 @@
+---
+id: client-essentials
+title: Client Essentials
+description: Understand ClientHandler, connecting to servers, and calling capabilities
+---
+
+# Client Essentials
+
+An MCP client connects to a server, discovers its capabilities, and invokes them - the mirror image of the server.
+
+## The ClientHandler trait
+
+Like `ServerHandler`, `ClientHandler` has default implementations for all methods. A minimal client needs **zero overrides**:
+
+```rust
+struct MyClient;
+#[async_trait]
+impl ClientHandler for MyClient {}
+```
+
+And a full-featured client can handle incoming requests from the server:
+
+| Method | What the server is asking |
+|--------|--------------------------|
+| `handle_create_message_request` | "Run an LLM completion for me" (sampling) |
+| `handle_list_roots_request` | "What filesystem roots do you have?" |
+| `handle_elicit_request` | "Ask the user for input" |
+| `handle_get_task_request` | "What's the status of this task?" |
+| `handle_progress_notification` | "Operation is at 50%" |
+| `handle_logging_message_notification` | "I logged something" |
+
+## The McpClient trait
+
+The `McpClient` object is what you call to interact with the server:
+
+```rust
+client.request_tool_list(None).await?;          // Discover tools
+client.request_tool_call(params).await?;        // Execute a tool
+client.request_resource_list(None).await?;      // Discover resources
+client.request_resource_read(params).await?;    // Read a resource
+client.request_prompt_list(None).await?;        // Discover prompts
+client.request_prompt(params).await?;           // Get a prompt
+client.server_version().unwrap();               // Who is the server?
+client.shut_down().await?;                      // Graceful disconnect
+```
+
+## Connecting to a server
+
+```rust
+// Stdio - launch the server as a child process
+let transport = StdioTransport::create_with_server_launch(
+    "npx",
+    vec!["-y".into(), "@modelcontextprotocol/server-everything@2026.8.18".into()],
+    None,
+    TransportOptions::default(),
+)?;
+
+// Streamable HTTP - connect to a remote server (no transport object needed)
+let client = client_runtime::with_transport_options(
+    client_details,
+    StreamableTransportOptions {
+        mcp_url: "http://127.0.0.1:8080/mcp".into(),
+        request_options: RequestOptions { ..Default::default() },
+    },
+    handler,
+    None, // task_store
+    None, // server_task_store
+    None, // message_observer
+);
+client.clone().start().await?;
+
+// Stdio - create the client with an options struct
+let client = client_runtime::create_client(McpClientOptions {
+    client_details,
+    transport,
+    handler: handler.to_mcp_client_handler(),
+    task_store: None,
+    server_task_store: None,
+    message_observer: None,
+});
+client.clone().start().await?;
+```
+
+## The discovery loop
+
+```
+Client                            Server
+  │                                 │
+  │── initialize ──────────────────►│  "I'm a client that supports tools"
+  │◄── InitializeResult ────────────│  "I'm weather-mcp v1.0, I have tools + resources"
+  │                                 │
+  │── tools/list ──────────────────►│
+  │◄── ListToolsResult ─────────────│  2 tools: current_weather, forecast
+  │                                 │
+  │── resources/list ──────────────►│
+  │◄── ListResourcesResult ─────────│  1 resource: greeting.txt
+  │                                 │
+  │── tools/call ──────────────────►│  current_weather{city:"London"}
+  │◄── CallToolResult ──────────────│  "Current weather: 24°C, sunny"
+```
+
+## Standard vs Core handler
+
+- **ClientHandler** - per-message-type methods. Use this in 90% of cases.
+- **ClientHandlerCore** - three raw methods. Use for full message-level control.
+
+Use `client_runtime::create_client()` for standard, `client_runtime_core::create_client()` for core.
+
+## Next
+
+- [Build Your First MCP Client](/docs/tutorials/build-your-first-mcp-client) - scenario walkthrough
+- [Clients reference](/docs/clients/overview) - complete API docs

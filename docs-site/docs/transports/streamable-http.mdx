@@ -1,0 +1,78 @@
+---
+id: streamable-http
+title: Streamable HTTP Transport
+description: Modern streaming HTTP transport
+---
+
+Streamable HTTP is the modern MCP transport, supporting bidirectional streaming, resumability, and multiple concurrent clients.
+
+## Server-side
+
+```rust
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
+
+let server = create_axum_server(
+    server_info,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        host: "127.0.0.1".into(),
+        port: 8080,
+        sse_support: false, // pure Streamable HTTP, no SSE fallback
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+## Client-side
+
+```rust
+use rust_mcp_sdk::{
+    mcp_client::{client_runtime, ClientHandler},
+    schema::{ClientCapabilities, Implementation, InitializeRequestParams, ProtocolVersion},
+    RequestOptions, StreamableTransportOptions,
+};
+
+// client name, version and capabilities
+let client_details = InitializeRequestParams {
+    capabilities: ClientCapabilities::default(),
+    client_info: Implementation {
+        name: "hello-client".into(),
+        version: "0.1.0".into(),
+        title: None,
+        description: None,
+        icons: vec![],
+        website_url: None,
+    },
+    protocol_version: ProtocolVersion::V2025_11_25.into(),
+    meta: None,
+};
+
+// Connect to the server's MCP endpoint over Streamable HTTP
+let transport_options = StreamableTransportOptions {
+    mcp_url: "http://127.0.0.1:8080/mcp".into(),
+    request_options: RequestOptions {
+        ..Default::default()
+    },
+};
+
+// create the MCP client (`handler` implements `ClientHandler`)
+let client = client_runtime::with_transport_options(
+    client_details,
+    transport_options,
+    handler,
+    None,
+    None,
+    None,
+);
+client.clone().start().await?;
+```
+
+The `RequestOptions` struct supports timeouts, retry behavior, and custom HTTP headers - see [`StreamableTransportOptions`](https://docs.rs/rust-mcp-transport/latest/rust_mcp_transport/struct.StreamableTransportOptions.html).
+
+## Key Features
+
+- Bidirectional streaming (JSON-RPC batches in both directions)
+- Resumability with event stores
+- Multiple concurrent clients
+- HTTP-level health checks and security

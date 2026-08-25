@@ -1,0 +1,17 @@
+---
+id: logging
+title: Client Logging
+description: Handling log messages from the server
+---
+
+```rust
+async fn handle_logging_message_notification(
+    &self, params: LoggingMessageNotificationParams, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("[{}] {}: {}", params.level, params.logger.unwrap_or_default(), params.data);
+    Ok(())
+}
+
+// The client can also set the server's logging level:
+// client.request_set_logging_level(SetLevelRequestParams { level: LoggingLevel::Debug, meta: None }).await?;
+```

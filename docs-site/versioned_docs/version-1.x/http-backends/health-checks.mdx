@@ -1,0 +1,58 @@
+---
+id: health-checks
+title: Health Checks
+description: HTTP health check endpoints for load balancers
+---
+
+The SDK provides an optional HTTP health check endpoint, useful for load balancers and container orchestration (Kubernetes, Docker Swarm, etc.).
+
+## Basic Usage
+
+```rust
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        health_endpoint: Some("/health".into()),
+        ..Default::default()
+    },
+);
+```
+
+The default handler returns `200 OK` with `{"status": "ok"}`.
+
+## Custom Health Handler
+
+```rust
+use rust_mcp_sdk::mcp_http::{self, GenericBodyExt};
+
+#[derive(Default)]
+struct CustomHealth;
+
+impl mcp_http::HealthHandler for CustomHealth {
+    fn call(
+        &self,
+        _req: mcp_http::http::Request<&str>,
+    ) -> mcp_http::http::Response<mcp_http::GenericBody> {
+        let status = serde_json::json!({
+            "status": "healthy",
+            "uptime_secs": 12345,
+            "connections": 42,
+        });
+        mcp_http::GenericBody::from_value(&status)
+            .into_json_response(mcp_http::http::StatusCode::OK, None)
+    }
+}
+
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        health_endpoint: Some("/health".into()),
+        health_handler: Some(Arc::new(CustomHealth)),
+        ..Default::default()
+    },
+);
+```
+
+See `examples/streamable_http_healthcheck.rs` in the `rust-mcp-sdk` crate for a complete implementation.

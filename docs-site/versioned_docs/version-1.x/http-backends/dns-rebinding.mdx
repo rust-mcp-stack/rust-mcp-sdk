@@ -1,0 +1,39 @@
+---
+id: dns-rebinding
+title: DNS Rebinding Protection
+description: Security against DNS rebinding attacks
+---
+
+DNS rebinding protection is **enabled by default** on HTTP backends.
+
+## How It Works
+
+The server verifies that incoming HTTP requests have a `Host` header matching the allowed hosts list.
+
+```rust
+// Auto-derived when using explicit host:port
+// e.g., "127.0.0.1:8080" → allowed_hosts = ["127.0.0.1:8080"]
+
+// For wildcard binds (0.0.0.0, ::), configure explicitly:
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        host: "0.0.0.0".into(),
+        dns_rebinding: DnsRebindingOptions {
+            allowed_hosts: Some(vec![
+                "mcp.example.com".into(),
+                "api.mcp.example.com".into(),
+            ]),
+            ..Default::default()
+        },
+        ..Default::default()
+    },
+);
+```
+
+## Best Practices
+
+- Bind to localhost (`127.0.0.1`) in development
+- Use TLS/HTTPS in production
+- Set explicit `allowed_hosts` when binding to `0.0.0.0`

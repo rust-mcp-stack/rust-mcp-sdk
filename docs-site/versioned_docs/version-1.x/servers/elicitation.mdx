@@ -1,0 +1,47 @@
+---
+id: elicitation
+title: User Elicitation
+description: Request user input from the client
+---
+
+Elicitation lets your server ask the client (and ultimately the user) for information.
+
+## Defining an Elicitation Schema
+
+```rust
+#[macros::mcp_elicit(message = "Please enter your info", mode = form)]
+#[derive(JsonSchema)]
+pub struct UserInfo {
+    #[json_schema(title = "Name", min_length = 5, max_length = 100)]
+    pub name: String,
+    #[json_schema(title = "Email", format = "email")]
+    pub email: Option<String>,
+    #[json_schema(title = "Age", minimum = 15, maximum = 125)]
+    pub age: i32,
+}
+```
+
+## Requesting Input
+
+Inside a handler method:
+
+```rust
+let result = server
+    .request_elicitation(UserInfo::elicit_request_params())
+    .await
+    .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?;
+
+if result.action != ElicitResultAction::Accept {
+    return Err(RpcError::invalid_params().with_message("user did not accept"));
+}
+
+let user = UserInfo::from_elicit_result_content(result.content)?;
+println!("name: {}", user.name);
+```
+
+## Modes
+
+- **`form`** - Client displays a structured form (the user fills in fields)
+- **`url`** - Client shows a URL the user should visit (e.g., for OAuth)
+
+The `mcp_elicit` macro generates `elicit_request_params()`, `from_elicit_result_content()`, and the JSON Schema declaration automatically. In `url` mode, `elicit_request_params()` takes an `elicitation_id: String` argument so the client can report completion for that specific request.

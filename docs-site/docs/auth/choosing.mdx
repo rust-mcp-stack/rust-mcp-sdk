@@ -1,0 +1,60 @@
+---
+id: choosing
+title: Choosing an Auth Approach
+description: Decision tree to pick the right authentication pattern for your MCP server
+---
+
+# Choosing an Auth Approach
+
+rust-mcp-sdk supports several authentication patterns. Which one you need depends on your infrastructure.
+
+## Decision tree
+
+```
+Do you run your own identity provider?
+  ├── YES → Does it support Dynamic Client Registration (DCR)?
+  │          ├── YES → RemoteAuthProvider  (Keycloak, WorkOS, Scalekit)
+  │          └── NO  → OAuthProxy          (coming soon - not yet in v1.0.0)
+  │
+  └── NO → Do tokens come from an external system you don't control?
+             ├── YES → Token Verification  (validate JWTs or call introspection)
+             └── NO  → You probably don't need auth yet
+```
+
+## Approach comparison
+
+| Approach | Use case | DCR | Complexity | Docs |
+|----------|----------|-----|------------|------|
+| **RemoteAuthProvider** | Your own IdP with DCR (Keycloak, WorkOS, Scalekit) | ✅ Auto | Medium | [RemoteAuthProvider](/docs/auth/server-auth/remote-auth-provider) |
+| **OAuthProxy** *(coming soon)* | Your own IdP without DCR | Proxy | High | [OAuthProxy](/docs/auth/server-auth/oauth-proxy) |
+| **Token Verification** | Accept tokens from external systems | N/A | Low | [Token Verification](/docs/auth/server-auth/token-verification) |
+
+:::note
+`OAuthProxy` is still work-in-progress and not included in v1.0.0. Until it ships, pair `RemoteAuthProvider` with a DCR-capable IdP.
+:::
+
+## Provider support matrix
+
+| Provider | Crate | DCR | Docs |
+|----------|-------|-----|------|
+| **Keycloak** | `rust-mcp-extra` | ✅ | [Keycloak](/docs/auth/providers/keycloak) |
+| **WorkOS AuthKit** | `rust-mcp-extra` | ✅ | [WorkOS](/docs/auth/providers/workos) |
+| **Scalekit** | `rust-mcp-extra` | ✅ | [Scalekit](/docs/auth/providers/scalekit) |
+| **Custom OIDC** | `rust-mcp-sdk` (core) | if supported | [RemoteAuthProvider](/docs/auth/server-auth/remote-auth-provider) |
+
+## Client-side auth
+
+If you're building an MCP **client** that needs to authenticate:
+
+- Use the built-in OAuth client flow → [Client OAuth Flow](/docs/auth/client-auth/oauth-flow)
+- DCR auto-registers your client → [DCR](/docs/auth/client-auth/dcr)
+- PKCE secures the authorization code exchange → handled automatically
+- Tokens are persisted via a pluggable store → [Token Store](/docs/auth/client-auth/token-store)
+
+## Extra: ID generators and token verifiers
+
+The `rust-mcp-extra` crate provides utilities beyond auth providers:
+- **ID generators** - NanoId, TimeBase64, RandomBase62, Snowflake - for session IDs
+- **Token verifiers** - pluggable JWT validation
+
+→ [rust-mcp-extra overview](/docs/auth/providers/rust-mcp-extra)

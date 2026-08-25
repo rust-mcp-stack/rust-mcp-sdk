@@ -1,0 +1,108 @@
+---
+id: tasks
+title: Tasks
+description: Long-running operations with MCP Tasks
+---
+
+MCP Tasks allow the server to run long operations that the client can poll for status.
+
+## Enabling Task Support
+
+Configure a task store and advertise the `tasks` capability when creating the server:
+
+```rust
+use std::sync::Arc;
+use rust_mcp_sdk::{
+    schema::{
+        ServerCapabilities, ServerTaskRequest, ServerTaskTools, ServerTasks,
+        schema_utils::{ClientJsonrpcRequest, ResultFromServer},
+    },
+    task_store::InMemoryTaskStore,
+};
+
+let task_store =
+    Arc::new(InMemoryTaskStore::<ClientJsonrpcRequest, ResultFromServer>::new(None));
+
+// In your InitializeResult:
+capabilities: ServerCapabilities {
+    tasks: Some(ServerTasks {
+        // required for task-augmented tools/call requests
+        requests: Some(ServerTaskRequest {
+            tools: Some(ServerTaskTools {
+                call: Some(Default::default()),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }),
+    ..Default::default()
+},
+```
+
+Then pass the store to `server_runtime::create_server` via `McpServerOptions` (see [Quickstart](/docs/getting-started/quickstart) for the full setup):
+
+```rust
+let server = server_runtime::create_server(McpServerOptions {
+    server_details,
+    transport,
+    handler: handler.to_mcp_server_handler(),
+    task_store: Some(task_store),
+    client_task_store: None,
+    message_observer: None,
+});
+```
+
+## Task-Capable Tools
+
+Mark a tool with `task_support`:
+
+```rust
+#[mcp_tool(
+    name = "process_data",
+    execution(task_support = "optional"),
+)]
+pub struct ProcessDataTool {
+    pub dataset: String,
+}
+```
+
+When a client sends a task-augmented `tools/call`, you **must** override `handle_task_augmented_tool_call` - the default implementation returns an error. Create the task with the provided `task_creator`, run the work, and return a `CreateTaskResult` immediately:
+
+```rust
+async fn handle_task_augmented_tool_call(
+    &self, params: CallToolRequestParams, task_creator: ServerTaskCreator,
+    runtime: Arc<dyn McpServer>,
+) -> Result<CreateTaskResult, CallToolError> {
+    let ttl = params.task.as_ref().and_then(|t| t.ttl);
+    let task = task_creator
+        .create_task(CreateTaskOptions { ttl, poll_interval: None, meta: None })
+        .await;
+
+    // Run the operation in the background and store the outcome with
+    // task_store.store_task_result(...) once it reaches a terminal state.
+
+    Ok(CreateTaskResult { meta: None, task })
+}
+```
+
+The client polls `tasks/get` until the task completes, then fetches the result via `tasks/result`.
+
+## Server-side Task Store
+
+Access the task store from within any handler:
+
+```rust
+if let Some(store) = runtime.task_store() {
+    // create_task(options, request_id, request, session_id)
+    let task = store
+        .create_task(
+            CreateTaskOptions { ttl: Some(60_000), poll_interval: None, meta: None },
+            request_id,
+            request,
+            session_id,
+        )
+        .await;
+}
+```
+
+Note that the `tasks` capability must be advertised (shown above); otherwise the SDK rejects task-augmented requests before they reach your handler.

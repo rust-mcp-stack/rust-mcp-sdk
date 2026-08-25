@@ -1,0 +1,38 @@
+---
+id: v0.10-to-v1.0
+title: v0.10.x to v1.0.0 Migration Guide
+description: Breaking changes and how to migrate
+---
+
+## Public API Renames
+
+| Old Name | New Name |
+|----------|----------|
+| `PingParamaters` | `PingParameters` |
+| `Implementation.capabilites` | `Implementation.capabilities` |
+| `ElicitResult` serialization | Fixed |
+
+## Removals
+
+The following deprecated items have been removed:
+
+- `json-with-source` response type (never supported by any implementation)
+- `server_driver.rs` module
+- Shutdown functionality from `ClientRuntime`
+
+## What Didn't Change
+
+- Handler traits remain open (unsealed) - no breaking changes to handler definitions
+- All crate names and feature flags remain the same
+- Migration requires only updating version numbers and fixing the renames above
+
+## Update Cargo.toml
+
+```toml
+[dependencies]
+rust-mcp-sdk = "1.0"
+rust-mcp-schema = "1.0"
+rust-mcp-axum = "1.0"
+rust-mcp-actix = "1.0"
+rust-mcp-macros = "1.0"
+```

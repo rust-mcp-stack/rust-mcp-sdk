@@ -24,7 +24,7 @@ Next, we’ll add the `rust-mcp-sdk` dependency , also include `tokio` and `asyn
 
 ```sh
 # rust-mcp dependencies
-cargo add rust-mcp-sdk
+cargo add rust-mcp-sdk@1
 
 # other required dependencies
 cargo add tokio async-trait serde serde_json

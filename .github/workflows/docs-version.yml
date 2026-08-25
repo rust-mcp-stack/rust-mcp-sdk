@@ -1,0 +1,90 @@
+name: Version Docs
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+# Serialize snapshot regeneration so concurrent releases can't race on
+# versions.json / version-labels.json.
+concurrency:
+  group: docs-versioning
+  cancel-in-progress: false
+
+jobs:
+  version-docs:
+    # Only version the docs when the main SDK crate gets a stable release.
+    # Tags look like: rust-mcp-sdk-v1.1.0
+    # Prereleases (rc/beta/alpha) are skipped so a new major can ship before
+    # its docs exist — see .opencode/docs-site.md §5.5.
+    if: >-
+      startsWith(github.ref, 'refs/tags/rust-mcp-sdk-v') &&
+      !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs-site
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RP_SECRET }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#rust-mcp-sdk-v}"
+          MAJOR="${VERSION%%.*}"
+          echo "label=$MAJOR.x" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh rolling major snapshot
+        run: |
+          LABEL="${{ steps.version.outputs.label }}"
+          # Remove the existing snapshot so docs:version can recreate it
+          rm -rf "versioned_docs/version-$LABEL"
+          rm -f "versioned_sidebars/version-$LABEL-sidebars.json"
+          # Remove the label from versions.json (keep any other versions intact)
+          node -e "const fs=require('fs');const p='versions.json';const v=JSON.parse(fs.readFileSync(p,'utf8'));const i=v.indexOf('$LABEL');if(i>=0)v.splice(i,1);fs.writeFileSync(p,JSON.stringify(v,null,2)+'\n');"
+          pnpm docusaurus docs:version "$LABEL"
+
+      - name: Update displayed version label
+        run: |
+          node -e "const fs=require('fs');const p='version-labels.json';const labels=JSON.parse(fs.readFileSync(p,'utf8'));labels['${{ steps.version.outputs.label }}']={label:'${{ steps.version.outputs.version }}',banner:'none'};fs.writeFileSync(p,JSON.stringify(labels,null,2)+'\n');"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add versioned_docs versioned_sidebars versions.json version-labels.json
+          if git diff --cached --quiet; then
+            echo "No docs changes; nothing to commit."
+          else
+            git commit -m "docs: version ${{ steps.version.outputs.version }}"
+            # The workflow checks out the tag (detached HEAD). Rebase the
+            # generated-files commit onto the latest main tip so the push is
+            # always a fast-forward, even if main moved after tagging.
+            git fetch origin main
+            if ! git rebase origin/main; then
+              echo "::error::Rebase onto origin/main failed — versions.json or version-labels.json were modified on main since this release was tagged. Resolve manually and re-run."
+              git rebase --abort
+              exit 1
+            fi
+            git push origin HEAD:main
+          fi

@@ -1,0 +1,33 @@
+---
+id: dcr
+title: Dynamic Client Registration
+description: Auto-register clients with the authorization server
+---
+
+Dynamic Client Registration (DCR) allows clients to automatically register with an OAuth server without manual configuration.
+
+```rust
+use rust_mcp_sdk::auth::McpAuthConfig;
+
+let client = McpAuthConfig::builder()
+    .server_url("https://mcp.example.com/mcp")
+    .build()?; // no client_id configured
+
+let registration = client.register().await?;
+println!("Client ID: {}", registration.client_id);
+if let Some(secret) = registration.client_secret {
+    println!("Client secret: {secret}");
+}
+```
+
+`register()` returns a `RegistrationResponse` (`client_id`, optional `client_secret`, plus issued-at/expiry timestamps when the server provides them). It posts an [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591) request to the `registration_endpoint` advertised by the discovered authorization-server metadata, including a client name, the resolved scope, and supported grant types.
+
+## When DCR happens
+
+- **Automatic**: when no `client_id` is configured, registration runs implicitly before every token exchange.
+- **Skipped** when you configure `client_id` (pre-registered credentials are used as-is).
+- **Skipped** when you configure `client_metadata_url` and the server advertises `client_id_metadata_document_supported: true` ([SEP-991](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)) - the URL becomes your client ID.
+
+## Server compatibility
+
+DCR is driven entirely by the authorization-server metadata, so it works against any RFC 7591-compliant authorization server - whether it sits behind a [`RemoteAuthProvider`](/docs/auth/server-auth/remote-auth-provider), Keycloak, WorkOS AuthKit, Scalekit, or anything else that advertises a `registration_endpoint`. Servers without one will fail registration with a clear error.

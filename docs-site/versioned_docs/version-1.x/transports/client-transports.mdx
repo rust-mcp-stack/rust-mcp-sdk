@@ -1,0 +1,43 @@
+---
+id: client-transports
+title: Client Transports
+description: Transport options for MCP clients
+---
+
+Clients can use any MCP transport. The transport is passed to `client_runtime::create_client()` (via [`McpClientOptions`](https://docs.rs/rust-mcp-sdk/latest/rust_mcp_sdk/mcp_client/struct.McpClientOptions.html)) or, for Streamable HTTP, to `client_runtime::with_transport_options()`:
+
+```rust
+// Stdio - launch a server subprocess
+let transport = StdioTransport::create_with_server_launch("my-server", vec![], None, TransportOptions::default())?;
+```
+
+```rust
+// Streamable HTTP - connect to a remote server
+let transport_options = StreamableTransportOptions {
+    mcp_url: "https://mcp.example.com/mcp".into(),
+    request_options: RequestOptions {
+        ..Default::default()
+    },
+};
+
+let client = client_runtime::with_transport_options(
+    client_details,
+    transport_options,
+    handler,
+    None,
+    None,
+    None,
+);
+```
+
+```rust
+// SSE - connect to a legacy server
+let transport = ClientSseTransport::new(
+    "https://mcp.example.com/sse",
+    ClientSseTransportOptions {
+        ..Default::default()
+    },
+)?;
+```
+
+`StreamableTransportOptions.request_options` and `ClientSseTransportOptions` also support request timeouts, retry behavior, and custom HTTP headers for auth tokens.

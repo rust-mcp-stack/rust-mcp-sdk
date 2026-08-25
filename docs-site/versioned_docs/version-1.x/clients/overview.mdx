@@ -1,0 +1,37 @@
+---
+id: overview
+title: Client Architecture
+description: Architecture overview for MCP clients
+---
+
+rust-mcp-sdk provides two levels of client handler abstraction, mirroring the server side.
+
+## Handler Traits
+
+| Trait | Use Case |
+|-------|----------|
+| `ClientHandler` | **Recommended** - override only needed methods |
+| `ClientHandlerCore` | **Advanced** - three raw methods for full message control |
+
+## McpClient Trait
+
+The `McpClient` trait provides methods to communicate with a connected server:
+
+- `request_tool_list()` - list available tools
+- `request_tool_list()` - list available tools
+- `request_tool_call()` - invoke a tool
+- `request_resource_list()` - list resources
+- `request_resource_read()` - read a resource
+- `request_prompt_list()` - list prompts
+- `request_prompt()` - get a prompt
+- `request_completion()` - get completions
+- `server_version()` - get server identity info
+- `shut_down()` - gracefully disconnect
+
+## Client Runtimes
+
+| Transport | Function |
+|-----------|----------|
+| Stdio | `client_runtime::create_client(McpClientOptions { .. })` or `client_runtime_core::create_client(McpClientOptions { .. })` |
+| Streamable HTTP | `client_runtime::with_transport_options(client_details, StreamableTransportOptions { mcp_url, .. }, handler, None, None, None)` |
+| SSE | `client_runtime::with_transport_options(client_details, StreamableTransportOptions { mcp_url, .. }, handler, None, None, None)` |

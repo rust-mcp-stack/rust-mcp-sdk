@@ -1,0 +1,80 @@
+---
+id: remote-auth-provider
+title: RemoteAuthProvider
+description: OAuth with DCR-capable identity providers
+---
+
+`RemoteAuthProvider` enables authentication with identity providers that support Dynamic Client Registration (DCR). It serves the RFC 9728 discovery endpoints your MCP server must expose and delegates every incoming bearer token to a pluggable verifier.
+
+```rust
+use rust_mcp_sdk::auth::{Audience, AuthMetadataBuilder, RemoteAuthProvider};
+use rust_mcp_extra::token_verifier::{
+    GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
+};
+
+// Build metadata from the IdP's OpenID Connect discovery document
+let (auth_server_meta, protected_resource_meta) = AuthMetadataBuilder::from_discovery_url(
+    "https://auth.example.com/.well-known/openid-configuration",
+    "https://mcp.example.com",   // this MCP server's public URL (the resource)
+    vec!["mcp:tools"],           // required scopes
+)
+.await?
+.resource_name("My MCP Server")
+.build()?;
+
+// Token verifier: JWKS locally + introspection for instant revocation
+let token_verifier = GenericOauthTokenVerifier::new(TokenVerifierOptions {
+    strategies: vec![
+        VerificationStrategies::JWKs {
+            jwks_uri: auth_server_meta.jwks_uri.as_ref().unwrap().to_string(),
+        },
+        VerificationStrategies::Introspection {
+            introspection_uri: auth_server_meta
+                .introspection_endpoint
+                .as_ref()
+                .unwrap()
+                .to_string(),
+            client_id: "my-client-id".into(),
+            client_secret: "my-client-secret".into(),
+            use_basic_auth: true,
+            extra_params: None,
+        },
+    ],
+    validate_audience: Some(Audience::Single("https://mcp.example.com".to_string())),
+    validate_issuer: Some(auth_server_meta.issuer.to_string()),
+    cache_capacity: Some(15),
+})?;
+
+let auth_provider = RemoteAuthProvider::new(
+    auth_server_meta,
+    protected_resource_meta,
+    Box::new(token_verifier),
+    Some(vec!["mcp:tools".to_string()]), // scopes every token must include
+);
+
+// Use with the HTTP backend:
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        auth: Some(std::sync::Arc::new(auth_provider)),
+        ..Default::default()
+    },
+);
+```
+
+If you already have an authorization-server metadata URL instead of a discovery document, use `RemoteAuthProvider::with_remote_metadata_url(metadata_url, protected_resource_meta, Box::new(verifier), required_scopes)`.
+
+## What the provider does
+
+- Serves the **RFC 9728** metadata endpoints:
+  - `/.well-known/oauth-authorization-server`
+  - the protected-resource metadata URL derived from your resource identifier
+- Delegates token verification to the configured [`OauthTokenVerifier`](/docs/auth/server-auth/token-verification)
+- Enforces the required scopes on verified tokens
+
+## What it does *not* do
+
+The provider never issues or refreshes tokens - that happens at your external IdP. MCP clients obtain credentials there (typically via DCR) and then send bearer tokens to your server for verification.
+
+See `crates/rust-mcp-sdk/examples/mcp-server-oauth-remote.rs` for a complete working example.

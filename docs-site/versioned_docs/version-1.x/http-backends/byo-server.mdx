@@ -1,0 +1,168 @@
+---
+id: byo-server
+title: BYO-Server
+description: Embed MCP in your existing HTTP app
+---
+
+Both backends support mounting MCP endpoints onto an existing router. The shared pieces are:
+
+- **`McpAppState`** - the shared MCP application state (session store, id generators, server details, handler, ...), built as a plain struct literal.
+- **`McpHttpHandler`** - handles auth, middlewares and health checks. Created with `McpHttpHandler::new(auth, middlewares, health_handler)`.
+- **`McpMountOptions`** - endpoint paths for the mounted routes (`/mcp`, `/sse`, `/messages`, optional `/health`) plus `max_request_body_size`.
+
+## Axum BYO-Server
+
+Build the state, create the HTTP handler, then merge `mcp_routes()` into your own router:
+
+```rust
+use std::sync::Arc;
+
+use axum::{routing::get, Router};
+use rust_mcp_axum::{mcp_routes, McpMountOptions};
+use rust_mcp_sdk::{
+    id_generator::{FastIdGenerator, UuidGenerator},
+    mcp_http::{McpAppState, McpHttpHandler},
+    mcp_server::ServerHandler,
+    schema::{
+        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
+        ServerCapabilitiesTools,
+    },
+    session_store::InMemorySessionStore,
+    ToMcpServerHandler,
+};
+
+// Minimal handler - add your own business logic here
+struct HelloHandler;
+#[async_trait::async_trait]
+impl ServerHandler for HelloHandler {}
+
+// STEP 1: Build the shared MCP application state
+let state = Arc::new(McpAppState {
+    session_store: Arc::new(InMemorySessionStore::new()),
+    id_generator: Arc::new(UuidGenerator {}),
+    stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
+    server_details: Arc::new(InitializeResult {
+        server_info: Implementation {
+            name: "MCP Server Axum BYO".into(),
+            version: "0.1.0".into(),
+            title: None,
+            description: None,
+            icons: vec![],
+            website_url: None,
+        },
+        capabilities: ServerCapabilities {
+            tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            ..Default::default()
+        },
+        meta: None,
+        instructions: None,
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+    }),
+    handler: HelloHandler.to_mcp_server_handler(),
+    ping_interval: std::time::Duration::from_secs(12),
+    transport_options: Default::default(),
+    enable_json_response: false,
+    event_store: None,
+    task_store: None,
+    client_task_store: None,
+    message_observer: None,
+});
+
+// STEP 2: Create the HTTP handler (handles auth, middlewares, health)
+let http_handler = McpHttpHandler::new(None, vec![], None);
+
+// STEP 3: Define MCP endpoint mount paths
+let mount_opts = McpMountOptions {
+    streamable_http_endpoint: "/mcp".into(),
+    sse_endpoint: "/sse".into(),
+    sse_messages_endpoint: "/messages".into(),
+    health_endpoint: Some("/health".into()),
+    ..Default::default()
+};
+
+// STEP 4: Merge MCP routes into your own Axum router
+let app = Router::new()
+    // Your own application routes
+    .route("/api/hello", get(|| async { "Hello from my custom API!" }))
+    // MCP routes merged in
+    .merge(mcp_routes(state, &mount_opts, http_handler));
+```
+
+## Actix BYO-Server
+
+Same building blocks, but the HTTP handler is shared as an `Arc` and MCP is registered with `mcp_scope()` as a service:
+
+```rust
+use std::sync::Arc;
+
+use actix_web::{web, App, HttpServer};
+use rust_mcp_actix::{mcp_scope, McpMountOptions};
+use rust_mcp_sdk::{
+    id_generator::{FastIdGenerator, UuidGenerator},
+    mcp_http::{McpAppState, McpHttpHandler},
+    mcp_server::ServerHandler,
+    schema::{
+        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
+        ServerCapabilitiesTools,
+    },
+    session_store::InMemorySessionStore,
+    ToMcpServerHandler,
+};
+
+// Minimal handler - add your own business logic here
+struct HelloHandler;
+#[async_trait::async_trait]
+impl ServerHandler for HelloHandler {}
+
+// Build the shared MCP application state (same fields as the Axum example)
+let state = Arc::new(McpAppState {
+    session_store: Arc::new(InMemorySessionStore::new()),
+    id_generator: Arc::new(UuidGenerator {}),
+    stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
+    server_details: Arc::new(InitializeResult {
+        server_info: Implementation {
+            name: "MCP Server Actix BYO".into(),
+            version: "0.1.0".into(),
+            title: None,
+            description: None,
+            icons: vec![],
+            website_url: None,
+        },
+        capabilities: ServerCapabilities {
+            tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            ..Default::default()
+        },
+        meta: None,
+        instructions: None,
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+    }),
+    handler: HelloHandler.to_mcp_server_handler(),
+    ping_interval: std::time::Duration::from_secs(12),
+    transport_options: Default::default(),
+    enable_json_response: false,
+    event_store: None,
+    task_store: None,
+    client_task_store: None,
+    message_observer: None,
+});
+let http_handler = Arc::new(McpHttpHandler::new(None, vec![], None));
+
+let mount_opts = McpMountOptions {
+    streamable_http_endpoint: "/mcp".into(),
+    sse_endpoint: "/sse".into(),
+    sse_messages_endpoint: "/messages".into(),
+    health_endpoint: Some("/health".into()),
+    ..Default::default()
+};
+
+HttpServer::new(move || {
+    App::new()
+        .service(web::scope("/api").route("", web::get().to(|| async { "custom-api" })))
+        .service(mcp_scope(state.clone(), http_handler.clone(), &mount_opts))
+})
+.bind("127.0.0.1:8080")?
+.run()
+.await?;
+```
+
+See `examples/byo-server.rs` in both the `rust-mcp-axum` and `rust-mcp-actix` crates for complete, runnable examples.

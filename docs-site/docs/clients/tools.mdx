@@ -1,0 +1,39 @@
+---
+id: tools
+title: Client Tools
+description: Calling server tools from a client
+---
+
+```rust
+// List available tools
+let tools = client.request_tool_list(None).await?;
+for tool in tools.tools {
+    println!("{}: {}", tool.name, tool.description.unwrap_or_default());
+}
+
+// Call a tool
+let result = client
+    .request_tool_call(CallToolRequestParams {
+        name: "greet".into(),
+        arguments: Some(serde_json::json!({ "name": "Alice" })),
+        meta: None,
+        task: None,
+    })
+    .await?;
+
+// Process the result (text content, embedded resources, etc.)
+for item in result.content {
+    match item {
+        ContentBlock::TextContent(text) => println!("{}", text.text),
+        ContentBlock::EmbeddedResource(res) => match res.resource {
+            EmbeddedResourceResource::TextResourceContents(text) => {
+                println!("Text resource {}: {}", text.uri, text.text);
+            }
+            EmbeddedResourceResource::BlobResourceContents(blob) => {
+                println!("Binary resource {} ({} bytes, base64)", blob.uri, blob.blob.len());
+            }
+        },
+        _ => {}
+    }
+}
+```

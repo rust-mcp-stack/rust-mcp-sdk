@@ -1,0 +1,26 @@
+---
+id: notifications
+title: Notifications
+description: Send notifications to the client
+---
+
+The server can notify the client of changes:
+
+```rust
+// Notify that a resource has changed
+runtime.notify_resource_updated(ResourceUpdatedNotificationParams {
+    uri: "hello.txt".into(),
+    meta: None,
+}).await?;
+
+// Notify that the resource list changed
+runtime.notify_resource_list_changed(None).await?;
+
+// Notify that the prompt list changed
+runtime.notify_prompt_list_changed(None).await?;
+
+// Notify that the tool list changed
+runtime.notify_tool_list_changed(None).await?;
+```
+
+These notifications let clients refresh their cached lists without polling.

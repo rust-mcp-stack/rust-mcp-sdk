@@ -1,0 +1,16 @@
+---
+id: v0.9-to-v0.10
+title: v0.9.x to v0.10.x Migration Guide
+description: Upgrading from v0.9 to v0.10
+---
+
+## Breaking Changes in v0.10.0
+
+1. **Handler trait signatures changed** - methods now take `Arc<dyn McpServer>` / `&dyn McpClient` instead of concrete types
+2. **Transport API redesigned** - `StdioTransport::new()` now takes `TransportOptions`
+3. **Auth module restructured** - `RemoteAuthProvider` replaces the old auth system
+4. **Feature flags reorganized** - `server`, `client`, `macros`, `stdio`, `sse`, `streamable-http`, `auth`
+
+See the full migration guide at `doc/migration/v0.9.x-to-v0.10.x.md` in the repository.
+
+> If you are migrating directly from v0.9.x to v1.0.0, please follow the v0.9→v0.10 guide first, then the v0.10→v1.0 guide.

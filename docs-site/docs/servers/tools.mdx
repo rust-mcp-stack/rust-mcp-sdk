@@ -1,0 +1,87 @@
+---
+id: tools
+title: Tools
+description: Expose tools to MCP clients
+---
+
+Tools are the primary way for clients to invoke actions on your server.
+
+## Defining a Tool
+
+Use the `mcp_tool` macro:
+
+```rust
+#[macros::mcp_tool(
+    name = "greet",
+    description = "Greet a user by name",
+    destructive_hint = false,
+    idempotent_hint = true,
+    execution(task_support = "optional"),
+)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, macros::JsonSchema)]
+pub struct GreetTool {
+    pub name: String,
+    pub greeting: Option<String>,
+}
+```
+
+## Listing Tools
+
+Override the handler method to return your tools:
+
+```rust
+async fn handle_list_tools_request(
+    &self, _request: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+) -> Result<ListToolsResult, RpcError> {
+    Ok(ListToolsResult {
+        tools: vec![GreetTool::tool()],
+        meta: None, next_cursor: None,
+    })
+}
+```
+
+## Calling a Tool
+
+```rust
+async fn handle_call_tool_request(
+    &self, params: CallToolRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<CallToolResult, CallToolError> {
+    if params.name == "greet" {
+        let args: GreetTool = serde_json::from_value(params.arguments.unwrap_or_default())
+            .map_err(CallToolError::from_message)?;
+        Ok(CallToolResult::text_content(vec![TextContent::new(
+            format!("Hello, {}!", args.name),
+            None,
+            None,
+        )]))
+    } else {
+        Err(CallToolError::unknown_tool(params.name))
+    }
+}
+```
+
+## Advertise the Capability
+
+Tools are only visible to clients if the `tools` capability is set in `ServerCapabilities` when building your `InitializeResult`:
+
+```rust
+capabilities: ServerCapabilities {
+    tools: Some(ServerCapabilitiesTools::default()),
+    ..Default::default()
+},
+```
+
+See [Quickstart](/docs/getting-started/quickstart) for the full server setup.
+
+## Task Support for Long-Running Tools
+
+For tools that take a long time, enable `task_support`:
+
+```rust
+#[mcp_tool(name = "long_task", execution(task_support = "optional"))]
+pub struct LongTask {
+    pub duration_secs: u64,
+}
+```
+
+When `task_support` is enabled and a client requests task-augmented execution, your handler can create a task and return a reference the client polls for completion - see [Tasks](/docs/servers/tasks).

@@ -1,0 +1,21 @@
+---
+id: roots
+title: Roots
+description: Access client filesystem roots
+---
+
+Roots allow the server to discover the filesystem roots that the client has exposed.
+
+```rust
+// Inside a handler:
+if runtime.client_supports_root_list().unwrap_or(false) {
+    let roots = runtime.request_root_list(None).await.map_err(|err| {
+        RpcError::internal_error().with_message(err.to_string())
+    })?;
+    for root in roots.roots {
+        println!("Root: {:?} at {}", root.name, root.uri);
+    }
+}
+```
+
+The client must declare the `roots` capability and provide the root list.

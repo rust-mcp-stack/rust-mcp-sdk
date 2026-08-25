@@ -1,0 +1,91 @@
+---
+id: server-essentials
+title: Server Essentials
+description: Understand ServerHandler, the big 3 capabilities, and the server lifecycle
+---
+
+# Server Essentials
+
+A server in rust-mcp-sdk has three parts: **a handler trait**, **capability methods**, and **a runtime**.
+
+## The ServerHandler trait
+
+`ServerHandler` is the trait you implement. It has ~30 methods with **default implementations** - you override only the ones relevant to your server:
+
+```rust
+#[async_trait]
+impl ServerHandler for MyHandler {
+    // ✅ Must override to list your tools
+    async fn handle_list_tools_request(&self, ...) -> Result<ListToolsResult, RpcError>;
+
+    // ✅ Must override to execute them
+    async fn handle_call_tool_request(&self, ...) -> Result<CallToolResult, CallToolError>;
+
+    // All other methods have reasonable defaults
+    // (ping, initialize, notifications - work out of the box)
+}
+```
+
+## The Big 3 capabilities
+
+| Capability | Method to override | What it returns |
+|------------|-------------------|-----------------|
+| **Tools** | `handle_list_tools_request` + `handle_call_tool_request` | Functions the LLM can call |
+| **Resources** | `handle_list_resources_request` + `handle_read_resource_request` | Data the LLM can read |
+| **Prompts** | `handle_list_prompts_request` + `handle_get_prompt_request` | Reusable message templates |
+
+When a client asks "what can you do?" (`list_tools`), your handler returns a list of `Tool` objects. When the client "calls a tool" (`call_tool`), your handler runs the logic and returns a result.
+
+## Server lifecycle
+
+1. **Create** - build `InitializeResult` (your server's identity + capabilities)
+2. **Create handler** - implement `ServerHandler`, convert with `.to_mcp_server_handler()`
+3. **Create transport** - `StdioTransport::new()` for stdio servers, or skip this step and let an HTTP backend (`create_axum_server()`) manage connections for you
+4. **Start** - `server.start().await`
+5. **Run** - the SDK handles client connections, JSON-RPC, and dispatches to your handler
+
+```rust
+// Minimal lifecycle
+let server_details = InitializeResult { /* ... */ };
+let handler = MyHandler.to_mcp_server_handler();
+let transport = StdioTransport::new(TransportOptions::default())?;
+let server = server_runtime::create_server(McpServerOptions {
+    server_details,
+    transport,
+    handler,
+    task_store: None,
+    client_task_store: None,
+    message_observer: None,
+});
+server.start().await?;
+```
+
+## Declaring capabilities
+
+You must declare what your server supports in `ServerCapabilities`:
+
+```rust
+ServerCapabilities {
+    tools: Some(ServerCapabilitiesTools::default()),   // I have tools
+    resources: Some(ServerCapabilitiesResources::default()), // I have resources
+    prompts: Some(ServerCapabilitiesPrompts::default()),     // I have prompts
+    ..Default::default()
+}
+```
+
+:::tip[Logging and completions]
+The `logging` and `completions` capability fields are plain JSON maps - declare them with `logging: Some(Default::default())`.
+:::
+
+If you don't declare a capability, clients won't try to use it - even if your handler implements the corresponding method.
+
+## Standard vs Core handler
+
+- **ServerHandler** - fine-grained methods per capability. Use this in 90% of cases.
+- **ServerHandlerCore** - three raw methods (`handle_request`, `handle_notification`, `handle_error`). Use for full control.
+
+See [Handler Traits](/docs/core-concepts/handler-traits) for a detailed comparison.
+
+## Next
+
+Follow the guided path in [Get Started](/docs/getting-started/quickstart), or dive deeper into [Tools](/docs/servers/tools), [Resources](/docs/servers/resources), or [Prompts](/docs/servers/prompts).

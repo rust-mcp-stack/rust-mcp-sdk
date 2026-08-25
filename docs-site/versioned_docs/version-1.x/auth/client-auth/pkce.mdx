@@ -1,0 +1,32 @@
+---
+id: pkce
+title: PKCE
+description: Proof Key for Code Exchange
+---
+
+PKCE (Proof Key for Code Exchange) secures the authorization code exchange. Generate parameters with `generate_pkce_params`, which returns a `PkceParams` struct:
+
+```rust
+use rust_mcp_sdk::auth::generate_pkce_params;
+
+let pkce = generate_pkce_params();
+println!("Challenge: {}", pkce.code_challenge); // S256(code_verifier), sent with /authorize
+println!("Verifier: {}", pkce.code_verifier);   // sent with the token exchange
+```
+
+- `code_verifier` is a cryptographically random, 43-character base64url string (RFC 7636)
+- `code_challenge` is its SHA-256 hash, base64url-encoded without padding
+
+Use them with the client flow:
+
+```rust
+// 1. send code_challenge in the authorization request
+let url = client.build_authorization_url(&pkce, Some("mcp"), None).await?;
+
+// 2. exchange the returned code with the matching code_verifier
+client.complete_authorization_code_flow(code, pkce.code_verifier).await?;
+// or via the grant type directly:
+// GrantType::AuthorizationCodePkce { code, redirect_uri, code_verifier }
+```
+
+PKCE is applied automatically whenever you go through `build_authorization_url()` / `complete_authorization_code_flow()` - the challenge is always sent with `code_challenge_method=S256`, as required for public clients by the OAuth 2.0 Security Best Current Practice.

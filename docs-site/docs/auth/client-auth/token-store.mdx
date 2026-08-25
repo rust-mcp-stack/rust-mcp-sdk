@@ -1,0 +1,65 @@
+---
+id: token-store
+title: Token Store
+description: Persisting OAuth tokens
+---
+
+The token store interface allows pluggable token persistence. Implement the `TokenStore` trait for custom backends (SQLite, Redis, filesystem, keyring, ...):
+
+```rust
+use async_trait::async_trait;
+use rust_mcp_sdk::auth::{TokenResponse, TokenStore, TokenStoreError};
+
+struct MyTokenStore;
+
+#[async_trait]
+impl TokenStore for MyTokenStore {
+    async fn get_access_token(&self) -> Option<String> {
+        // Retrieve the access token from disk, keyring, or database
+        todo!()
+    }
+
+    async fn get_refresh_token(&self) -> Option<String> {
+        // Retrieve the refresh token, if any
+        todo!()
+    }
+
+    async fn set_tokens(&self, token: TokenResponse) -> Result<(), TokenStoreError> {
+        // Persist access + refresh tokens
+        todo!()
+    }
+
+    async fn clear(&self) -> Result<(), TokenStoreError> {
+        // Remove tokens (e.g., on logout or failed refresh)
+        todo!()
+    }
+
+    // Optional: hint that a stored token should be refreshed.
+    // Defaults to false.
+    async fn needs_refresh(&self) -> bool {
+        false
+    }
+}
+```
+
+All methods are `async` to accommodate I/O-bound backends.
+
+## Wiring it in
+
+```rust
+use std::sync::Arc;
+use rust_mcp_sdk::auth::McpAuthConfig;
+
+let client = McpAuthConfig::builder()
+    .server_url("https://mcp.example.com/mcp")
+    .token_store(Arc::new(MyTokenStore))
+    .build()?;
+```
+
+The client uses the store on every `get_auth_headers()`/`get_token()` call: it returns the cached access token when available, tries the refresh token next, and falls back to full re-authentication after a `clear()`.
+
+## Built-in implementations
+
+- `InMemoryTokenStore` - thread-safe in-memory storage; used by default when no store is configured
+
+There is no built-in file-backed store - implement `TokenStore` for your persistence layer of choice.

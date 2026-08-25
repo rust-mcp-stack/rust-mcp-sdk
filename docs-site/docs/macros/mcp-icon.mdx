@@ -1,0 +1,36 @@
+---
+id: mcp-icon
+title: mcp_icon!
+description: Convenient Icon builder
+---
+
+The `mcp_icon!` macro creates an `Icon` instance with full attribute support.
+
+```rust
+use rust_mcp_sdk::mcp_icon;
+
+let icon = mcp_icon!(
+    src = "https://example.com/icon.png",
+    mime_type = "image/png",
+    sizes = ["64x64"],
+    theme = "dark"
+);
+
+// Use in server info
+let server_info = InitializeResult {
+    server_info: Implementation {
+        icons: vec![icon],
+        ..Default::default()
+    },
+    // ...
+};
+```
+
+## Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `src` | Yes | Icon URL |
+| `mime_type` | No | MIME type of the icon |
+| `sizes` | No | Array of size strings (e.g., `["64x64", "128x128"]`) |
+| `theme` | No | `"light"` or `"dark"` |

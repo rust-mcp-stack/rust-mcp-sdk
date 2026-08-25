@@ -1,0 +1,26 @@
+---
+id: prompts
+title: Client Prompts
+description: Listing and getting prompts from a server
+---
+
+```rust
+// List prompts
+let prompts = client.request_prompt_list(None).await?;
+for prompt in prompts.prompts {
+    println!("{}: {}", prompt.name, prompt.description.unwrap_or_default());
+}
+
+// Get a prompt with arguments
+let result = client
+    .request_prompt(GetPromptRequestParams {
+        name: "greeting".into(),
+        arguments: Some([("name".to_string(), "Alice".to_string())].into_iter().collect()),
+        meta: None,
+    })
+    .await?;
+
+for message in result.messages {
+    println!("{:?}: {:?}", message.role, message.content);
+}
+```

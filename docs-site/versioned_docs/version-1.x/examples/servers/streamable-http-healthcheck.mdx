@@ -1,0 +1,18 @@
+---
+id: streamable-http-healthcheck
+title: Streamable HTTP with Health Check
+description: Server with custom health check endpoint
+---
+
+Location: `crates/rust-mcp-sdk/examples/streamable_http_healthcheck.rs`
+
+Demonstrates enabling the health check endpoint with a custom JSON health handler.
+
+```bash
+cargo run --example streamable_http_healthcheck -p rust-mcp-sdk
+```
+
+```
+$ curl http://127.0.0.1:8080/health
+{"status":"healthy","uptime_secs":42,"connections":1}
+```

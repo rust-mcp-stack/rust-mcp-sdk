@@ -1,0 +1,57 @@
+---
+id: keycloak
+title: Keycloak
+description: Using Keycloak as an auth provider
+---
+
+[Keycloak](https://www.keycloak.org/) integration is available via `rust-mcp-extra`.
+
+```toml
+[dependencies]
+rust-mcp-extra = "1.0"
+```
+
+```rust
+use rust_mcp_extra::auth_provider::keycloak::{KeycloakAuthProvider, KeycloakAuthOptions};
+
+let auth_provider = KeycloakAuthProvider::new(KeycloakAuthOptions {
+    // Base URL of your Keycloak server
+    keycloak_base_url: "https://keycloak.example.com".to_string(),
+    // Public base URL of this MCP server (used for discovery endpoints)
+    mcp_server_url: "https://mcp.example.com".to_string(),
+    // Scopes that must be present in the access token
+    required_scopes: Some(vec!["openid", "mcp:tools"]),
+    // Confidential client credentials - enable token introspection
+    client_id: Some("my-mcp-client".to_string()),
+    client_secret: Some("my-client-secret".to_string()),
+    // Optional overrides; see docs for all fields
+    token_verifier: None,
+    resource_name: None,
+    resource_documentation: None,
+    validate_audience: None,          // defaults to mcp_server_url
+    disable_audience_validation: false,
+})?;
+
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        auth: Some(Arc::new(auth_provider)),
+        ..Default::default()
+    },
+);
+```
+
+## Token verification strategies
+
+`KeycloakAuthProvider` picks verification strategies automatically:
+
+| Strategy | When used | Notes |
+|----------|-----------|-------|
+| **JWKs** | Always | Local JWT signature/issuer/expiry validation, no network call |
+| **Introspection** | When `client_id` + `client_secret` are provided | Detects revoked/expired tokens immediately - recommended for production |
+| **UserInfo** | Fallback when `openid` is a required scope but no introspection credentials | Less secure than introspection |
+
+Keycloak exposes a DCR endpoint, so SDK clients auto-register against it; the provider itself serves the OAuth discovery metadata and verifies tokens.
+
+See `rust_mcp_extra::auth_provider::keycloak` for the full `KeycloakAuthOptions` reference.

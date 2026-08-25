@@ -1,0 +1,15 @@
+---
+id: oauth-proxy
+title: OAuthProxy
+description: OAuth for providers without DCR
+---
+
+`OAuthProxy` enables authentication with OAuth providers that don't support Dynamic Client Registration.
+
+> ⚠️ OAuthProxy support is still in development. Use `RemoteAuthProvider` for now.
+
+The proxy:
+1. Accepts any client registration request locally
+2. Handles DCR on your server side
+3. Uses pre-registered app credentials upstream
+4. Forwards callbacks, allowing dynamic redirect URIs with providers that require fixed ones

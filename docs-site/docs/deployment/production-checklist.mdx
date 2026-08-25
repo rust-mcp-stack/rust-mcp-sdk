@@ -1,0 +1,19 @@
+---
+id: production-checklist
+title: Production Checklist
+description: Checklist for production deployments
+---
+
+- [ ] Use `cargo build --release`
+- [ ] Enable TLS (via SDK or reverse proxy)
+- [ ] Review DNS rebinding protection settings in `DnsRebindingOptions { allowed_hosts, allowed_origins }` (nested under the `dns_rebinding` server option) - when `allowed_hosts` is unset, allowed hosts are auto-derived from `host:port` unless the bind address is a wildcard
+- [ ] Set up health check endpoint for load balancers
+- [ ] Enable resumability with an event store
+- [ ] Configure task store if using MCP Tasks
+- [ ] Set up OAuth authentication (if exposing publicly)
+- [ ] Configure logging with `RUST_LOG`
+- [ ] Run behind a process manager (systemd, supervisord)
+- [ ] Set resource limits (ulimit, cgroups)
+- [ ] Monitor with your existing observability stack
+- [ ] Pin dependency version in Cargo.lock
+- [ ] Regular dependency updates (`cargo update`)

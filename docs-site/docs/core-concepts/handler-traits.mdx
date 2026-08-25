@@ -1,0 +1,75 @@
+---
+id: handler-traits
+title: Handler Traits
+description: Standard vs Core - when to use each handler pattern
+---
+
+# Handler Traits
+
+rust-mcp-sdk provides two pairs of handler traits - one standard (per-capability methods), one core (raw message methods). Choose based on how much control you need.
+
+## Server-side: ServerHandler vs ServerHandlerCore
+
+| | ServerHandler | ServerHandlerCore |
+|---|---|---|
+| **Methods** | ~30 fine-grained: `handle_list_tools_request`, `handle_call_tool_request`, `handle_list_resources_request`, etc. | 3 raw: `handle_request`, `handle_notification`, `handle_error` |
+| **Defaults** | Yes - ping, initialize, most notifications work out of the box | No - you handle everything |
+| **Type safety** | Fully typed: method returns `Result<ListToolsResult, RpcError>` | Generic: returns `Result<ResultFromServer, RpcError>` - you match on enum variants |
+| **Best for** | 90% of servers | Full control, custom protocol extensions, debugging |
+| **Runtime function** | `server_runtime::create_server()` | `server_runtime_core::create_server()` |
+| **Conversion** | `.to_mcp_server_handler()` | `.to_mcp_server_handler()` (same method) |
+
+### ServerHandler example
+
+```rust
+async fn handle_call_tool_request(
+    &self, params: CallToolRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<CallToolResult, CallToolError> {
+    // params.name is "say_hello"
+    // params.arguments is the JSON args
+    Ok(CallToolResult::text_content(vec!["Hello!".into()]))
+}
+```
+
+### ServerHandlerCore example
+
+```rust
+async fn handle_request(
+    &self, request: RequestFromClient, _runtime: Arc<dyn McpServer>,
+) -> Result<ResultFromServer, RpcError> {
+    match request {
+        RequestFromClient::ListToolsRequest(_) => Ok(ListToolsResult { ... }.into()),
+        RequestFromClient::CallToolRequest(params) => Ok(CallToolResult::text_content(...).into()),
+        _ => Err(RpcError::method_not_found()),
+    }
+}
+```
+
+## Client-side: ClientHandler vs ClientHandlerCore
+
+Same pattern, same decision:
+
+| | ClientHandler | ClientHandlerCore |
+|---|---|---|
+| **Methods** | ~20 per-message-type handlers | 3 raw methods |
+| **Defaults** | Yes - returns "not found" for unhandled requests | No - you handle everything |
+| **Runtime function** | `client_runtime::create_client()` | `client_runtime_core::create_client()` |
+| **Conversion** | `.to_mcp_client_handler()` | `.to_mcp_client_handler()` (same method) |
+
+## Decision guide
+
+```
+Do you need to intercept every raw JSON-RPC message?
+  ├── Yes → use Core
+  └── No  → do you have a small fixed set of capabilities?
+              ├── Yes → ServerHandler / ClientHandler
+              └── No  → ServerHandler / ClientHandler (override only what you need)
+```
+
+**Start with the standard handler.** Switch to Core only if you need access to the raw JSON-RPC envelope or want to implement custom protocol behavior.
+
+## Next
+
+- [ServerHandler reference](/docs/servers/server-handler) - all methods
+- [ServerHandlerCore reference](/docs/servers/server-handler-core) - the raw API
+- [ClientHandler reference](/docs/clients/client-handler) - all methods
