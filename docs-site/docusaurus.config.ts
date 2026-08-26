@@ -36,13 +36,36 @@ const SITE_CONFIG = {
   projectName: 'rust-mcp-sdk',
   githubUrl: 'https://github.com/rust-mcp-stack/rust-mcp-sdk',
   editUrlBase: 'https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/docs-site/',
+  // Umami Cloud website ID (cloud.umami.is → site settings). Empty = analytics
+  // disabled; the tracker is only injected for production builds.
+  umamiWebsiteId: 'a003cde7-1a07-4667-8369-6f8fc019eff6',
 };
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── ANALYTICS ───────────────────────────────────────────────────────────────
+const umamiHeadTags =
+  SITE_CONFIG.umamiWebsiteId && process.env.NODE_ENV === 'production'
+    ? [
+        {
+          tagName: 'script',
+          attributes: {
+            defer: 'true',
+            src: 'https://cloud.umami.is/script.js',
+            'data-website-id': SITE_CONFIG.umamiWebsiteId,
+            // Only record traffic hitting the real deployment host.
+            'data-domains': `${SITE_CONFIG.url.replace(/^https?:\/\//, '')}`,
+          },
+        },
+      ]
+    : [];
 // ─────────────────────────────────────────────────────────────────────────────
 
 const config: Config = {
   title: SITE_CONFIG.title,
   tagline: SITE_CONFIG.tagline,
   favicon: 'img/favicon.ico',
+
+  headTags: umamiHeadTags,
 
   future: {
     v4: true,
@@ -120,7 +143,7 @@ const config: Config = {
     // ─── ANNOUNCEMENT BAR ───────────────────────────────────────────────────
     announcementBar: {
       id: 'announcement-v1',
-      content: `🚀 <strong>v1.0.1 is out!</strong> &nbsp; <a href="${SITE_CONFIG.baseUrl}docs/migration/overview">See migration guide →</a> &nbsp;·&nbsp; 📚 <strong>Docs in beta</strong> — <a href="${SITE_CONFIG.githubUrl}/issues/new?template=documentation.md&labels=documentation">Report an issue</a>`,
+      content: `🚀 <strong>v1.0.1 is out!</strong> &nbsp; <a href="${SITE_CONFIG.baseUrl}docs/migration/overview" data-umami-event="announcement-cta">See migration guide →</a> &nbsp;·&nbsp; 📚 <strong>Docs in beta</strong> — <a href="${SITE_CONFIG.githubUrl}/issues/new?template=documentation.md&labels=documentation">Report an issue</a>`,
       backgroundColor: 'var(--ifm-color-primary)',
       textColor: '#ffffff',
       isCloseable: true,
