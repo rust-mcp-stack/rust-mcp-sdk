@@ -1,0 +1,66 @@
+---
+id: token-verification
+title: Token Verification
+description: Verify tokens issued by external systems
+---
+
+For servers that want to verify tokens from external issuers (like JWTs from a third-party IdP), implement the `OauthTokenVerifier` trait and pass it to a [`RemoteAuthProvider`](/docs/auth/server-auth/remote-auth-provider):
+
+```rust
+use async_trait::async_trait;
+use rust_mcp_sdk::auth::{AuthInfo, AuthenticationError, OauthTokenVerifier};
+
+struct MyTokenVerifier;
+
+#[async_trait]
+impl OauthTokenVerifier for MyTokenVerifier {
+    async fn verify_token(
+        &self,
+        access_token: String,
+    ) -> Result<AuthInfo, AuthenticationError> {
+        // Decode and validate the JWT (signature, expiry, issuer) using
+        // whatever library you prefer.
+        let claims = decode_jwt(&access_token)
+            .map_err(|err| AuthenticationError::InvalidOrExpiredToken(err.to_string()))?;
+
+        Ok(AuthInfo {
+            // Unique id for the token: the jti claim when available,
+            // otherwise the token itself.
+            token_unique_id: claims.jwt_id.unwrap_or(access_token),
+            client_id: claims.client_id,
+            user_id: claims.subject,
+            scopes: claims.scope.map(|s| s.split(' ').map(String::from).collect()),
+            expires_at: None,          // Option<SystemTime>
+            audience: None,            // Option<Audience>
+            extra: None,               // Option<serde_json::Map<String, Value>>
+        })
+    }
+}
+```
+
+Note that `AuthInfo` has no `Default` implementation - you must always provide every field, including the required `token_unique_id` (`String`) and the optional `scopes` (`Option<Vec<String>>`).
+
+## Easier path: GenericOauthTokenVerifier
+
+Before writing your own verifier, check whether `GenericOauthTokenVerifier` from `rust-mcp-extra` covers your case. It composes verification strategies (JWKS signature checks, RFC 7662 introspection, OIDC UserInfo) via `VerificationStrategies`:
+
+```rust
+use rust_mcp_extra::token_verifier::{
+    GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
+};
+
+let verifier = GenericOauthTokenVerifier::new(TokenVerifierOptions {
+    strategies: vec![VerificationStrategies::JWKs {
+        jwks_uri: "https://idp.example.com/.well-known/jwks.json".into(),
+    }],
+    validate_issuer: Some("https://idp.example.com".to_string()),
+    validate_audience: Some(rust_mcp_sdk::auth::Audience::Single(
+        "https://mcp.example.com".to_string(),
+    )),
+    cache_capacity: Some(100),
+})?;
+
+// then pass Box::new(verifier) to RemoteAuthProvider::new(...)
+```
+
+This approach lets you use any existing auth infrastructure without DCR.

@@ -2,6 +2,8 @@
 
 A companion crate to [`rust-mcp-sdk`](https://github.com/rust-mcp-stack/rust-mcp-sdk) providing additional implementations for core traits like `AuthProvider`, `IdGenerator`, `SessionStore` and `EventStore`.
 
+> 📚 Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — see the [full documentation, guides & tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/).
+
 ## 📖 Table of Contents
 - **[Authentication Providers](#-authentication-providers)**
   - [Keycloak](#keycloak)

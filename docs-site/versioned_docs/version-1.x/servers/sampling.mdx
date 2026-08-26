@@ -1,0 +1,41 @@
+---
+id: sampling
+title: LLM Sampling
+description: Request completions from the client's LLM
+---
+
+Sampling allows the server to request the client to produce an LLM completion (create message).
+
+```rust
+// Inside a handler method:
+let result = runtime
+    .request_message_creation(CreateMessageRequestParams {
+        messages: vec![SamplingMessage {
+            role: Role::User,
+            content: SamplingMessageContent::TextContent(TextContent::new(
+                "Summarize the user's request".into(),
+                None,
+                None,
+            )),
+            meta: None,
+        }],
+        // max_tokens is required (i64); this struct has no Default impl
+        max_tokens: 1000,
+        stop_sequences: vec![],
+        tools: vec![],
+        include_context: None,
+        metadata: None,
+        model_preferences: None,
+        system_prompt: None,
+        task: None,
+        temperature: None,
+        tool_choice: None,
+        meta: None,
+    })
+    .await
+    .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?;
+
+println!("Response: {:?}", result.content);
+```
+
+The client must declare `sampling` capability for this to work. Check with `runtime.client_supports_sampling()`.

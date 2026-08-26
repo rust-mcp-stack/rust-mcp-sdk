@@ -1,0 +1,30 @@
+---
+id: overview
+title: Examples Overview
+description: Example code for rust-mcp-sdk
+---
+
+Ready-to-run examples live in several crates:
+
+- [crates/rust-mcp-sdk/examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) - servers, clients, and OAuth/DCR examples
+- [crates/rust-mcp-extra/examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-extra/examples) - Keycloak, WorkOS, and Scalekit auth provider examples
+- [crates/rust-mcp-axum/examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-axum/examples) - BYO-Server with Axum
+- [crates/rust-mcp-actix/examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-actix/examples) - BYO-Server with Actix
+
+## Running Examples
+
+```bash
+# Clone the repo
+git clone https://github.com/rust-mcp-stack/rust-mcp-sdk.git
+cd rust-mcp-sdk
+
+# Run a specific example (the repo root is a virtual workspace, so pass -p)
+cargo run --example hello-world-mcp-server-stdio -p rust-mcp-sdk
+```
+
+## Categories
+
+- **Servers** - Stdio, Streamable HTTP, Core variants, health checks (`rust-mcp-sdk`)
+- **Clients** - Stdio, SSE, Streamable HTTP, Core variants (`rust-mcp-sdk`)
+- **Auth** - OAuth with DCR (`rust-mcp-sdk`); Keycloak, WorkOS, Scalekit (`rust-mcp-extra`)
+- **BYO-Server** - Embed MCP in existing Axum (`rust-mcp-axum`) or Actix (`rust-mcp-actix`) apps

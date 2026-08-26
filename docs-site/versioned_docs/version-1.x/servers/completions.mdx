@@ -1,0 +1,40 @@
+---
+id: completions
+title: Completions
+description: Provide argument completion suggestions
+---
+
+Argument completions help clients with auto-complete for prompt and resource arguments.
+
+```rust
+async fn handle_complete_request(
+    &self, params: CompleteRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<CompleteResult, RpcError> {
+    // params.ref_ contains the prompt or resource reference
+    // params.argument contains the argument name and value so far
+    let values = match params.argument.name.as_str() {
+        "name" => vec!["Alice".into(), "Bob".into(), "Charlie".into()],
+        _ => vec![],
+    };
+
+    Ok(CompleteResult {
+        completion: CompleteResultCompletion {
+            values,
+            total: None,
+            has_more: Some(false),
+        },
+        meta: None,
+    })
+}
+```
+
+## Advertise the Capability
+
+Add the `completions` capability to `ServerCapabilities` in your `InitializeResult` (see [Quickstart](/docs/getting-started/quickstart) for the full setup):
+
+```rust
+capabilities: ServerCapabilities {
+    completions: Some(Default::default()),
+    ..Default::default()
+},
+```

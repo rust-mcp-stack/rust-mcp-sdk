@@ -1,0 +1,15 @@
+---
+id: server-oauth-remote
+title: Server OAuth (Remote)
+description: MCP server with RemoteAuthProvider
+---
+
+Location: `crates/rust-mcp-sdk/examples/mcp-server-oauth-remote.rs`
+
+Demonstrates a server with OAuth authentication using `RemoteAuthProvider` and a DCR-capable identity provider.
+
+```bash
+cargo run --example mcp-server-oauth-remote -p rust-mcp-sdk
+```
+
+The server authenticates clients via an external OAuth provider, handling DCR, token issuance, and verification automatically.

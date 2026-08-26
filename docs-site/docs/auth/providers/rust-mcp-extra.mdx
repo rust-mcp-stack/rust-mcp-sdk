@@ -1,0 +1,79 @@
+---
+id: rust-mcp-extra
+title: rust-mcp-extra
+description: Companion crate - ID generators, token verifiers, and more
+---
+
+# rust-mcp-extra
+
+[`rust-mcp-extra`](https://crates.io/crates/rust-mcp-extra) is a companion crate to `rust-mcp-sdk` providing additional implementations of core traits. It includes ready-made auth providers, ID generators, and more.
+
+```toml
+[dependencies]
+rust-mcp-extra = "1.0"
+```
+
+### Default features
+The default feature set includes all ID generators and auth support.
+
+## ID Generators
+
+Use these to customize how session IDs are generated. They implement the `IdGenerator` trait and plug into `AxumServerOptions` or `ActixServerOptions`:
+
+```rust
+use rust_mcp_extra::id_generator::SnowflakeIdGenerator;
+use std::sync::Arc;
+
+let server = rust_mcp_axum::create_axum_server(
+    server_info, handler,
+    AxumServerOptions {
+        session_id_generator: Some(Arc::new(SnowflakeIdGenerator::new(1))), // machine ID = 1
+        ..Default::default()
+    },
+);
+```
+
+| Generator | Feature flag | Description |
+|-----------|-------------|-------------|
+| **NanoIdGenerator** | `nano_id` | Short, URL-safe random strings. Compact and user-friendly. |
+| **TimeBase64Generator** | `time_64_id` | Timestamp (ms) encoded as URL-safe Base64. Time-sortable. |
+| **RandomBase62Generator** | `random_62_id` | Alphanumeric `[A-Za-z0-9]` random strings. |
+| **SnowflakeIdGenerator** | `snowflake_id` | 64-bit time-ordered IDs with machine ID + sequence. Distributed-friendly. |
+
+## Auth Providers
+
+Drop-in providers for common identity platforms - no need to build an `AuthProvider` implementation yourself:
+
+| Provider | Module | Docs |
+|----------|--------|------|
+| **Keycloak** | `auth_provider::keycloak` | [Keycloak](/docs/auth/providers/keycloak) |
+| **WorkOS AuthKit** | `auth_provider::work_os` | [WorkOS](/docs/auth/providers/workos) |
+| **Scalekit** | `auth_provider::scalekit` | [Scalekit](/docs/auth/providers/scalekit) |
+
+Each provider is a standalone `AuthProvider` implementation for MCP servers. They share the same building blocks from `rust_mcp_sdk` - `AuthMetadataBuilder` for discovery metadata and `GenericOauthTokenVerifier` for token verification - but none of them wraps `RemoteAuthProvider`, issues tokens, or performs registration. Token issuance and refresh always happen at the external identity provider; the providers here serve the OAuth discovery endpoints and verify incoming bearer tokens.
+
+## Token Verifiers
+
+`GenericOauthTokenVerifier` implements the `OauthTokenVerifier` trait from `rust-mcp-sdk`. To customize how tokens are validated, compose `VerificationStrategies` (JWKs, introspection, UserInfo) inside `TokenVerifierOptions` - or implement `OauthTokenVerifier` yourself.
+
+```rust
+use rust_mcp_extra::token_verifier::{GenericOauthTokenVerifier, TokenVerifierOptions};
+
+let verifier = GenericOauthTokenVerifier::new(TokenVerifierOptions {
+    strategies: vec![/* JWKs / Introspection / UserInfo */],
+    validate_audience: None,
+    validate_issuer: None,
+    cache_capacity: None,
+})?;
+```
+
+See [Token Verification](/docs/auth/server-auth/token-verification) for details.
+
+## Coming Soon
+
+- **Session Store** - persistent session management (SQLite, Redis)
+- **Event Store** - persistent event history for resumability
+
+:::note
+The `sqlite` module in `rust-mcp-extra` currently has placeholder implementations. These will be fleshed out in a future release.
+:::

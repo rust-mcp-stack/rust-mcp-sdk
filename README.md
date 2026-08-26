@@ -1,8 +1,9 @@
 <p align="center">
-  <img width="200" src="assets/rust-mcp-sdk.png" alt="Description" width="300">
+  <img width="200" src="assets/rust-mcp-sdk.png" alt="Rust MCP SDK" width="300">
 </p>
 
-# Rust MCP SDK
+
+<div align="center">
 
 [<img alt="crates.io" src="https://img.shields.io/crates/v/rust-mcp-sdk?style=for-the-badge&logo=rust&color=FE965D" height="22">](https://crates.io/crates/rust-mcp-sdk)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs" height="22">](https://docs.rs/rust-mcp-sdk)
@@ -11,6 +12,10 @@
 [<img alt="Hello World MCP Server" src="https://img.shields.io/badge/Example-Hello%20World%20MCP-0286ba?style=for-the-badge&logo=rust" height="22">
 ](examples/hello-world-mcp-server-stdio)
 
+[Documentation](https://rust-mcp-stack.github.io/rust-mcp-sdk/) · [Tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/tutorials/build-your-first-mcp-server) · [Examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) · [Upgrade Guide](UPGRADING.md) · [Changelog](CHANGELOG.md) <br/>
+[Contributing](CONTRIBUTING.md) · [Report a bug](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=bug_report.md) · [Request a Feature](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=feature_request.md)
+
+</div>
 
 A high-performance, asynchronous Rust toolkit for building MCP servers and clients.  
 
@@ -377,7 +382,7 @@ async fn main() -> SdkResult<()> {
 
 👉 For more examples (stdio, Streamable HTTP, clients, auth, etc.), see the [examples/](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) directory.
 
-👉 If you are looking for a step-by-step tutorial on how to get started with `rust-mcp-sdk` , please see : [Getting Started MCP Server](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/doc/getting-started-mcp-server.md)  
+👉 For step-by-step tutorials (server, client, HTTP deployment, OAuth, and more), see the [documentation site](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/tutorials/build-your-first-mcp-server).
 
 See [hello-world-mcp-server-stdio](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs) example running in [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) :
 

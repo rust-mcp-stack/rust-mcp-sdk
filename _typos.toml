@@ -1,0 +1,19 @@
+# Typos configuration - https://github.com/crate-ci/typos
+# Ignores are scoped to exact historical strings so genuine typos elsewhere are
+# still caught.
+
+[files]
+# Frozen snapshots are generated mirrors of docs-site/docs (which is spell-checked);
+# skip re-checking generated copies.
+extend-exclude = ["docs-site/versioned_docs/**"]
+
+[default]
+extend-ignore-re = [
+  # Migration guides quote the actual v0.10 API names (renamed in v1.0);
+  # correcting them would break find-and-replace guidance.
+  '`PingParamaters` \| `PingParameters`',
+  'Implementation\.capabilites',
+  # Pre-existing identifiers/comments using the accepted "clonable" variant.
+  'fn shared_http_client_is_clonable\(',
+  'isn.t clonable\b',
+]

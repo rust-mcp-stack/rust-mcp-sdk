@@ -1,0 +1,20 @@
+---
+id: progress
+title: Progress
+description: Report operation progress to the client
+---
+
+The server can report progress on long-running operations using progress tokens.
+
+```rust
+// In a long-running handler:
+runtime.notify_progress(ProgressNotificationParams {
+    progress_token: ProgressToken::String("task-123".into()),
+    progress: 0.5,
+    total: Some(1.0),
+    message: Some("Processing...".into()),
+    meta: None,
+}).await?;
+```
+
+Progress tokens are typically provided by the client in the request. Use them to give feedback on tool execution or resource loading.

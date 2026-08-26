@@ -1,0 +1,51 @@
+---
+id: elicitation
+title: Client Elicitation
+description: Handling user input elicitation requests from the server
+---
+
+When a server requests user input via elicitation, the client must present the form or URL to the user and return their response.
+
+`ElicitRequestParams` is an untagged enum with two variants:
+
+- `ElicitRequestParams::FormParams(ElicitRequestFormParams)` — `message`, `requested_schema` (and an optional `mode`)
+- `ElicitRequestParams::UrlParams(ElicitRequestUrlParams)` — `elicitation_id`, `message`, `url`
+
+```rust
+async fn handle_elicit_request(
+    &self, params: ElicitRequestParams, _runtime: &dyn McpClient,
+) -> Result<ElicitResult, RpcError> {
+    // For form mode, match on ElicitRequestParams::FormParams(form) and use
+    // form.message / form.requested_schema to render the input UI.
+
+    // In a real client, display the form to the user and collect input,
+    // then map each field into an ElicitResultContent value
+    Ok(ElicitResult {
+        action: ElicitResultAction::Accept,
+        content: Some(
+            [
+                (
+                    "name".to_string(),
+                    ElicitResultContent::Primitive(ElicitResultContentPrimitive::String(
+                        "Alice".into(),
+                    )),
+                ),
+                (
+                    "email".to_string(),
+                    ElicitResultContent::Primitive(ElicitResultContentPrimitive::String(
+                        "alice@example.com".into(),
+                    )),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        meta: None,
+    })
+}
+```
+
+The client must declare the elicitation capability for this to work:
+`elicitation: Some(ClientElicitation::default())` in `ClientCapabilities`.
+
+For task-augmented elicitation, override `handle_task_augmented_elicit_request` and return a `CreateTaskResult` instead.

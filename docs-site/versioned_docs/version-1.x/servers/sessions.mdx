@@ -1,0 +1,23 @@
+---
+id: sessions
+title: Server Sessions
+description: Per-session state management
+---
+
+When running with Streamable HTTP (Axum or Actix backends), each connected client gets a session.
+
+## Auth Info
+
+```rust
+// Get session auth data
+let auth_info = runtime.auth_info().await;
+if let Some(auth) = &*auth_info {
+    println!("Client authenticated as: {:?}", auth.user_id);
+}
+```
+
+## Session Identity
+
+The SDK manages sessions automatically. Each HTTP connection carries a session ID that maps to a specific client's initialization state and auth context.
+
+For Stdio transport, there is a single session since only one client connects via stdin/stdout.

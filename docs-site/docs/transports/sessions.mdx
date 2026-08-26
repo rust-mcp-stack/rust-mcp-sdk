@@ -1,0 +1,22 @@
+---
+id: sessions
+title: Transport Sessions
+description: Session lifecycle management
+---
+
+Each client connection is assigned a session ID (`SessionId`). Sessions are managed automatically:
+
+- **Stdio**: Single session for the lifetime of the process
+- **Streamable HTTP**: One session per client connection, identified by cookie or header
+- **SSE**: One session per SSE connection
+
+## Session Lifecycle
+
+1. Client connects → session created with a unique `SessionId`
+2. Client initializes → session stores client info and capabilities
+3. Client disconnects → session is preserved (if event store is configured)
+4. Client reconnects with same session ID → session is resumed
+
+## Session Config
+
+Configure session behavior via server options (timeout, max sessions, etc.) in the HTTP backend's options struct.

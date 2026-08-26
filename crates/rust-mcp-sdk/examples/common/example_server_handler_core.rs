@@ -1,4 +1,4 @@
-use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
+use crate::common::resources::{BlobResource, PlainTextResource, PokemonImageResource};
 
 use super::tools::GreetingTools;
 use async_trait::async_trait;
@@ -74,7 +74,7 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
             RequestFromClient::ListResourcesRequest(params) => Ok(ListResourcesResult {
                 meta: None,
                 next_cursor: None,
-                resources: vec![PlainTextResource::resource(), BlobTextResource::resource()],
+                resources: vec![PlainTextResource::resource(), BlobResource::resource()],
             }
             .into()),
 
@@ -92,8 +92,8 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 if PlainTextResource::resource_uri().starts_with(&params.uri) {
                     return PlainTextResource::get_resource().await.map(|r| r.into());
                 }
-                if BlobTextResource::resource_uri().starts_with(&params.uri) {
-                    return BlobTextResource::get_resource().await.map(|r| r.into());
+                if BlobResource::resource_uri().starts_with(&params.uri) {
+                    return BlobResource::get_resource().await.map(|r| r.into());
                 }
 
                 if PokemonImageResource::matches_url(&params.uri) {

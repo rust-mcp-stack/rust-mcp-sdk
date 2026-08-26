@@ -1,0 +1,69 @@
+---
+id: server-handler-core
+title: ServerHandlerCore Trait
+description: Raw handler trait for full message-level control
+---
+
+`ServerHandlerCore` provides three methods that give you full control over every message:
+
+## Trait Definition
+
+```rust
+#[async_trait]
+pub trait ServerHandlerCore: Send + Sync + 'static {
+    async fn handle_request(
+        &self,
+        request: RequestFromClient,
+        runtime: Arc<dyn McpServer>,
+    ) -> Result<ResultFromServer, RpcError>;
+
+    async fn handle_notification(
+        &self,
+        notification: NotificationFromClient,
+        runtime: Arc<dyn McpServer>,
+    ) -> Result<(), RpcError>;
+
+    async fn handle_error(
+        &self,
+        error: &RpcError,
+        runtime: Arc<dyn McpServer>,
+    ) -> Result<(), RpcError>;
+}
+```
+
+## Example
+
+```rust
+#[async_trait]
+impl ServerHandlerCore for MyCoreHandler {
+    async fn handle_request(
+        &self, request: RequestFromClient, runtime: Arc<dyn McpServer>,
+    ) -> Result<ResultFromServer, RpcError> {
+        match request {
+            RequestFromClient::ListToolsRequest(_) => {
+                Ok(ListToolsResult { tools: vec![], meta: None, next_cursor: None }.into())
+            }
+            RequestFromClient::CallToolRequest(params) => {
+                Ok(CallToolResult::text_content(vec![TextContent::new(
+                    "done".into(), None, None,
+                )]).into())
+            }
+            _ => Err(RpcError::method_not_found()),
+        }
+    }
+
+    async fn handle_notification(
+        &self, _notification: NotificationFromClient, _runtime: Arc<dyn McpServer>,
+    ) -> Result<(), RpcError> {
+        Ok(())
+    }
+
+    async fn handle_error(
+        &self, _error: &RpcError, _runtime: Arc<dyn McpServer>,
+    ) -> Result<(), RpcError> {
+        Ok(())
+    }
+}
+```
+
+Use `.to_mcp_server_handler()` to convert (same method name as the standard trait).

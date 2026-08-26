@@ -1,0 +1,35 @@
+---
+id: mcp-resource-template
+title: mcp_resource_template
+description: Define parameterized resource templates
+---
+
+The `mcp_resource_template` macro generates utility methods for parameterized resource templates.
+
+```rust
+#[macros::mcp_resource_template(
+    uri_template = "users://{user_id}/profile",
+    name = "User Profile",
+    description = "Profile data for a specific user",
+    mime_type = "application/json",
+)]
+#[derive(Debug, macros::JsonSchema)]
+pub struct UserProfileTemplate;
+```
+
+Generated methods:
+- `UserProfileTemplate::resource_template()` - creates a `ResourceTemplate` instance
+- `UserProfileTemplate::resource_template_uri()` - returns the URI template
+
+## Using in Handler
+
+```rust
+async fn handle_list_resource_templates_request(
+    &self, _params: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+) -> Result<ListResourceTemplatesResult, RpcError> {
+    Ok(ListResourceTemplatesResult {
+        resource_templates: vec![UserProfileTemplate::resource_template()],
+        meta: None, next_cursor: None,
+    })
+}
+```

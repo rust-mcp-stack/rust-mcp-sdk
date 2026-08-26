@@ -1,0 +1,36 @@
+---
+id: overview
+title: Authentication Overview
+description: OAuth authentication for MCP servers and clients
+---
+
+rust-mcp-sdk provides a comprehensive OAuth 2.0 authentication framework for MCP.
+
+## Server-side
+
+| Method | Description |
+|--------|-------------|
+| **RemoteAuthProvider** | Integrates with identity providers that support DCR (Keycloak, WorkOS, Scalekit) |
+| **OAuthProxy** *(coming soon)* | For providers without DCR support - proxy handles registration |
+| **Token Verification** | Verify tokens issued by external systems |
+
+:::note
+OAuthProxy is still work-in-progress and not included in v1.0.0. Use `RemoteAuthProvider` in the meantime.
+:::
+
+## Client-side
+
+| Feature | Description |
+|---------|-------------|
+| OAuth Flow | Authorization code + PKCE |
+| DCR | Dynamic Client Registration |
+| Token Refresh | Automatic token refresh |
+| Token Store | Pluggable token persistence |
+
+## Provider Packages
+
+The `rust-mcp-extra` crate offers drop-in auth providers:
+
+- **Keycloak** - OIDC-compliant identity provider
+- **WorkOS AuthKit** - Auth-as-a-service
+- **Scalekit** - Enterprise auth platform

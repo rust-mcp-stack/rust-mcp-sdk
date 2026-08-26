@@ -1,0 +1,35 @@
+---
+id: overview
+title: Server Architecture
+description: Architecture overview for MCP servers
+---
+
+rust-mcp-sdk provides two levels of server handler abstraction.
+
+## Handler Traits
+
+| Trait | Use Case |
+|-------|----------|
+| `ServerHandler` | **Recommended** - override only the methods you need |
+| `ServerHandlerCore` | **Advanced** - three raw methods for full control |
+
+## McpServer Trait
+
+The `McpServer` trait is injected into every handler method via `Arc<dyn McpServer>`, providing:
+
+- `server_info()` - server identity and capabilities
+- `client_info()` - connected client details
+- `session_id()` - session identifier (HTTP backends)
+- `auth_info()` - current authentication data
+- `task_store()` / `client_task_store()` - MCP Tasks support
+- `request_message_creation()` - LLM sampling requests
+- `request_elicitation()` - user input elicitation
+- `notify_*()` methods - send notifications to the client
+
+## Server Runtimes
+
+| Transport | Function |
+|-----------|----------|
+| Stdio | `server_runtime::create_server()` or `server_runtime_core::create_server()` |
+| Streamable HTTP (Axum) | `create_axum_server()` |
+| Streamable HTTP (Actix) | `create_actix_server()` |

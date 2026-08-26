@@ -2,6 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/rust-mcp-axum?style=for-the-badge&logo=rust&color=FE965D)](https://crates.io/crates/rust-mcp-axum)
 [![docs.rs](https://img.shields.io/badge/docs.rs-rust_mcp_axum-0ECDAB?style=for-the-badge&logo=docs.rs)](https://docs.rs/rust-mcp-axum)
+[![guides](https://img.shields.io/badge/docs-guides_&_tutorials-0286BA?style=for-the-badge)](https://rust-mcp-stack.github.io/rust-mcp-sdk/)
 
 Axum HTTP server integration for [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk).
 

@@ -1,0 +1,61 @@
+---
+id: stdio
+title: Stdio Transport
+description: Local subprocess MCP transport
+---
+
+Stdio transport communicates with a server via standard input/output.
+
+## Server-side
+
+```rust
+use rust_mcp_sdk::{
+    mcp_server::{server_runtime, McpServerOptions},
+    StdioTransport, ToMcpServerHandler, TransportOptions,
+};
+
+let transport = StdioTransport::new(TransportOptions::default())?;
+
+// create the MCP server (`handler` implements `ServerHandler`)
+let server = server_runtime::create_server(McpServerOptions {
+    server_details,
+    transport,
+    handler: handler.to_mcp_server_handler(),
+    task_store: None,
+    client_task_store: None,
+    message_observer: None,
+});
+server.start().await?;
+```
+
+## Client-side
+
+```rust
+use rust_mcp_sdk::{
+    mcp_client::{client_runtime, McpClientOptions},
+    ToMcpClientHandler, TransportOptions, StdioTransport,
+};
+
+// Launch and connect to a server subprocess
+let transport = StdioTransport::create_with_server_launch(
+    "npx",
+    vec!["-y".to_string(), "@modelcontextprotocol/server-everything@latest".to_string()],
+    None, // environment variables
+    TransportOptions::default(),
+)?;
+
+// create the MCP client (`handler` implements `ClientHandler`)
+let client = client_runtime::create_client(McpClientOptions {
+    client_details,
+    transport,
+    handler: handler.to_mcp_client_handler(),
+    task_store: None,
+    server_task_store: None,
+    message_observer: None,
+});
+client.clone().start().await?;
+```
+
+## Process Lifecycle
+
+The SDK handles spawning, monitoring, and cleaning up the child process. Tune message handling via the [`TransportOptions`](https://docs.rs/rust-mcp-transport/latest/rust_mcp_transport/struct.TransportOptions.html) fields (`timeout`, `max_line_length`, `channel_capacity`).

@@ -1,0 +1,26 @@
+---
+id: resumability
+title: Resumability
+description: Reconnect without losing context
+---
+
+The SDK supports resumable sessions. When a client disconnects and reconnects, it can resume its previous session.
+
+## Enabling Resumability
+
+Provide an `EventStore` during server creation:
+
+```rust
+use rust_mcp_sdk::event_store::InMemoryEventStore;
+
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        event_store: Some(Arc::new(InMemoryEventStore::default())),
+        ..Default::default()
+    },
+);
+```
+
+When the client reconnects with the same session ID, the server replays missed events. For production, you can implement `EventStore` with a persistent backend (Redis, Postgres, etc.).

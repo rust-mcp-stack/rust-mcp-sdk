@@ -2,6 +2,8 @@
 
 `rust-mcp-macros` provides procedural macros for the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem. These macros simplify the generation of `tools` and `elicitation` schemas compatible with the latest MCP protocol specifications.
 
+> 📚 Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — see the [full documentation, guides & tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/).
+
 
 The available macros are:
 
@@ -264,7 +266,7 @@ match uri {
     _ => {}
 }
 ```
-👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and blob resources.
+👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and image resources.
 
 
 ## ➡️ mcp_resource_template Macro

@@ -1,0 +1,32 @@
+---
+id: resources
+title: Client Resources
+description: Reading server resources from a client
+---
+
+```rust
+// List resources
+let resources = client.request_resource_list(None).await?;
+for resource in resources.resources {
+    println!("{} ({})", resource.name, resource.uri);
+}
+
+// Read a specific resource
+let result = client
+    .request_resource_read(ReadResourceRequestParams {
+        uri: "hello.txt".into(),
+        meta: None,
+    })
+    .await?;
+
+for contents in result.contents {
+    match contents {
+        ReadResourceContent::TextResourceContents(text) => {
+            println!("Text: {}", text.text);
+        }
+        ReadResourceContent::BlobResourceContents(blob) => {
+            println!("Blob: {} bytes (base64)", blob.blob.len());
+        }
+    }
+}
+```

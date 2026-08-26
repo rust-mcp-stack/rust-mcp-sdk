@@ -1,0 +1,55 @@
+---
+id: mcp-tool
+title: mcp_tool
+description: Generate Tool definitions from structs
+---
+
+The `mcp_tool` attribute macro generates a `Tool` from your struct with rich metadata.
+
+```rust
+#[macros::mcp_tool(
+    name = "write_file",
+    title = "Write File Tool",
+    description = "Create or overwrite a file with new content.",
+    destructive_hint = false,
+    idempotent_hint = false,
+    open_world_hint = false,
+    read_only_hint = false,
+    meta = r#"{ "version": "1.0" }"#,
+    execution(task_support = "optional"),
+    icons = [(
+        src = "https://example.com/write.png",
+        mime_type = "image/png",
+        sizes = ["128x128"],
+        theme = "light"
+    )]
+)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, macros::JsonSchema)]
+pub struct WriteFileTool {
+    /// The target file path
+    pub path: String,
+    /// The content to write
+    pub content: String,
+}
+```
+
+This generates:
+- `WriteFileTool::tool()` - returns a `Tool` instance
+- `WriteFileTool::tool_name()` - returns `"write_file"`
+- JSON Schema for the struct fields
+
+## Execution Hints
+
+| Attribute | Description |
+|-----------|-------------|
+| `task_support = "forbidden"` | Tool must not use tasks |
+| `task_support = "required"` | Tool must use tasks |
+| `task_support = "optional"` | Tool may use tasks |
+| (omitted) | No task support |
+
+## Destructiveness Hints
+
+- `destructive_hint` - the tool modifies data
+- `idempotent_hint` - calling multiple times has same effect
+- `open_world_hint` - output depends on external state
+- `read_only_hint` - the tool only reads data

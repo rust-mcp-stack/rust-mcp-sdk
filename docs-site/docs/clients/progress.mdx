@@ -1,0 +1,18 @@
+---
+id: progress
+title: Client Progress
+description: Handling progress notifications from the server
+---
+
+```rust
+async fn handle_progress_notification(
+    &self, params: ProgressNotificationParams, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    let percent = (params.progress * 100.0) as u32;
+    let total = params.total.unwrap_or(1.0);
+    println!("Progress: {}% (token: {:?})", percent, params.progress_token);
+
+    // Update a progress bar or status indicator in the UI
+    Ok(())
+}
+```

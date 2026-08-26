@@ -1,0 +1,49 @@
+---
+id: actix
+title: Actix Backend
+description: Using rust-mcp-actix for HTTP servers
+---
+
+Add `rust-mcp-actix` to your dependencies:
+
+```toml
+[dependencies]
+rust-mcp-actix = "1.0"
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["server", "macros"] }
+```
+
+## Creating an Actix MCP Server
+
+```rust
+use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+
+let server = create_actix_server(
+    server_info,
+    handler.to_mcp_server_handler(),
+    ActixServerOptions {
+        host: "127.0.0.1".into(),
+        port: 8080,
+        event_store: Some(Arc::new(InMemoryEventStore::default())),
+        task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
+        auth: None,
+        health_endpoint: Some("/health".into()),
+        sse_support: true,
+        ..Default::default()
+    },
+);
+server.start().await?;
+```
+
+`ActixServerOptions` mirrors `AxumServerOptions` field-for-field.
+
+## Feature Comparison
+
+| Feature | Axum | Actix |
+|---------|------|-------|
+| Streamable HTTP | ✅ | ✅ |
+| SSE | ✅ | ✅ |
+| Resumability | ✅ | ✅ |
+| Tasks | ✅ | ✅ |
+| Auth | ✅ | ✅ |
+| Health Check | ✅ | ✅ |
+| DNS Rebinding Protection | ✅ | ✅ |

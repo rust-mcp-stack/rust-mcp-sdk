@@ -1,0 +1,51 @@
+---
+id: notifications
+title: Client Notifications
+description: Handling notifications from the server
+---
+
+Clients receive notifications when server resources, prompts, or tools change:
+
+```rust
+async fn handle_resource_updated_notification(
+    &self, params: ResourceUpdatedNotificationParams, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Resource updated: {}", params.uri);
+    Ok(())
+}
+
+async fn handle_resource_list_changed_notification(
+    &self, params: Option<NotificationParams>, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Resource list changed, consider refreshing");
+    Ok(())
+}
+
+async fn handle_prompt_list_changed_notification(
+    &self, params: Option<NotificationParams>, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Prompt list changed");
+    Ok(())
+}
+
+async fn handle_tool_list_changed_notification(
+    &self, params: Option<NotificationParams>, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Tool list changed");
+    Ok(())
+}
+
+async fn handle_cancelled_notification(
+    &self, params: CancelledNotificationParams, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Request {:?} cancelled by server", params.request_id);
+    Ok(())
+}
+
+async fn handle_task_status_notification(
+    &self, params: TaskStatusNotificationParams, _runtime: &dyn McpClient,
+) -> Result<(), RpcError> {
+    println!("Task {} status: {:?}", params.task_id, params.status);
+    Ok(())
+}
+```

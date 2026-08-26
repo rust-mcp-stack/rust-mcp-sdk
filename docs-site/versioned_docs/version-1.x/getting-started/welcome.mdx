@@ -1,0 +1,62 @@
+---
+title: Welcome
+description: A high-performance Rust toolkit for building MCP servers and clients
+---
+
+import Link from '@docusaurus/Link';
+
+# Rust MCP SDK
+
+A high-performance, asynchronous Rust toolkit for building **MCP servers** and **MCP clients** - with 100% conformance to the official MCP test suites.
+
+[![crates.io](https://img.shields.io/crates/v/rust-mcp-sdk?style=for-the-badge&logo=rust&color=FE965D)](https://crates.io/crates/rust-mcp-sdk)
+[![docs.rs](https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs)](https://docs.rs/rust-mcp-sdk)
+
+
+## What is MCP?
+
+The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open standard for connecting LLM applications to tools and data. It is a uniform way for AI applications (like Claude, ChatGPT, or your own agent) to discover and use capabilities you expose.
+
+With MCP you can build:
+
+- **Servers** that expose *tools* (functions the LLM can call), *resources* (data the LLM can read), and *prompts* (reusable interaction templates)
+- **Clients** that connect to servers, discover their capabilities, and invoke them
+
+**rust-mcp-sdk** handles the protocol, transports, session management, authentication, and schema generation - you focus on your application logic.
+
+## Why rust-mcp-sdk?
+
+| | |
+|---|---|
+| ✅ | **100% MCP Conformance** - passes all official server and client conformance tests |
+| ✅ | **Latest protocol** - MCP spec `2025-11-25` |
+| ✅ | **All transports** - Stdio, Streamable HTTP, and backward-compatible SSE |
+| ✅ | **Framework agnostic** - native Axum & Actix-web integrations, plus BYO-server mode |
+| ✅ | **Procedural macros** - `mcp_tool`, `tool_box!`, `mcp_elicit` generate schemas from your structs |
+| ✅ | **OAuth 2.1** - server and client auth with DCR, PKCE, token refresh, and ready-made providers |
+| ✅ | **Production ready** - DNS rebinding protection, resumability, health checks, tasks, telemetry hooks |
+
+## Quick links
+
+<div className="card-grid">
+  <Link className="card" to="/docs/getting-started/installation">
+    <div className="card__title">📥 Installation</div>
+    <div className="card__description">Add the SDK to your project in one command.</div>
+  </Link>
+  <Link className="card" to="/docs/getting-started/quickstart">
+    <div className="card__title">🚀 Quickstart</div>
+    <div className="card__description">Build and run your first MCP server in ~10 minutes.</div>
+  </Link>
+  <Link className="card" to="/docs/tutorials/build-your-first-mcp-server">
+    <div className="card__title">🎓 Tutorials</div>
+    <div className="card__description">Scenario-based walkthroughs for real-world goals.</div>
+  </Link>
+  <Link className="card" to="/docs/examples/overview">
+    <div className="card__title">💡 Examples</div>
+    <div className="card__description">Runnable examples for every transport and use case.</div>
+  </Link>
+</div>
+
+## Next step
+
+👉 [Install the SDK](/docs/getting-started/installation) and then follow the [Quickstart](/docs/getting-started/quickstart).

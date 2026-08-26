@@ -1,0 +1,32 @@
+---
+id: overview
+title: HTTP Backend Overview
+description: HTTP server framework integrations
+---
+
+rust-mcp-sdk provides native integrations for two popular Rust HTTP frameworks:
+
+| Backend | Crate | Function |
+|---------|-------|----------|
+| **Axum** | `rust-mcp-axum` | `create_axum_server()` |
+| **Actix-web** | `rust-mcp-actix` | `create_actix_server()` |
+
+Both backends support:
+- Streamable HTTP transport
+- SSE (backward-compatible)
+- Multi-client concurrency
+- Built-in DNS rebinding protection
+- Session management
+- Health check endpoints
+- Event stores (resumability)
+- Task stores
+- OAuth authentication
+
+## BYO-Server
+
+Both backends offer a "Bring Your Own Server" mode - mount MCP routes onto your existing app router:
+
+| Backend | Function |
+|---------|----------|
+| Axum | `mcp_routes(state, &mount_opts, http_handler)` |
+| Actix | `mcp_scope(state, http_handler, &mount_opts)` |

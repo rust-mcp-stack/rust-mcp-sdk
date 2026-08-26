@@ -1,0 +1,87 @@
+---
+id: resources
+title: Resources
+description: Expose static and dynamic resources
+---
+
+Resources represent data that clients can read from your server. They can be static (files, documents) or dynamic (template-based).
+
+## Static Resources with `mcp_resource`
+
+```rust
+#[macros::mcp_resource(
+    uri = "hello.txt",
+    name = "Hello Text",
+    description = "A plain text greeting",
+    mime_type = "text/plain",
+)]
+#[derive(Debug, macros::JsonSchema)]
+pub struct HelloResource;
+```
+
+The macro generates `HelloResource::resource()`, `resource_uri()`, `resource_name()`, `resource_mime_type()`, and a `RESOURCE_URI` constant. Reading the content is up to you - see `handle_read_resource_request` below.
+
+## Resource Templates with `mcp_resource_template`
+
+```rust
+#[macros::mcp_resource_template(
+    uri = "users://{user_id}/profile",
+    name = "User Profile",
+    description = "Profile data for a specific user",
+    mime_type = "application/json",
+)]
+#[derive(Debug, macros::JsonSchema)]
+pub struct UserProfileTemplate;
+```
+
+## Handler Methods
+
+```rust
+async fn handle_list_resources_request(
+    &self, _params: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+) -> Result<ListResourcesResult, RpcError> {
+    Ok(ListResourcesResult {
+        resources: vec![HelloResource::resource()],
+        meta: None, next_cursor: None,
+    })
+}
+
+async fn handle_list_resource_templates_request(
+    &self, _params: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+) -> Result<ListResourceTemplatesResult, RpcError> {
+    Ok(ListResourceTemplatesResult {
+        resource_templates: vec![UserProfileTemplate::resource_template()],
+        meta: None, next_cursor: None,
+    })
+}
+
+async fn handle_read_resource_request(
+    &self, params: ReadResourceRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<ReadResourceResult, RpcError> {
+    match params.uri.as_str() {
+        HelloResource::RESOURCE_URI => {
+            let text = tokio::fs::read_to_string(HelloResource::RESOURCE_URI)
+                .await
+                .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?;
+            let contents = TextResourceContents::new(text, HelloResource::RESOURCE_URI)
+                .with_mime_type("text/plain");
+            Ok(ReadResourceResult {
+                contents: vec![contents.into()],
+                meta: None,
+            })
+        }
+        _ => Err(RpcError::invalid_params().with_message("unknown resource")),
+    }
+}
+```
+
+## Advertise the Capability
+
+Add the `resources` capability to `ServerCapabilities` in your `InitializeResult` (see [Quickstart](/docs/getting-started/quickstart) for the full setup):
+
+```rust
+capabilities: ServerCapabilities {
+    resources: Some(ServerCapabilitiesResources::default()),
+    ..Default::default()
+},
+```

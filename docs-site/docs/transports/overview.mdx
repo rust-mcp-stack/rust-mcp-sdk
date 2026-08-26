@@ -1,0 +1,28 @@
+---
+id: overview
+title: Transport Overview
+description: MCP transport options
+---
+
+rust-mcp-sdk supports three transport protocols:
+
+| Transport | Use Case |
+|-----------|----------|
+| **Stdio** | Local subprocess - server runs as a child process |
+| **Streamable HTTP** | Remote HTTP - modern, streaming, SSE-free |
+| **SSE** | Backward-compatible legacy SSE transport |
+
+## TransportOptions
+
+```rust
+pub struct TransportOptions {
+    /// Request timeout; how long to wait for a response before considering
+    /// the request timed out.
+    pub timeout: Duration,
+    /// Maximum size (in bytes) of a single newline-delimited incoming message.
+    /// Default: 16 MiB.
+    pub max_line_length: usize,
+    /// Capacity of the incoming-message channel buffer. Default: 36.
+    pub channel_capacity: usize,
+}
+```

@@ -1,0 +1,30 @@
+---
+id: tool-box
+title: tool_box!
+description: Organize multiple tools into an enum
+---
+
+The `tool_box!` macro generates an enum from multiple tool structs, simplifying dispatch.
+
+```rust
+tool_box!(GreetingTools, [SayHelloTool, SayGoodbyeTool]);
+
+// Get all tool definitions
+let tools: Vec<Tool> = GreetingTools::tools();
+
+// Dispatch in handler
+async fn handle_call_tool_request(
+    &self, params: CallToolRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<CallToolResult, CallToolError> {
+    let tool: GreetingTools = GreetingTools::try_from(params)?;
+
+    match tool {
+        GreetingTools::SayHelloTool(t) => t.call_tool(),
+        GreetingTools::SayGoodbyeTool(t) => t.call_tool(),
+    }
+}
+```
+
+The generated enum implements `TryFrom<CallToolRequestParams>` and provides a `tools()` method that returns all tool definitions.
+
+See the `rust-mcp-filesystem` project for a real-world example with many tools.

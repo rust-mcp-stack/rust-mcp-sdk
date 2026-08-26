@@ -1,0 +1,44 @@
+---
+id: whats-new
+title: What's New in v1.0.0
+description: Highlights of the 1.0.0 release
+---
+
+v1.0.0 is the first stable release of rust-mcp-sdk.
+
+## Highlights
+
+- **First stable release** - all crates at v1.0.0 together
+- **100% MCP conformance** - passes all server and client conformance tests
+- **Handler traits remain open (unsealed)** - you can implement them for your own types
+
+## Public API Renames
+
+Three typos were fixed in the public API. These are **breaking renames** - the old names were removed, so update your call sites:
+
+| Old Name | New Name |
+|----------|----------|
+| `PingParamaters` | `PingParameters` |
+| `Implementation.capabilites` | `Implementation.capabilities` |
+| `ElicitResult` | (corrected serialization) |
+
+## Dead Code Removal
+
+- Removed unused types from `rust-mcp-schema`
+- Removed `server_driver.rs` from `rust-mcp-sdk`
+- Removed shutdown functionality from `ClientRuntime`
+- Removed `json-with-source` response type (never supported by any MCP implementation)
+
+## Deprecation Hygiene
+
+All items deprecated in v0.9.x and v0.10.x have been removed.
+
+## CI Hardening
+
+- Rust 1.86 clippy compliance
+- MSRV bumped to 1.80
+- `mcp-discovery` and `rust-mcp-filesystem` pinned to `rust-mcp-sdk = "1.0"`
+
+---
+
+[View the full migration guide](../migration/v0.10-to-v1.0)

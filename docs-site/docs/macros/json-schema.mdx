@@ -1,0 +1,33 @@
+---
+id: json-schema
+title: JsonSchema
+description: Derive JSON Schema for MCP types
+---
+
+The `JsonSchema` derive macro generates JSON Schema for your struct fields, used by `mcp_tool`, `mcp_resource`, and `mcp_elicit`.
+
+```rust
+#[derive(macros::JsonSchema)]
+pub struct MyTool {
+    pub name: String,
+    #[json_schema(title = "Age", minimum = 0, maximum = 150)]
+    pub age: u32,
+    #[json_schema(title = "Tags", max_length = 10)]
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optional_field: Option<String>,
+}
+```
+
+## Supported Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `title` | string | Human-readable field name |
+| `description` | string | Field description |
+| `minimum` / `maximum` | number | Numeric range |
+| `min_length` / `max_length` | integer | String length (`minLength`/`maxLength`) or array size (`minItems`/`maxItems`) for `Vec<T>` fields |
+| `format` | string | Format hint (e.g., `"email"`, `"uri"`, `"date-time"`) |
+| `default` | any | Default value |
+
+Required/repeated `#[json_schema(...)]` attributes can be stacked on a single field.

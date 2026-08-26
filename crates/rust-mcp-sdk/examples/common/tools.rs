@@ -39,6 +39,7 @@ impl SayHelloTool {
 #[mcp_tool(
     name = "say_goodbye",
     description = "Accepts a person's name and says a personalized \"Goodbye\" to that person.",
+    title = "A tool that says Goodbye!",
     idempotent_hint = false,
     destructive_hint = false,
     open_world_hint = false,

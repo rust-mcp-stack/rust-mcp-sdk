@@ -1,0 +1,52 @@
+---
+id: installation
+title: Installation
+description: Add rust-mcp-sdk to your project
+---
+
+To use rust-mcp-sdk in your Rust project, add it to your `Cargo.toml`:
+
+```toml
+[dependencies]
+rust-mcp-sdk = "1.0"
+```
+
+**Minimum Rust version**: 1.80+
+
+## Feature Flags
+
+All features are enabled by default. You can customize which features to include:
+
+| Feature | Description |
+|---------|-------------|
+| `server` | MCP server capabilities |
+| `client` | MCP client capabilities |
+| `macros` | Procedural macros (`mcp_tool`, `mcp_resource`, `mcp_prompt`, `tool_box!`, etc.) |
+| `sse` | Server-Sent Events transport |
+| `streamable-http` | Streamable HTTP transport |
+| `stdio` | Standard I/O transport |
+| `auth` | OAuth authentication support |
+
+The HTTP backend crates add TLS features of their own: `rust-mcp-axum` has `ssl` and `tls-no-provider`, `rust-mcp-actix` has `ssl`.
+
+## Minimal Installations
+
+**Server only:**
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["server", "macros", "stdio"] }
+```
+
+**Client only:**
+```toml
+[dependencies]
+rust-mcp-sdk = { version = "1.0", default-features = false, features = ["client", "stdio"] }
+```
+
+For Streamable HTTP transport, add the HTTP backend crate:
+
+```toml
+[dependencies]
+rust-mcp-axum = "1.0"   # or
+rust-mcp-actix = "1.0"
+```

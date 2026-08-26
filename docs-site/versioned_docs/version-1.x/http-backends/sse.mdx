@@ -1,0 +1,22 @@
+---
+id: sse
+title: SSE (Backend)
+description: Enabling SSE fallback on HTTP backends
+---
+
+SSE (Server-Sent Events) provides backward compatibility for clients that don't support Streamable HTTP.
+
+## Enabling SSE
+
+```rust
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        sse_support: true, // default is true
+        ..Default::default()
+    },
+);
+```
+
+When `sse_support` is `true`, the HTTP backend serves both Streamable HTTP endpoints and SSE endpoints. Clients can connect using either protocol.

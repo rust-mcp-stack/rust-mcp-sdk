@@ -1,0 +1,38 @@
+---
+id: client-config
+title: Client Auth Config
+description: Configuring OAuth on the client
+---
+
+## Full Client Auth Configuration
+
+`McpAuthConfig` is a flat config built with `builder()`. `build()` returns a ready-to-use [`McpAuthClient`](/docs/auth/client-auth/oauth-flow):
+
+```rust
+use std::sync::Arc;
+use rust_mcp_sdk::auth::{InMemoryTokenStore, McpAuthConfig};
+
+let client = McpAuthConfig::builder()
+    .server_url("https://mcp.example.com/mcp")       // required
+    .client_id("my-client")                          // optional, skips DCR
+    .client_secret("my-secret")                      // optional, token endpoint auth
+    .scope("mcp tools")                              // optional, requested scopes
+    .redirect_uri("http://localhost:3000/callback")  // optional, needed for auth-code flows
+    .resource("https://mcp.example.com/mcp")         // optional, RFC 8707 resource indicator
+    .token_store(Arc::new(InMemoryTokenStore::new())) // optional, default store
+    .build()?;
+```
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `server_url` | Yes | Base URL of the MCP server; discovery starts here |
+| `client_id` | No | Pre-registered client ID (skips DCR if set) |
+| `client_secret` | No | Pre-registered client secret (`client_secret_basic`/`post` at the token endpoint) |
+| `scope` | No | OAuth scopes to request, e.g. `"mcp tools"` |
+| `redirect_uri` | No | Redirect URI for the authorization-code grant |
+| `metadata` | No | Pre-discovered `AuthorizationServerMetadata` (skips discovery) |
+| `resource` | No | RFC 8707 resource indicator, sent as the `resource` parameter |
+| `client_metadata_url` | No | SEP-991 Client ID Metadata Document URL (replaces DCR when supported) |
+| `token_store` | No | Custom `Arc<dyn TokenStore>`; defaults to `InMemoryTokenStore` |
+
+When connecting to an MCP server with auth, the SDK uses the metadata endpoints to discover authorization, token, and registration URLs automatically - see [DCR](/docs/auth/client-auth/dcr) and [Token Store](/docs/auth/client-auth/token-store).

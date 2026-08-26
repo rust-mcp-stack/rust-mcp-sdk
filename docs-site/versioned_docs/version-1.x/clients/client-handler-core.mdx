@@ -1,0 +1,26 @@
+---
+id: client-handler-core
+title: ClientHandlerCore Trait
+description: Raw client handler for full message-level control
+---
+
+`ClientHandlerCore` gives you full control over every JSON-RPC message:
+
+```rust
+#[async_trait]
+pub trait ClientHandlerCore: Send + Sync + 'static {
+    async fn handle_request(
+        &self, request: ServerJsonrpcRequest, runtime: &dyn McpClient,
+    ) -> Result<ResultFromClient, RpcError>;
+
+    async fn handle_notification(
+        &self, notification: NotificationFromServer, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+
+    async fn handle_error(
+        &self, error: &RpcError, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+}
+```
+
+Use `.to_mcp_client_handler()` (shared by both conversion traits) and `client_runtime_core::create_client()`.

@@ -2,6 +2,8 @@
 
 `rust-mcp-transport` is a part of the [rust-mcp-sdk](https://crates.io/crates/rust-mcp-sdk) ecosystem, offering transport implementations for the MCP (Model Context Protocol). It enables asynchronous data exchange and efficient MCP message handling between MCP Clients and Servers.
 
+> 📚 Part of the [rust-mcp-sdk](https://github.com/rust-mcp-stack/rust-mcp-sdk) ecosystem — see the [full documentation, guides & tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/).
+
 ## Usage Example
 
 ### For MCP Server

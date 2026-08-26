@@ -1,0 +1,42 @@
+---
+id: running
+title: Running MCP Servers
+description: Deploying MCP servers in production
+---
+
+## Stdio
+
+For stdio servers, the client launches the server binary:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/path/to/my-server",
+      "args": [],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+## HTTP (Streamable HTTP / SSE)
+
+For HTTP servers, run the binary directly and connect via URL:
+
+```bash
+./my-mcp-server
+# Listening on http://127.0.0.1:8080
+```
+
+## Environment Variables
+
+Configure logging and behavior:
+
+```bash
+RUST_LOG=info ./my-mcp-server         # Standard logging
+RUST_LOG=debug ./my-mcp-server         # Debug logging
+RUST_LOG=trace ./my-mcp-server         # Trace logging (verbose)
+```

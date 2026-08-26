@@ -1,0 +1,45 @@
+---
+id: mcp-resource
+title: mcp_resource
+description: Define static resources
+---
+
+The `mcp_resource` macro generates utility methods for static resource definitions.
+
+```rust
+#[macros::mcp_resource(
+    uri = "hello.txt",
+    name = "Hello Text",
+    description = "A plain text greeting",
+    mime_type = "text/plain",
+)]
+#[derive(Debug, macros::JsonSchema)]
+pub struct HelloResource;
+```
+
+Generated methods:
+- `HelloResource::resource()` - creates a `Resource` instance
+- `HelloResource::resource_uri()` - returns the URI string
+- `HelloResource::RESOURCE_URI` - the URI as a constant, usable in `match` patterns
+
+The macro only generates metadata helpers - it does not read or produce resource content. Load the content yourself (e.g., with `tokio::fs::read_to_string`) in your `read_resource` handler and build a `ReadResourceResult` manually.
+
+## With Custom Logic
+
+```rust
+async fn handle_read_resource_request(
+    &self, params: ReadResourceRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<ReadResourceResult, RpcError> {
+    if params.uri == HelloResource::resource_uri() {
+        let text = tokio::fs::read_to_string("hello.txt").await?;
+        Ok(ReadResourceResult {
+            contents: vec![TextResourceContents::new(text, HelloResource::resource_uri())
+                .with_mime_type(HelloResource::resource_mime_type().unwrap_or("text/plain"))
+                .into()],
+            meta: None,
+        })
+    } else {
+        Err(RpcError::invalid_params())
+    }
+}
+```

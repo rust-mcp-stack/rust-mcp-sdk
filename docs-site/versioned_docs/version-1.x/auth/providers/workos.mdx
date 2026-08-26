@@ -1,0 +1,43 @@
+---
+id: workos
+title: WorkOS AuthKit
+description: Using WorkOS as an auth provider
+---
+
+[WorkOS AuthKit](https://workos.com/authkit) integration is available via `rust-mcp-extra`.
+
+```toml
+[dependencies]
+rust-mcp-extra = "1.0"
+```
+
+```rust
+use rust_mcp_extra::auth_provider::work_os::{WorkOsAuthProvider, WorkOSAuthOptions};
+
+let auth_provider = WorkOsAuthProvider::new(WorkOSAuthOptions {
+    // Your AuthKit app domain (found in the WorkOS dashboard)
+    authkit_domain: "https://your-app.authkit.app".to_string(),
+    // Public base URL of this MCP server (used for discovery endpoints)
+    mcp_server_url: "https://mcp.example.com".to_string(),
+    // Optional overrides; see docs for all fields
+    required_scopes: None,
+    token_verifier: None,
+    resource_name: None,
+    resource_documentation: None,
+    validate_audience: None,          // defaults to mcp_server_url
+    disable_audience_validation: false,
+})?;
+
+let server = create_axum_server(
+    server_info,
+    handler,
+    AxumServerOptions {
+        auth: Some(Arc::new(auth_provider)),
+        ..Default::default()
+    },
+);
+```
+
+Tokens are verified with cached JWKS signature checks plus a UserInfo endpoint validation. The provider serves the OAuth discovery metadata endpoints and delegates verification to an internal `GenericOauthTokenVerifier` (replaceable via `token_verifier`).
+
+See `rust_mcp_extra::auth_provider::work_os` for the full `WorkOSAuthOptions` reference.

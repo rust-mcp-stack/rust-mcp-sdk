@@ -1,0 +1,98 @@
+---
+id: transports
+title: Transports
+description: Choose the right transport for your MCP server or client
+---
+
+# Transports
+
+The transport determines *how* JSON-RPC messages travel between client and server. rust-mcp-sdk supports three transports. Pick the one that matches your deployment.
+
+## Decision table
+
+| | Stdio | Streamable HTTP | SSE |
+|---|---|---|---|
+| **Concurrent clients** | 1 | ✅ Unlimited | ✅ Unlimited |
+| **Remote access** | ❌ Local only | ✅ | ✅ |
+| **Resumability** | ❌ N/A | ✅ with `EventStore` | ✅ with `EventStore` |
+| **Health checks** | ❌ N/A | ✅ | ✅ |
+| **DNS rebinding protection** | ❌ N/A | ✅ | ✅ |
+| **Process management** | SDK spawns child | You manage process | You manage process |
+| **Best for** | Desktop tools, Claude Desktop, Cursor | Services, agents, production | Legacy clients only |
+| **Use in new projects?** | ✅ For local tools | ✅ **Recommended** | ❌ Deprecated |
+
+> **Note:** SSE and Streamable HTTP are served by the *same* HTTP server (`sse_support: true`, the default), so server-level features - health checks, DNS rebinding protection, and resumability via an `EventStore` - apply to both. Stdio has no HTTP layer or reconnect model, so none of those apply to it.
+
+## Stdio
+
+Client launches the server as a child process. Messages flow over stdin/stdout.
+
+```rust
+// Server side
+let transport = StdioTransport::new(TransportOptions::default())?;
+
+// Client side - launches the server automatically
+let transport = StdioTransport::create_with_server_launch(
+    "npx",
+    vec!["-y".into(), "@modelcontextprotocol/server-everything@2026.8.18".into()],
+    None,
+    TransportOptions::default(),
+)?;
+```
+
+## Streamable HTTP
+
+The modern transport. Client connects over HTTP to a running server. Supports multiple concurrent clients, streaming responses, resumability, and health checks.
+
+```rust
+// Server side - use rust-mcp-axum or rust-mcp-actix
+let server = rust_mcp_axum::create_axum_server(
+    server_details,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions::default(),
+);
+server.start().await?;
+// → http://127.0.0.1:8080/mcp
+
+// Client side - pass transport options directly to the runtime
+let client = client_runtime::with_transport_options(
+    client_details,
+    StreamableTransportOptions {
+        mcp_url: "http://127.0.0.1:8080/mcp".into(),
+        request_options: RequestOptions { ..Default::default() },
+    },
+    handler,
+    None,
+    None,
+    None,
+);
+client.clone().start().await?;
+```
+
+## SSE (Server-Sent Events)
+
+Legacy transport, supported for backward compatibility. The client holds open a persistent SSE event stream (`text/event-stream`) over which the server can push messages. New projects should use Streamable HTTP.
+
+When you create an HTTP server with `sse_support: true` (the default), both Streamable HTTP and SSE endpoints are available. SSE-only clients connect to `/sse` instead of `/mcp`.
+
+## Resumability
+
+With an `EventStore`, a disconnected client can reconnect and replay messages it missed while offline - this works over both Streamable HTTP and SSE:
+
+```rust
+AxumServerOptions {
+    event_store: Some(Arc::new(InMemoryEventStore::default())),
+    ..Default::default()
+}
+```
+
+The client reconnects with the same session ID, and the server replays events it missed while disconnected.
+
+## Combining transports
+
+You can run stdio-based tools (launched by clients) AND a Streamable HTTP service (for remote access) from the same handler code. The handler trait is transport-agnostic - only `main()` changes.
+
+## Next
+
+- [Deploy Your Server over HTTP](/docs/tutorials/deploy-your-server-over-http) - tutorial
+- [Streamable HTTP reference](/docs/transports/streamable-http) | [Rediscover SSE](/docs/http-backends/sse)

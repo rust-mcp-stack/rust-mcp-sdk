@@ -1,0 +1,80 @@
+---
+id: client-handler
+title: ClientHandler Trait
+description: The recommended handler trait for MCP clients
+---
+
+`ClientHandler` provides default implementations for all incoming requests from the server. Override only the methods you need.
+
+## Key Methods
+
+```rust
+#[async_trait]
+pub trait ClientHandler: Send + Sync + 'static {
+    // Requests from server
+    async fn handle_ping_request(
+        &self, params: Option<RequestParams>, runtime: &dyn McpClient,
+    ) -> Result<Result, RpcError>;
+
+    async fn handle_create_message_request(
+        &self, params: CreateMessageRequestParams, runtime: &dyn McpClient,
+    ) -> Result<CreateMessageResult, RpcError>;
+
+    async fn handle_list_roots_request(
+        &self, params: Option<RequestParams>, runtime: &dyn McpClient,
+    ) -> Result<ListRootsResult, RpcError>;
+
+    async fn handle_elicit_request(
+        &self, params: ElicitRequestParams, runtime: &dyn McpClient,
+    ) -> Result<ElicitResult, RpcError>;
+
+    async fn handle_get_task_request(
+        &self, params: GetTaskParams, runtime: &dyn McpClient,
+    ) -> Result<GetTaskResult, RpcError>;
+
+    async fn handle_cancel_task_request(
+        &self, params: CancelTaskParams, runtime: &dyn McpClient,
+    ) -> Result<CancelTaskResult, RpcError>;
+
+    // Notifications from server
+    async fn handle_resource_updated_notification(
+        &self, params: ResourceUpdatedNotificationParams, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_resource_list_changed_notification(
+        &self, params: Option<NotificationParams>, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_prompt_list_changed_notification(
+        &self, params: Option<NotificationParams>, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_tool_list_changed_notification(
+        &self, params: Option<NotificationParams>, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_logging_message_notification(
+        &self, params: LoggingMessageNotificationParams, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_progress_notification(
+        &self, params: ProgressNotificationParams, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_cancelled_notification(
+        &self, params: CancelledNotificationParams, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+    async fn handle_task_status_notification(
+        &self, params: TaskStatusNotificationParams, runtime: &dyn McpClient,
+    ) -> Result<(), RpcError>;
+
+    // Custom request handler
+    async fn handle_custom_request(
+        &self, request: CustomRequest, runtime: &dyn McpClient,
+    ) -> Result<ListRootsResult, RpcError>;
+}
+```
+
+## Basic Client
+
+```rust
+pub struct MyClientHandler;
+#[async_trait]
+impl ClientHandler for MyClientHandler {}
+```
+
+All methods return sensible defaults or error responses, so the minimal client just needs an empty impl.

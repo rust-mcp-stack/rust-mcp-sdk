@@ -1,0 +1,298 @@
+---
+id: long-running-tasks
+title: Handle Long-Running Tools with Tasks
+description: Use MCP Tasks for operations that take minutes to complete
+---
+
+# Handle Long-Running Tools with Tasks
+
+Most tools return in milliseconds. But sometimes you need to process a large file, call a slow API, or run a batch job - operations that take seconds or minutes. **MCP Tasks** let the server return a task reference immediately, run the work in the background, and let the client poll `tasks/get` for status while it runs, then fetch the final payload via `tasks/result`.
+
+**What you'll build:** a server with a `generate_report` tool that simulates a 30-second operation, using MCP Tasks for async execution and progress reporting.
+
+**Prerequisites:** [Quickstart](/docs/getting-started/quickstart) completed.
+
+## Step 1 - Create the project
+
+```bash
+cargo new task-demo && cd task-demo
+cargo add rust-mcp-sdk@1 rust-mcp-axum async-trait chrono serde serde_json
+cargo add tokio
+```
+
+## Step 2 - Define a task-capable tool
+
+The key is `execution(task_support = "required")` - this tells the SDK every call to this tool MUST be executed as a task:
+
+```rust title="src/tools.rs"
+use rust_mcp_sdk::macros::{JsonSchema, mcp_tool};
+
+#[mcp_tool(
+    name = "generate_report",
+    description = "Generate a detailed report (takes ~30 seconds)",
+    execution(task_support = "required"),
+)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, JsonSchema)]
+pub struct ReportTool {
+    /// Type of report to generate
+    pub report_type: String,
+    /// Number of days of data to include
+    pub days: u32,
+}
+```
+
+## Step 3 - Configure the task store
+
+```rust title="src/main.rs - main()"
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
+use rust_mcp_sdk::{
+    error::SdkResult,
+    schema::schema_utils::{ClientJsonrpcRequest, ResultFromServer},
+    task_store::{InMemoryTaskStore, ServerTaskStore},
+    ToMcpServerHandler,
+};
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // ... build server_info and your handler ...
+
+    let task_store: Arc<ServerTaskStore> = Arc::new(InMemoryTaskStore::<
+        ClientJsonrpcRequest,
+        ResultFromServer,
+    >::new(None)); // None = default page size
+
+    let server = create_axum_server(
+        server_info,
+        handler.to_mcp_server_handler(),
+        AxumServerOptions {
+            host: "127.0.0.1".into(),
+            port: 8080,
+            task_store: Some(task_store), // ← enables MCP Tasks
+            ..Default::default()
+        },
+    );
+
+    server.start().await?;
+    Ok(())
+}
+```
+
+## Step 4 - Run the task in the handler
+
+With `task_support = "required"`, task-augmented `callTool` requests are routed to **`handle_task_augmented_tool_call`**, *not* `handle_call_tool_request`. The SDK hands you a `task_creator` bound to the incoming request - create the task, spawn the work, and return the task reference right away:
+
+```rust title="src/main.rs - inside the handler"
+use async_trait::async_trait;
+use rust_mcp_sdk::{
+    mcp_server::ServerHandler,
+    schema::{
+        schema_utils::{CallToolError, ResultFromServer},
+        CallToolRequestParams, CallToolResult, CreateTaskResult, ProgressNotificationParams,
+        TaskStatus, TextContent,
+    },
+    task_store::{CreateTaskOptions, ServerTaskCreator},
+    McpServer,
+};
+use std::sync::Arc;
+
+#[async_trait]
+impl ServerHandler for ReportHandler {
+
+     async fn handle_list_tools_request(
+         &self,
+         _params: Option<PaginatedRequestParams>,
+         _runtime: Arc<dyn McpServer>,
+     ) -> std::result::Result<ListToolsResult, RpcError> {
+         Ok(ListToolsResult {
+             meta: None,
+             next_cursor: None,
+             tools: vec![ReportTool::tool()],
+         })
+     }
+
+     
+    async fn handle_task_augmented_tool_call(
+        &self,
+        params: CallToolRequestParams,
+        task_creator: ServerTaskCreator,
+        runtime: Arc<dyn McpServer>,
+    ) -> Result<CreateTaskResult, CallToolError> {
+        if params.name != ReportTool::tool_name() {
+            return Err(CallToolError::unknown_tool(params.name));
+        }
+
+        let args: ReportTool =
+            serde_json::from_value(params.arguments.unwrap_or_default().into())
+                .map_err(CallToolError::new)?;
+
+        let store = runtime.task_store().ok_or_else(|| {
+            CallToolError::from_message("No task store configured on this server")
+        })?;
+
+        // Create the task - the SDK binds it to the incoming request automatically.
+        // Returns the Task directly (no Result), so no unwrapping needed.
+        let task = task_creator
+            .create_task(CreateTaskOptions {
+                ttl: params.task.as_ref().and_then(|t| t.ttl),
+                poll_interval: None,
+                meta: None,
+            })
+            .await;
+
+        // Only send progress notifications if the client asked for them
+        let progress_token = params.meta.and_then(|m| m.progress_token);
+        let session_id = runtime.session_id();
+        let task_id = task.task_id.clone();
+        let rt = Arc::clone(&runtime);
+
+        // Run the actual work in the background
+        tokio::spawn(async move {
+            for i in 0..args.days {
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                // Clients polling tasks/get see this status message
+                store
+                    .update_task_status(
+                        &task_id,
+                        TaskStatus::Working,
+                        Some(format!("Processing day {}/{}", i + 1, args.days)),
+                        session_id.clone(),
+                    )
+                    .await;
+
+                if let Some(token) = &progress_token {
+                    rt.notify_progress(ProgressNotificationParams {
+                        progress_token: token.clone(),
+                        progress: (i + 1) as f64,
+                        total: Some(args.days as f64),
+                        message: Some(format!("Processing day {}/{}", i + 1, args.days)),
+                        meta: None,
+                    })
+                    .await
+                    .ok();
+                }
+            }
+
+            // Store the final payload under the task - clients fetch it via tasks/result
+            store
+                .store_task_result(
+                    &task_id,
+                    TaskStatus::Completed,
+                    ResultFromServer::CallToolResult(CallToolResult::text_content(vec![
+                        TextContent::from(
+                            serde_json::json!({
+                                "report_type": args.report_type,
+                                "days_processed": args.days,
+                                "status": "complete",
+                                "generated_at": chrono::Utc::now().to_rfc3339(),
+                            })
+                            .to_string(),
+                        ),
+                    ])),
+                    session_id.as_ref(),
+                )
+                .await;
+        });
+
+        // Return the task reference IMMEDIATELY
+        Ok(CreateTaskResult { meta: None, task })
+    }
+}
+```
+
+## Step 5 - Test it
+
+```bash
+cargo run
+```
+
+Connect with MCP Inspector, find the `generate_report` tool, and call it. Instead of a result, you'll get a **task reference**. The Inspector polls `tasks/get` and shows the working status in real time; once the task completes, the final payload arrives through `tasks/result`.
+
+## How tasks work
+
+```
+Client                                     Server
+  │                                          │
+  ├── callTool("generate_report") ──────────►│  (task-augmented request)
+  │                                          │── create_task() → returns Task immediately
+  │◄── CreateTaskResult{task} ───────────────┤
+  │                                          │── spawn(async background work)
+  │                                          │
+  │── tasks/get(taskId) ────────────────────►│
+  │◄── status: "working" ────────────────────┤  ← status arrives via tasks/get
+  │◄── notifications/progress ───────────────┤  ← only if client sent a progress token
+  │                                          │
+  │── tasks/result(taskId) ─────────────────►│
+  │◄── final CallToolResult ─────────────────┤  ← payload delivered via tasks/result
+```
+
+## `task_support` options
+
+| Value | Behavior |
+|-------|----------|
+| `"forbidden"` | Tool must never run as a task - callers cannot request task augmentation |
+| `"required"` | Every call returns a task reference and goes to `handle_task_augmented_tool_call` |
+| `"optional"` | Caller can request async execution via a `task` field in the request; plain calls go to `handle_call_tool_request` |
+| (omitted) | Tool never uses tasks |
+
+## Production task stores
+
+`InMemoryTaskStore` is fine for development. For production, implement the `TaskStore` trait with a persistent backend (Postgres, Redis, SQS). On the server side this type is used through an alias:
+
+```rust
+// ServerTaskStore is a type alias over the generic trait:
+// pub type ServerTaskStore = dyn TaskStore<ClientJsonrpcRequest, ResultFromServer>;
+//
+// The interface your backend implements:
+#[async_trait]
+pub trait TaskStore<Req, Res>: Send + Sync + TaskStatusSignal {
+    async fn create_task(
+        &self,
+        options: CreateTaskOptions,
+        request_id: RequestId,
+        request: Req,
+        session_id: Option<String>,
+    ) -> Task;
+    fn start_task_polling(&self, get_task_callback: TaskStatusPoller) -> SdkResult<()>;
+    async fn wait_for_task_result(
+        &self,
+        task_id: &str,
+        session_id: Option<String>,
+    ) -> SdkResult<(TaskStatus, Option<Res>)>;
+    async fn get_task(&self, task_id: &str, session_id: Option<String>) -> Option<Task>;
+    async fn store_task_result(
+        &self,
+        task_id: &str,
+        status: TaskStatus,
+        result: Res,
+        session_id: Option<&String>,
+    );
+    async fn get_task_result(&self, task_id: &str, session_id: Option<String>) -> Option<Res>;
+    async fn update_task_status(
+        &self,
+        task_id: &str,
+        status: TaskStatus,
+        status_message: Option<String>,
+        session_id: Option<String>,
+    );
+    async fn list_tasks(&self, cursor: Option<String>, session_id: Option<String>)
+        -> ListTasksResult;
+}
+```
+
+The SDK drives everything else - polling schedules, status notifications, and `tasks/result` delivery - so your store only persists state.
+
+## What you learned
+
+- **`execution(task_support)`** on `mcp_tool` controls which calls run as tasks
+- **`handle_task_augmented_tool_call`** receives a `task_creator` bound to the incoming request - `create_task()` returns the `Task` directly, ready to wrap in `CreateTaskResult`
+- **Status arrives via `tasks/get`** (`update_task_status`); the **final payload arrives via `tasks/result`** (`store_task_result`)
+- **Progress reporting** via `runtime.notify_progress()` when the client supplies a `progressToken`
+- **`InMemoryTaskStore`** tracks task state in memory; implement **`TaskStore`** for persistent backends
+
+## Where next
+
+- [Background Tasks reference](/docs/servers/tasks) - server-side task docs
+- [Client Tasks](/docs/clients/tasks) - handling tasks on the client side
+- [Progress reporting](/docs/servers/progress) - how progress tokens work

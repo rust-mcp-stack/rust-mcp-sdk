@@ -1,0 +1,49 @@
+---
+id: streamable-http
+title: Streamable HTTP (Backend)
+description: Configuring Streamable HTTP on backends
+---
+
+The Streamable HTTP transport is the primary protocol for HTTP backends. It supports:
+
+- **Non-streaming mode**: Client sends requests, server responds synchronously
+- **Streaming mode**: Server streams notifications and results as they become available
+- **Batch messages**: Multiple JSON-RPC messages in a single HTTP request
+
+## Configuration
+
+```rust
+// Enabled by default when using create_axum_server / create_actix_server
+// No additional configuration needed beyond the basic server options.
+
+// To disable Streamable HTTP and only support SSE (not recommended):
+// (There's no explicit flag - just set sse_support: true and don't use Streamable HTTP)
+```
+
+## Client-side
+
+```rust
+use rust_mcp_sdk::{
+    mcp_client::{client_runtime, ClientHandler},
+    RequestOptions, StreamableTransportOptions,
+};
+
+// Connect to the running server over Streamable HTTP
+let transport_options = StreamableTransportOptions {
+    mcp_url: "http://127.0.0.1:8080/mcp".into(),
+    request_options: RequestOptions {
+        ..Default::default()
+    },
+};
+
+// create the MCP client (`client_details` is an `InitializeRequestParams`,
+// `handler` implements `ClientHandler`)
+let client = client_runtime::with_transport_options(
+    client_details,
+    transport_options,
+    handler,
+    None,
+    None,
+    None,
+);
+```

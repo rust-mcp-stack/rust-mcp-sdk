@@ -1,0 +1,61 @@
+---
+id: tasks
+title: Client Tasks
+description: Handling MCP Tasks on the client side
+---
+
+Clients can handle task-related requests from the server:
+
+```rust
+async fn handle_get_task_request(
+    &self, params: GetTaskParams, _runtime: &dyn McpClient,
+) -> Result<GetTaskResult, RpcError> {
+    // Return the current state of the requested task
+    Ok(GetTaskResult {
+        task_id: "task-123".into(),
+        status: TaskStatus::Completed,
+        created_at: "2026-01-01T00:00:00Z".into(),
+        last_updated_at: "2026-01-01T00:05:00Z".into(),
+        ttl: 60_000,
+        poll_interval: Some(1_000),
+        status_message: None,
+        meta: None,
+    })
+}
+
+async fn handle_get_task_payload_request(
+    &self, params: GetTaskPayloadParams, _runtime: &dyn McpClient,
+) -> Result<GenericResult, RpcError> {
+    // Return the completed task's result payload
+    Ok(GenericResult::default())
+}
+
+async fn handle_list_tasks_request(
+    &self, params: Option<PaginatedRequestParams>, _runtime: &dyn McpClient,
+) -> Result<ListTasksResult, RpcError> {
+    Ok(ListTasksResult {
+        tasks: vec![],
+        next_cursor: None,
+        meta: None,
+    })
+}
+
+async fn handle_cancel_task_request(
+    &self, params: CancelTaskParams, _runtime: &dyn McpClient,
+) -> Result<CancelTaskResult, RpcError> {
+    Ok(CancelTaskResult {
+        task_id: "task-123".into(),
+        status: TaskStatus::Cancelled,
+        created_at: "2026-01-01T00:00:00Z".into(),
+        last_updated_at: "2026-01-01T00:06:00Z".into(),
+        ttl: 60_000,
+        poll_interval: None,
+        status_message: None,
+        meta: None,
+    })
+}
+```
+
+To process tasks initiated by the client (e.g. task-augmented `tools/call`), configure
+`task_store` / `server_task_store` in `McpClientOptions` when creating the client, and declare
+the `tasks: Some(ClientTasks::default())` capability in `ClientCapabilities`.

@@ -1,0 +1,43 @@
+---
+id: logging
+title: Logging
+description: Send log messages to the client
+---
+
+The server can send structured log messages to the client using MCP logging notifications.
+
+```rust
+// Send a structured log message to the client
+runtime.notify_log_message(LoggingMessageNotificationParams {
+    level: LoggingLevel::Info,
+    logger: Some("my-server".into()),
+    data: serde_json::json!({
+        "event": "user_login",
+        "user_id": "abc123",
+        "timestamp": "2025-01-01T00:00:00Z",
+    }),
+    meta: None,
+}).await?;
+```
+
+The client controls the minimum logging level via the `handle_set_level_request` server handler method:
+
+```rust
+async fn handle_set_level_request(
+    &self, params: SetLevelRequestParams, _runtime: Arc<dyn McpServer>,
+) -> Result<Result, RpcError> {
+    println!("Client set logging level to: {:?}", params.level);
+    Ok(Result::default())
+}
+```
+
+## Advertise the Capability
+
+Add the `logging` capability to `ServerCapabilities` in your `InitializeResult` so clients know you accept `logging/setLevel` (see [Quickstart](/docs/getting-started/quickstart) for the full setup):
+
+```rust
+capabilities: ServerCapabilities {
+    logging: Some(Default::default()),
+    ..Default::default()
+},
+```

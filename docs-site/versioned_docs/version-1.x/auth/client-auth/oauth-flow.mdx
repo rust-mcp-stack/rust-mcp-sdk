@@ -1,0 +1,55 @@
+---
+id: oauth-flow
+title: Client OAuth Flow
+description: Authorization code flow for MCP clients
+---
+
+The client-side OAuth flow is driven by `McpAuthClient`, built with `McpAuthConfig::builder()`. Endpoints are never hardcoded - they come from OAuth metadata discovery on the server URL.
+
+```rust
+use rust_mcp_sdk::auth::McpAuthConfig;
+
+let client = McpAuthConfig::builder()
+    .server_url("https://mcp.example.com/mcp")
+    .scope("mcp tools")
+    .redirect_uri("http://localhost:3000/callback")
+    .build()?;
+```
+
+Discovery fetches `{server_url}/.well-known/oauth-authorization-server` and falls back to RFC 9728 protected-resource metadata (following the `WWW-Authenticate` challenge of a 401) when needed.
+
+## Machine-to-machine
+
+```rust
+// client_credentials grant
+client.authenticate().await?;
+
+// {"Authorization": "Bearer <token>"}, auto-refreshed before expiry
+let headers = client.get_auth_headers().await?;
+```
+
+## Authorization code + PKCE
+
+For user-facing clients (CLI, GUI, web app):
+
+```rust
+use rust_mcp_sdk::auth::generate_pkce_params;
+
+let pkce = generate_pkce_params();
+
+// Build the /authorize URL (challenge included, method=S256)
+let authorize_url = client
+    .build_authorization_url(&pkce, Some("mcp tools"), Some("optional-state"))
+    .await?;
+
+// Send the user to `authorize_url` and capture ?code= at your redirect_uri...
+let token = client
+    .complete_authorization_code_flow(code, pkce.code_verifier)
+    .await?;
+```
+
+The client automatically:
+1. Discovers authorization/token/registration endpoints from server metadata
+2. Registers via DCR when no pre-registered `client_id` is configured
+3. Generates the PKCE challenge and verifier for the authorization-code flow
+4. Stores tokens in the token store and auto-refreshes them before expiry

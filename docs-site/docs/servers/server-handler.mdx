@@ -1,0 +1,74 @@
+---
+id: server-handler
+title: ServerHandler Trait
+description: The recommended handler trait for MCP servers
+---
+
+`ServerHandler` is the recommended trait for most projects. It provides default implementations for all MCP operations - you override only the methods relevant to your application.
+
+## Key Methods
+
+```rust
+#[async_trait]
+pub trait ServerHandler: Send + Sync + 'static {
+    async fn on_initialized(&self, runtime: Arc<dyn McpServer>) {}
+    // Has a default implementation - only override it to customize initialization.
+    async fn handle_initialize_request(
+        &self, params: InitializeRequestParams, runtime: Arc<dyn McpServer>
+    ) -> Result<InitializeResult, RpcError> { /* default impl */ }
+    async fn handle_ping_request(
+        &self, _params: Option<RequestParams>, runtime: Arc<dyn McpServer>
+    ) -> Result<Result, RpcError>;
+    async fn handle_list_tools_request(
+        &self, _request: Option<PaginatedRequestParams>, runtime: Arc<dyn McpServer>
+    ) -> Result<ListToolsResult, RpcError>;
+    async fn handle_call_tool_request(
+        &self, params: CallToolRequestParams, runtime: Arc<dyn McpServer>
+    ) -> Result<CallToolResult, CallToolError>;
+    async fn handle_list_resources_request(
+        &self, _request: Option<PaginatedRequestParams>, runtime: Arc<dyn McpServer>
+    ) -> Result<ListResourcesResult, RpcError>;
+    async fn handle_read_resource_request(
+        &self, params: ReadResourceRequestParams, runtime: Arc<dyn McpServer>
+    ) -> Result<ReadResourceResult, RpcError>;
+    async fn handle_list_prompts_request(
+        &self, _request: Option<PaginatedRequestParams>, runtime: Arc<dyn McpServer>
+    ) -> Result<ListPromptsResult, RpcError>;
+    async fn handle_get_prompt_request(
+        &self, params: GetPromptRequestParams, runtime: Arc<dyn McpServer>
+    ) -> Result<GetPromptResult, RpcError>;
+    async fn handle_complete_request(
+        &self, params: CompleteRequestParams, runtime: Arc<dyn McpServer>
+    ) -> Result<CompleteResult, RpcError>;
+    // ... plus notification handlers, logging, progress, etc.
+}
+```
+
+## Custom Handler Example
+
+```rust
+#[async_trait]
+impl ServerHandler for MyHandler {
+    async fn handle_list_tools_request(
+        &self, _request: Option<PaginatedRequestParams>, _runtime: Arc<dyn McpServer>,
+    ) -> Result<ListToolsResult, RpcError> {
+        Ok(ListToolsResult {
+            tools: vec![MyTool::tool()],
+            meta: None, next_cursor: None,
+        })
+    }
+
+    async fn handle_call_tool_request(
+        &self, params: CallToolRequestParams, _runtime: Arc<dyn McpServer>,
+    ) -> Result<CallToolResult, CallToolError> {
+        match params.name.as_str() {
+            "my_tool" => Ok(CallToolResult::text_content(vec![TextContent::new(
+                "result".into(), None, None,
+            )])),
+            _ => Err(CallToolError::unknown_tool(params.name)),
+        }
+    }
+}
+```
+
+Convert to a runtime handler with `.to_mcp_server_handler()`.

@@ -1,0 +1,19 @@
+---
+id: hello-world-server-stdio
+title: Hello World Server (Stdio)
+description: Minimal stdio MCP server with ServerHandler
+---
+
+Location: `crates/rust-mcp-sdk/examples/hello-world-mcp-server-stdio.rs`
+
+This example creates a stdio MCP server with a `say_hello` tool using `ServerHandler`. It demonstrates the minimal code needed for a working MCP server.
+
+```bash
+cargo run --example hello-world-mcp-server-stdio -p rust-mcp-sdk
+```
+
+Connect with MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector node ./target/debug/examples/hello-world-mcp-server-stdio
+```

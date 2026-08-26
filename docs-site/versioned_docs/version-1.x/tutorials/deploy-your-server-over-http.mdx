@@ -1,0 +1,257 @@
+---
+id: deploy-your-server-over-http
+title: Deploy Your Server over HTTP
+description: Production-ready Streamable HTTP with resumability, health checks, and SSE fallback
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Deploy Your Server over HTTP
+
+Stdio is great for local tools. For remote access, multiple concurrent clients, load balancers, and observability - you need **Streamable HTTP**.
+
+This tutorial covers both backends (Axum and Actix-web) with tabs. The handler code is identical, only `main()` changes.
+
+**What you'll build:** the weather server from [Build Your First MCP Server](/docs/tutorials/build-your-first-mcp-server), served over Streamable HTTP with resumability, health checks, and SSE fallback for older clients. Any handler works - the steps below apply to whatever server you already have.
+
+**Prerequisites:** a working server (from [Quickstart](/docs/getting-started/quickstart) or [Server tutorial](/docs/tutorials/build-your-first-mcp-server)).
+
+## Step 1 - Pick your backend
+
+<Tabs groupId="backend">
+<TabItem value="axum" label="Axum" default>
+
+```bash
+cargo add rust-mcp-axum
+```
+
+Axum is our recommended backend - it's the async ecosystem default, well-tested, and has excellent middleware support.
+
+</TabItem>
+<TabItem value="actix" label="Actix-web">
+
+```bash
+cargo add rust-mcp-actix
+```
+
+Actix-web is battle-tested in production. Use it if your org already runs Actix or if you need its actor-based concurrency model.
+
+</TabItem>
+</Tabs>
+
+:::note[Same API shape]
+Both backends expose the exact same API shape (`XxxServerOptions`, `create_xxx_server`). Switching between them is a one-line change in `main()` - your `ServerHandler` code never needs to change.
+:::
+
+## Step 2 - Configure the server
+
+The production bits live in the options struct: an **event store** for resumability, a **health endpoint** for load balancers, **SSE fallback** for older clients, and **DNS rebinding protection**.
+
+<Tabs groupId="backend">
+<TabItem value="axum" label="Axum" default>
+
+```rust title="src/main.rs"
+mod tools;
+mod handler;
+
+use rust_mcp_axum::{create_axum_server, AxumServerOptions};
+use rust_mcp_sdk::{
+    ToMcpServerHandler,
+    error::SdkResult,
+    event_store::InMemoryEventStore,
+    mcp_http::DnsRebindingOptions,
+    schema::{
+        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
+        ServerCapabilitiesTools,
+    },
+};
+use std::sync::Arc;
+
+use handler::WeatherHandler;
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // server name, version and capabilities
+    let server_details = InitializeResult {
+        server_info: Implementation {
+            name: "weather-mcp".into(),
+            version: "1.0.0".into(),
+            description: Some("A weather server with current conditions and forecasts".into()),
+            icons: vec![],
+            website_url: None,
+            title: Some("Weather MCP Server".into()),
+        },
+        capabilities: ServerCapabilities {
+            tools: Some(ServerCapabilitiesTools::default()),
+            ..Default::default()
+        },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        instructions: None,
+        meta: None,
+    };
+
+    // instantiate our custom handler for handling MCP messages
+    let handler = WeatherHandler {};
+
+    // create the MCP server
+    let server = create_axum_server(
+        server_details,
+        handler.to_mcp_server_handler(),
+        AxumServerOptions {
+            host: "127.0.0.1".into(),
+            port: 8080,
+            // ── Production features ──
+            // Resumability: clients can reconnect and replay missed events
+            event_store: Some(Arc::new(InMemoryEventStore::default())),
+            // Health check endpoint for load balancers / orchestration
+            health_endpoint: Some("/health".into()),
+            // Backward compatibility with older SSE-only clients
+            sse_support: true,
+            // DNS rebinding protection (protection itself is on by default)
+            dns_rebinding: DnsRebindingOptions {
+                allowed_hosts: Some(vec!["127.0.0.1:8080".into()]),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+
+    server.start().await?;
+    Ok(())
+}
+```
+
+</TabItem>
+<TabItem value="actix" label="Actix-web">
+
+```rust title="src/main.rs"
+mod tools;
+mod handler;
+
+use rust_mcp_actix::{create_actix_server, ActixServerOptions};
+use rust_mcp_sdk::{
+    ToMcpServerHandler,
+    error::SdkResult,
+    event_store::InMemoryEventStore,
+    mcp_http::DnsRebindingOptions,
+    schema::{
+        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
+        ServerCapabilitiesTools,
+    },
+};
+use std::sync::Arc;
+
+use handler::WeatherHandler;
+
+#[tokio::main]
+async fn main() -> SdkResult<()> {
+    // server name, version and capabilities
+    let server_details = InitializeResult {
+        server_info: Implementation {
+            name: "weather-mcp".into(),
+            version: "1.0.0".into(),
+            description: Some("A weather server with current conditions and forecasts".into()),
+            icons: vec![],
+            website_url: None,
+            title: Some("Weather MCP Server".into()),
+        },
+        capabilities: ServerCapabilities {
+            tools: Some(ServerCapabilitiesTools::default()),
+            ..Default::default()
+        },
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
+        instructions: None,
+        meta: None,
+    };
+
+    // instantiate our custom handler for handling MCP messages
+    let handler = WeatherHandler {};
+
+    // create the MCP server
+    let server = create_actix_server(
+        server_details,
+        handler.to_mcp_server_handler(),
+        ActixServerOptions {
+            host: "127.0.0.1".into(),
+            port: 8080,
+            event_store: Some(Arc::new(InMemoryEventStore::default())),
+            health_endpoint: Some("/health".into()),
+            sse_support: true,
+            dns_rebinding: DnsRebindingOptions {
+                allowed_hosts: Some(vec!["127.0.0.1:8080".into()]),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+
+    server.start().await?;
+    Ok(())
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::note[Any handler works]
+The snippets use the `WeatherHandler` from the previous tutorial, but nothing here is weather-specific - point `create_xxx_server()` at any `ServerHandler` implementation.
+:::
+
+## Step 3 - Run it
+
+```bash
+cargo run
+```
+
+```text
+• Streamable HTTP server is available at http://127.0.0.1:8080/mcp
+• SSE server is available at http://127.0.0.1:8080/sse
+```
+
+Check the health endpoint:
+
+```bash
+curl http://127.0.0.1:8080/health
+# {"status":"ok","server":"<crate>","version":"..."}
+```
+
+## Step 4 - Connect the inspector
+
+Open the MCP Inspector pointed at your server:
+
+```
+npx -y @modelcontextprotocol/inspector@latest \
+  --transport http \
+  --server-url http://127.0.0.1:8080/mcp
+```
+
+## Key options explained
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `host` | `"127.0.0.1"` | Bind address. Use `"0.0.0.0"` for all interfaces |
+| `port` | `8080` | TCP port |
+| `event_store` | `None` | Enables **resumability** - clients can reconnect and replay missed events |
+| `health_endpoint` | `None` | Adds a `GET /health` endpoint for load balancers and container orchestration |
+| `health_handler` | built-in | Custom response for the health endpoint |
+| `sse_support` | `true` | Enables the SSE fallback endpoint for backward compatibility |
+| `dns_rebinding` | protection on | DNS rebinding protection; `allowed_hosts` auto-derives from `host:port` unless overridden |
+| `auth` | `None` | OAuth provider (see [Add OAuth to Your Server](/docs/tutorials/add-oauth-to-your-server)) |
+| `task_store` | `None` | Server-side MCP Tasks store |
+| `custom_streamable_http_endpoint` | `None` | Serve MCP at a custom path instead of `/mcp` |
+| `enable_ssl` / `ssl_cert_path` / `ssl_key_path` | off | Terminate TLS directly in the server |
+
+## What you learned
+
+- **Switching transports** - the handler stays identical; only `main()` changes
+- **Resumability** - `InMemoryEventStore` lets clients reconnect without losing messages
+- **Health checks** - ready for Kubernetes, HAProxy, or any orchestration
+- **SSE fallback** - older clients that don't support Streamable HTTP still work
+- **DNS rebinding protection** - on by default, with configurable allowed hosts
+
+## Where next
+
+- Add authentication → [Add OAuth to Your Server](/docs/tutorials/add-oauth-to-your-server)
+- Mount MCP into your existing app → [Embed MCP (BYO)](/docs/tutorials/embed-mcp-byo)
+- Reference → [Axum Backend](/docs/http-backends/axum) | [Actix Backend](/docs/http-backends/actix)

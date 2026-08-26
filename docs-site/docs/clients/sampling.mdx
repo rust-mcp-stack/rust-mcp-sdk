@@ -1,0 +1,42 @@
+---
+id: sampling
+title: Client Sampling
+description: Handling LLM sampling requests from the server
+---
+
+When the server requests an LLM completion, the client should show the request to the user (human-in-the-loop) and then call the LLM.
+
+```rust
+async fn handle_create_message_request(
+    &self, params: CreateMessageRequestParams, _runtime: &dyn McpClient,
+) -> Result<CreateMessageResult, RpcError> {
+    // params contains the conversation so far, system prompt, etc.
+    // The client selects a model, calls the LLM, and returns the result
+
+    Ok(CreateMessageResult {
+        role: Role::Assistant,
+        content: CreateMessageContent::TextContent(TextContent::new(
+            "Here is the completion from the LLM...".into(),
+            None,
+            None,
+        )),
+        model: "gpt-4".into(),
+        stop_reason: Some("endTurn".into()),
+        meta: None,
+    })
+}
+```
+
+The client must declare `sampling` in its capabilities for this to work:
+
+```rust
+let client_details = InitializeRequestParams {
+    capabilities: ClientCapabilities {
+        sampling: Some(ClientSampling::default()),
+        ..Default::default()
+    },
+    // client_info: Implementation { name: "my-client".into(), version: "0.1.0".into(), .. },
+    // protocol_version: "2025-11-25".into(),
+    ..Default::default()
+};
+```

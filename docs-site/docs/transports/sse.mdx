@@ -1,0 +1,68 @@
+---
+id: sse
+title: SSE Transport
+description: Legacy SSE transport for backward compatibility
+---
+
+Server-Sent Events transport is supported for backward compatibility with older MCP clients.
+
+Enable SSE on the Axum or Actix backend:
+
+```rust
+let server = create_axum_server(
+    server_info,
+    handler.to_mcp_server_handler(),
+    AxumServerOptions {
+        sse_support: true, // enables SSE alongside Streamable HTTP
+        ..Default::default()
+    },
+);
+```
+
+SSE is **enabled by default** (`true`) for maximum compatibility.
+
+## Client-side SSE
+
+```rust
+use rust_mcp_sdk::{
+    mcp_client::{client_runtime, McpClientOptions},
+    schema::{ClientCapabilities, Implementation, InitializeRequestParams, ProtocolVersion},
+    ClientSseTransport, ClientSseTransportOptions, ToMcpClientHandler,
+};
+
+// client name, version and capabilities
+let client_details = InitializeRequestParams {
+    capabilities: ClientCapabilities::default(),
+    client_info: Implementation {
+        name: "hello-client".into(),
+        version: "0.1.0".into(),
+        title: None,
+        description: None,
+        icons: vec![],
+        website_url: None,
+    },
+    protocol_version: ProtocolVersion::V2025_11_25.into(),
+    meta: None,
+};
+
+// Connect to the server's SSE endpoint
+let transport = ClientSseTransport::new(
+    "http://127.0.0.1:8080/sse",
+    ClientSseTransportOptions {
+        ..Default::default()
+    },
+)?;
+
+// create the MCP client (`handler` implements `ClientHandler`)
+let client = client_runtime::create_client(McpClientOptions {
+    client_details,
+    transport,
+    handler: handler.to_mcp_client_handler(),
+    task_store: None,
+    server_task_store: None,
+    message_observer: None,
+});
+client.clone().start().await?;
+```
+
+The `ClientSseTransportOptions` struct supports request timeouts, retry behavior, and custom HTTP headers - see [`ClientSseTransportOptions`](https://docs.rs/rust-mcp-transport/latest/rust_mcp_transport/struct.ClientSseTransportOptions.html).
