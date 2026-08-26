@@ -1,5 +1,5 @@
 use super::tools::GreetingTools;
-use crate::common::resources::{BlobTextResource, PlainTextResource, PokemonImageResource};
+use crate::common::resources::{BlobResource, PlainTextResource, PokemonImageResource};
 use async_trait::async_trait;
 use rust_mcp_schema::{
     CompleteRequestParams, CompleteResult, ListResourceTemplatesResult, ListResourcesResult,
@@ -65,7 +65,7 @@ impl ServerHandler for ExampleServerHandler {
         Ok(ListResourcesResult {
             meta: None,
             next_cursor: None,
-            resources: vec![PlainTextResource::resource(), BlobTextResource::resource()],
+            resources: vec![PlainTextResource::resource(), BlobResource::resource()],
         })
     }
 
@@ -95,8 +95,8 @@ impl ServerHandler for ExampleServerHandler {
         if PlainTextResource::resource_uri().starts_with(&params.uri) {
             return PlainTextResource::get_resource().await;
         }
-        if BlobTextResource::resource_uri().starts_with(&params.uri) {
-            return BlobTextResource::get_resource().await;
+        if BlobResource::resource_uri().starts_with(&params.uri) {
+            return BlobResource::get_resource().await;
         }
 
         if PokemonImageResource::matches_url(&params.uri) {

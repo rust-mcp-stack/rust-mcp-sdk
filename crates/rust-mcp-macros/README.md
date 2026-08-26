@@ -266,7 +266,7 @@ match uri {
     _ => {}
 }
 ```
-👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and blob resources.
+👉 Please see [examples/common/resources.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/resources.rs) and [examples/common/example_server_handler.rs](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/examples/common/example_server_handler.rs) for a working example with text and image resources.
 
 
 ## ➡️ mcp_resource_template Macro

@@ -35,18 +35,17 @@ impl PlainTextResource {
     }
 }
 
-/// A static resource provider for a binary/blob example demonstrating base64-encoded content.
+/// A static resource provider for a binary/blob example demonstrating an embedded image.
 ///
 /// This resource serves as a simple, self-contained example of how to expose arbitrary binary data
-/// (or base64-encoded text) via the MCP ReadResource request.
+/// (base64-encoded) via the MCP ReadResource request.
 ///
-/// The embedded payload is the base64 encoding of the string:
-/// `"Resource 2: I'm gonna need a bigger boat"`
+/// The embedded payload is a PNG image of the rust-mcp-sdk logo, included at compile time.
 #[mcp_resource(
     name = "Resource 2",
-    description = "A blob resource",
-    title = "A blob resource",
-    mime_type = "application/octet-stream",
+    description = "An image blob resource",
+    title = "An image blob resource",
+    mime_type = "image/png",
     uri="test://static/resource/2",
     icons = [
         ( src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/blob-resource.png",
@@ -54,15 +53,17 @@ impl PlainTextResource {
           mime_type = "image/png" )
     ]
 )]
-pub struct BlobTextResource {}
-impl BlobTextResource {
+pub struct BlobResource {}
+impl BlobResource {
     pub async fn get_resource() -> std::result::Result<ReadResourceResult, RpcError> {
+        let bytes = include_bytes!("../../../../assets/rust-mcp-sdk.png");
         Ok(ReadResourceResult {
-            contents: vec![BlobResourceContents::new(
-                "UmVzb3VyY2UgMjogSSdtIGdvbm5hIG5lZWQgYSBiaWdnZXIgYm9hdA==",
-                Self::resource_uri(),
-            )
-            .with_mime_type("application/octet-stream")
+            contents: vec![BlobResourceContents {
+                blob: BASE64.encode(bytes),
+                uri: Self::resource_uri().to_string(),
+                mime_type: Some("image/png".to_string()),
+                meta: None,
+            }
             .into()],
             meta: None,
         })
@@ -130,7 +131,7 @@ impl PokemonImageResource {
         let id = uri.replace("pokemon://", "");
 
         let pokemon_uri = format!(
-            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{}.png",
+            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/{}.png",
             id.trim()
         );
 
