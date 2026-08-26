@@ -299,7 +299,9 @@ impl GenericOauthTokenVerifier {
         let response = request
             .send()
             .await
-            .map_err(|err| AuthenticationError::Jwks(err.to_string()))?;
+            .map_err(|err| AuthenticationError::ServerError {
+                description: format!("Failed to call introspection endpoint: {err}"),
+            })?;
 
         let status_code = response.status();
         if !response.status().is_success() {
@@ -310,10 +312,11 @@ impl GenericOauthTokenVerifier {
             });
         }
 
-        let introspect_response: IntrospectionResponse = response
-            .json()
-            .await
-            .map_err(|err| AuthenticationError::Jwks(err.to_string()))?;
+        let introspect_response: IntrospectionResponse = response.json().await.map_err(|err| {
+            AuthenticationError::ParsingError(format!(
+                "Failed to parse introspection response: {err}"
+            ))
+        })?;
 
         if !introspect_response.active {
             return Err(AuthenticationError::InactiveToken);
@@ -326,9 +329,15 @@ impl GenericOauthTokenVerifier {
                 });
             };
 
-            if token_audience != validate_audience {
+            let allowed_audiences = validate_audience.to_vec();
+            let token_audiences = token_audience.to_vec();
+
+            if !token_audiences
+                .iter()
+                .any(|aud| allowed_audiences.contains(aud))
+            {
                 return Err(AuthenticationError::TokenVerificationFailed { description:
-                    format!("None of the provided audiences are allowed. Expected ${validate_audience}, got: ${token_audience}")
+                    format!("None of the provided audiences are allowed. Expected {validate_audience}, got: {token_audience}")
                     , status_code: Some(StatusCode::UNAUTHORIZED.as_u16())
                 });
             }
@@ -344,7 +353,7 @@ impl GenericOauthTokenVerifier {
             if token_issuer != validate_issuer {
                 return Err(AuthenticationError::TokenVerificationFailed {
                     description: format!(
-                        "Issuer is not allowed. Expected ${validate_issuer}, got: ${token_issuer}"
+                        "Issuer is not allowed. Expected {validate_issuer}, got: {token_issuer}"
                     ),
                     status_code: Some(StatusCode::UNAUTHORIZED.as_u16()),
                 });
