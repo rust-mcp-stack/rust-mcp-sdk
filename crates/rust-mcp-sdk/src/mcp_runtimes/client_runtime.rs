@@ -169,8 +169,11 @@ impl ClientRuntime {
 
             #[cfg(feature = "streamable-http")]
             // try to create a sse stream for server initiated messages , if supported by the server
-            if let Err(error) = self.clone().create_sse_stream().await {
-                tracing::warn!("{error}");
+            // only applicable to clients connected over streamable http transport
+            if self.transport_options.is_some() {
+                if let Err(error) = self.clone().create_sse_stream().await {
+                    tracing::warn!("{error}");
+                }
             }
 
             // send a InitializedNotification to the server
