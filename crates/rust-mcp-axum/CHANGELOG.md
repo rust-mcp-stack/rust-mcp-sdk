@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v1.0.1...rust-mcp-axum-v1.0.2) (2026-08-26)
+
+
+### 📚 Documentation
+
+* Add versioned Docusaurus site, GitHub Pages deploy & release automation ([#239](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/239)) ([006b7bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/006b7bfec21cd41e006ed734505768703343bbb1))
+
 ## [1.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v1.0.0...rust-mcp-axum-v1.0.1) (2026-07-26)
 
 ## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v0.2.3...rust-mcp-axum-v1.0.0) (2026-07-25)
