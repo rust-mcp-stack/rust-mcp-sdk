@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v1.0.1...rust-mcp-extra-v1.0.2) (2026-08-26)
+
+
+### 🐛 Bug Fixes
+
+* Generic token verifier introspect ([b05e360](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b05e360c2975b0da8c0e4dc06e4d8f5031ea2a3b))
+
+
+### 📚 Documentation
+
+* Add versioned Docusaurus site, GitHub Pages deploy & release automation ([#239](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/239)) ([006b7bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/006b7bfec21cd41e006ed734505768703343bbb1))
+
 ## [1.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v1.0.0...rust-mcp-extra-v1.0.1) (2026-07-26)
 
 ## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-extra-v0.3.3...rust-mcp-extra-v1.0.0) (2026-07-25)

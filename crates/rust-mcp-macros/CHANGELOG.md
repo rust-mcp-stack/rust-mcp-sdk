@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v1.0.0...rust-mcp-macros-v1.1.0) (2026-08-26)
+
+
+### 🚀 Features
+
+* Add mcp_prompt macro and improve mcp_resource macro ([#232](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/232)) ([10fcf33](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/10fcf334512b3e282955131ac8c3077a929df84f))
+* Rework mcp_prompt macro with typed from_arguments/render API ([#233](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/233)) ([1ec6838](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1ec68383396c992cef3383eb5c0223795383c8f0))
+
+
+### 📚 Documentation
+
+* Add versioned Docusaurus site, GitHub Pages deploy & release automation ([#239](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/239)) ([006b7bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/006b7bfec21cd41e006ed734505768703343bbb1))
+
 ## [1.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-macros-v0.9.1...rust-mcp-macros-v1.0.0) (2026-07-25)
 
 
