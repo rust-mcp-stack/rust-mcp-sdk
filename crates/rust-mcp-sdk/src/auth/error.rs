@@ -25,7 +25,7 @@ pub enum AuthenticationError {
     )]
     InsufficientScope,
 
-    #[error("None of the provided audiences are allowed. Expected ${expected}, got: ${received}")]
+    #[error("None of the provided audiences are allowed. Expected {expected}, got: {received}")]
     AudienceNotAllowed { expected: String, received: String },
 
     #[error("Invalid or expired token: {0}")]
