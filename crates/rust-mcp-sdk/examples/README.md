@@ -49,7 +49,12 @@ cargo build --example hello-world-mcp-server-stdio # or quick_start_server_stdio
 The compiled binary will be located at `target/debug/examples/`
 
 **Testing:**
-You can use this binary with any MCP-compatible client. For easy testing and inspection, launch it in the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), by selecting `stdio` transport , pointing it to the generated binary and connecting to the server.  
+You can use this binary with any MCP-compatible client. For easy testing and inspection, `cd` to the folder containing the binary and launch it with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```sh
+cd target/debug/examples
+npx -y @modelcontextprotocol/inspector@latest ./hello-world-mcp-server-stdio
+```
 
 Here you can see it in action :
 <img src="../assets/examples/hello-world-mcp-server.gif" alt="hello-world-mcp-server" width="800" />
@@ -78,20 +83,17 @@ Once the server starts, you’ll see the following output in the terminal:
 
 
 For easy testing and inspection, connect to it using [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
-start the inspector by running:
+Start the inspector by running:
 
 ```bash
-npx -y @modelcontextprotocol/inspector@latest
+npx -y @modelcontextprotocol/inspector@latest \
+  --transport http \
+  --server-url http://127.0.0.1:8080/mcp
 ```
 
-That will open the inspector in a browser,
+That will open the inspector in a browser, already connected to the server.
 
-Then , to test the server, visit one of the following URLs based on the desired transport:
-
-* Streamable HTTP:
-  [http://localhost:6274/?transport=streamable-http\&serverUrl=http://localhost:8080/mcp](http://localhost:6274/?transport=streamable-http&serverUrl=http://localhost:8080/mcp)
-* SSE:
-  [http://localhost:6274/?transport=sse\&serverUrl=http://localhost:8080/sse](http://localhost:6274/?transport=sse&serverUrl=http://localhost:8080/sse)
+> 💡 _To test over **SSE** instead, use `--transport sse --server-url http://127.0.0.1:8080/sse`._
 
 Here you can see it in action :
 
