@@ -12,7 +12,7 @@ use rust_mcp_sdk::{
 };
 use std::sync::Arc;
 
-const MCP_SERVER_TO_LAUNCH: &str = "@modelcontextprotocol/server-everything";
+const MCP_SERVER_TO_LAUNCH: &str = "@modelcontextprotocol/server-everything@2026.8.18";
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
