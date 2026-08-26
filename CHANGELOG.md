@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.0.1...rust-mcp-sdk-v1.1.0) (2026-08-26)
+
+
+### 🚀 Features
+
+* Add mcp_prompt macro and improve mcp_resource macro ([#232](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/232)) ([10fcf33](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/10fcf334512b3e282955131ac8c3077a929df84f))
+* Rework mcp_prompt macro with typed from_arguments/render API ([#233](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/233)) ([1ec6838](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/1ec68383396c992cef3383eb5c0223795383c8f0))
+* **server:** Expose ServerRuntime::shutdown for BYO-server stores ([#234](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/234)) ([292c9ec](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/292c9ec67e4527e6830789d37b2199556aa948ea))
+
+
+### 🐛 Bug Fixes
+
+* Auth url_base utility function ([483af77](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/483af77cc706cb828918d96b5ae21e6830f303e7))
+* Auth-backcompat-discovery ([#221](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/221)) ([6a3999f](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/6a3999f68a5ba989b54f6581cb9e694e479e7fa8))
+* Generic token verifier introspect ([b05e360](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/b05e360c2975b0da8c0e4dc06e4d8f5031ea2a3b))
+
+
+### 📚 Documentation
+
+* Add versioned Docusaurus site, GitHub Pages deploy & release automation ([#239](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/239)) ([006b7bf](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/006b7bfec21cd41e006ed734505768703343bbb1))
+
 ## [1.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.0.0...rust-mcp-sdk-v1.0.1) (2026-07-26)
 
 
