@@ -17,13 +17,25 @@ const versionLabels = Object.fromEntries(
   >).filter(([version]) => existingVersions.has(version)),
 ) as Record<string, { label: string; banner: 'none' }>;
 
-// The rolling "current" docs display the real version number of the most
-// recent release (versions.json is ordered newest-first), suffixed with
-// "(latest)" so it stays distinguishable from the frozen snapshot entry,
-// e.g. current → "1.0.1 (latest)", snapshot → "1.0.1".
-const latestReleasedLabel = versionsJson[0]
-  ? versionLabels[versionsJson[0]]?.label
-  : undefined;
+// The version served at /docs by default (the LTS line). This stays pinned
+// even when a newer major is released and listed in the dropdown.
+const DEFAULT_VERSION = '1.x';
+
+// The first entry in versions.json is the "latest" — append "(latest)" to its
+// label so it stays distinguishable from the default version in the dropdown,
+// e.g. latest → "2.0.0 (latest)", default → "1.1.0".
+const latestVersion = versionsJson[0];
+const versionLabelsWithLatest = {
+  ...versionLabels,
+  ...(latestVersion && versionLabels[latestVersion]
+    ? {
+        [latestVersion]: {
+          label: `${versionLabels[latestVersion].label} (latest)`,
+          banner: 'none' as const,
+        },
+      }
+    : {}),
+};
 
 // ─── WHITE-LABEL CONFIGURATION ───────────────────────────────────────────────
 // Change these values when forking for a new project
@@ -96,18 +108,12 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           editUrl: SITE_CONFIG.editUrlBase,
-          // Versioning — "current" (docs/) is the latest, served at /docs.
-          // Rolling major snapshots live under versioned_docs/version-{major}.x/
-          lastVersion: 'current',
-          versions: {
-            current: {
-              label: latestReleasedLabel
-                ? `${latestReleasedLabel} (latest)`
-                : 'Latest',
-              banner: 'none',
-            },
-            ...versionLabels,
-          },
+          // Versioning — "1.x" is the default (served at /docs). The latest
+          // major (e.g. "2.x") is listed in the dropdown but is not the
+          // default. The in-progress docs/ folder ("current") is hidden.
+          lastVersion: DEFAULT_VERSION,
+          includeCurrentVersion: false,
+          versions: versionLabelsWithLatest,
           showLastUpdateAuthor: false,
           showLastUpdateTime: false,
           // Table of contents

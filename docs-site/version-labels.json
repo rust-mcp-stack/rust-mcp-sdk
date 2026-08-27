@@ -1,4 +1,8 @@
 {
+  "2.x": {
+    "label": "2.0.0",
+    "banner": "none"
+  },
   "1.x": {
     "label": "1.1.0",
     "banner": "none"

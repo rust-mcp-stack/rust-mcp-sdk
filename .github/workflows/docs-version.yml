@@ -1,8 +1,21 @@
 name: Version Docs
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TOGGLE — auto-version docs on release?
+#
+# Auto-versioning on release is currently DISABLED so a stable release can
+# never overwrite a frozen snapshot (the 1.x LTS default or the 2.x stub).
+# Versions are managed by hand (see docs-site/README.md).
+#
+# To re-enable auto-versioning, un-comment the `release:` trigger below. The
+# rest of the workflow (the job `if:`, "Determine version", and the
+# `.docs-major` gate) already handles both the `release` and
+# `workflow_dispatch` paths, so no other change is needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
-  release:
-    types: [published]
+  # release:
+  #   types: [published]
   # Manual escape hatch: snapshot the current `docs/` into a major's folder on
   # demand (used when a new major's docs are finished, or to fix a frozen major).
   workflow_dispatch:

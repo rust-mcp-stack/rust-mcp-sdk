@@ -17,13 +17,30 @@ Requires Node >= 20.
 
 | Path | What it is | Editable? |
 |------|-----------|-----------|
-| `docs/` | **Latest** docs, served at `/docs` — the source of truth | ✅ yes |
-| `versioned_docs/version-{major}.x/` | Frozen snapshot per major line (e.g. `/docs/1.x/`) | ⚠️ auto-generated; hand-editable only once superseded (see "Maintaining a superseded major") |
-| `versions.json` / `version-labels.json` | Which snapshots exist / what the dropdown displays | ❌ auto-managed (labels may be hand-bumped for superseded majors) |
+| `docs/` | In-progress docs ("current") — hidden from the site, used as the source for future snapshots | ✅ yes |
+| `versioned_docs/version-{major}.x/` | Frozen snapshot per major line (e.g. `/docs/1.x/`, `/docs/2.x/`) | ✅ manual |
+| `versions.json` / `version-labels.json` | Which snapshots exist / what the dropdown displays | ✅ manual (see "Version model") |
 | `sidebars.ts` | Navigation for latest docs **and** the template for snapshot sidebars | ✅ yes |
-| `.docs-major` | The major that `docs/` currently describes (e.g. `1`) — gates auto-versioning | ✅ manual (flip when a new major's docs go live) |
+| `.docs-major` | The major that `docs/` currently describes (e.g. `2`) — informational only | ✅ manual |
 
-Snapshot URLs are stable (`/docs/1.x/…` never changes). Only the displayed label updates per release (`1.0.1` → `1.1.0` → …).
+Snapshot URLs are stable (`/docs/1.x/…` never changes). Only the displayed label is bumped by hand (`1.1.0` → `2.0.0` → …).
+
+## Version model
+
+The site deliberately decouples **default** from **latest**:
+
+- `1.x` is the **default** — served at `/docs`, set by `lastVersion` in
+  `docusaurus.config.ts`. It stays pinned even after a newer major ships.
+- The first entry of `versions.json` is the **latest** and is shown in the
+  dropdown with a `(latest)` suffix (e.g. `2.0.0 (latest)`), but it is **not**
+  the default landing page.
+- The in-progress `docs/` folder ("current") is hidden from the site via
+  `includeCurrentVersion: false`.
+
+This is why auto-versioning on release is disabled: versions are cut by hand so
+a release can never overwrite the frozen `1.x` LTS snapshot or the `2.x` stub.
+To re-enable release auto-versioning later, un-comment the `release:` trigger in
+`.github/workflows/docs-version.yml`.
 
 ## Deployment vs. versioning
 
@@ -32,9 +49,7 @@ These are independent:
 | Event | What happens |
 |-------|--------------|
 | Merge any `docs-site/**` change to `main` | Deploys immediately — no release needed |
-| Publish a **stable** release of the *current* major (minor/patch, e.g. `v2.0.1`) | Refreshes that major's snapshot from `docs/`, updates the dropdown label, then deploys |
-| Publish a **stable** release of a *new* major (e.g. `v2.0.0`) while `.docs-major` still points at the old major | Skipped — docs are left untouched. Snapshot it manually when ready (see below) |
-| Publish a **pre-release** | Docs are untouched (versioning is skipped on purpose) |
+| Publish a release (any kind) | Docs are **not** touched — auto-versioning is disabled; versions are managed by hand |
 | Run the `Version Docs` workflow manually (`workflow_dispatch`) | Snapshots `docs/` into the given major's folder and sets its label |
 
 ## Common scenarios to keep in mind
@@ -45,21 +60,26 @@ Edit the file under `docs/`, open a PR, merge. Live after deploy.
 **Adding a new page**
 Create `docs/<section>/<page>.mdx` **and** register it in `sidebars.ts` — unregistered pages build but never appear in navigation. This applies to every future version snapshot too.
 
-**Releasing a patch/minor of the current major (e.g. `v2.0.1`, `v2.1.0`)**
-Automatic: the release re-snapshots `docs/` into `versioned_docs/version-{major}.x/` and bumps the dropdown label. Nothing to do.
+**Releasing a patch/minor (e.g. `v2.0.1`, `v2.1.0`)**
+Manual: run the `Version Docs` workflow (`workflow_dispatch`) with the version
+number. It re-snapshots `docs/` into `version-{major}.x/` and bumps the dropdown
+label. Nothing happens automatically on release.
 
 **Releasing a new major whose docs aren't ready yet (e.g. `v2.0.0`)**
-Publish it as a **stable** release — the workflow sees that the release major (`2`) doesn't match `.docs-major` (`1`) and skips the snapshot, so the docs are left untouched. `/docs/1.x/` stays complete for existing users. When the v2 docs are ready:
-
-1. Rewrite `docs/` to describe v2 (drafts deploy live to `/docs` as you work).
-2. Set `.docs-major` to `2`.
-3. Trigger the `Version Docs` workflow manually (`workflow_dispatch`) with version `2.0.0` — or just wait for the next `v2.x` release, which snapshots automatically.
+Publish the release normally — docs are left untouched (auto-versioning is
+disabled). When the docs are ready:
+1. Rewrite `docs/` to describe the new major.
+2. Trigger the `Version Docs` workflow manually with the version number.
 
 **Releasing a new major whose docs ARE ready**
-Set `.docs-major` to the new major, then publish the stable release. The workflow snapshots `docs/` into `version-{major}.x/` and sets the label automatically — no manual step.
+Trigger the `Version Docs` workflow manually with the version number (e.g.
+`2.0.0`). It snapshots `docs/` into `version-{major}.x/` and sets the label.
+Then edit `docusaurus.config.ts` if the new major should become the default
+(`DEFAULT_VERSION`).
 
 **Maintaining a superseded major (e.g. v1 after v2 ships)**
-A superseded major's snapshot is frozen — the `.docs-major` gate means later releases can never overwrite it. To update it:
+A superseded major's snapshot is frozen — with auto-versioning disabled, nothing
+re-snapshots it. To update it:
 
 - Edit files under `versioned_docs/version-{major}.x/` **directly** (safe once superseded — nothing re-snapshots it).
 - If you add a new page, also add it to `versioned_sidebars/version-{major}.x-sidebars.json`.
@@ -73,7 +93,7 @@ The site builds with `onBrokenLinks: 'throw'`. If CI fails after a docs change, 
 Two equivalent ways:
 
 **A. Via GitHub Actions (preferred)**
-Run the `Version Docs` workflow (`workflow_dispatch`) with the target version (e.g. `2.0.0`). It snapshots `docs/` into `versioned_docs/version-{major}.x/`, updates `versions.json` / `version-labels.json`, and pushes (which triggers the deploy). Also flip `.docs-major` to the new major so future releases of that major auto-version.
+Run the `Version Docs` workflow (`workflow_dispatch`) with the target version (e.g. `2.0.0`). It snapshots `docs/` into `versioned_docs/version-{major}.x/`, updates `versions.json` / `version-labels.json`, and pushes (which triggers the deploy).
 
 **B. Locally**
 ```bash
