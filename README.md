@@ -23,10 +23,17 @@ This SDK fully implements the [MCP 2026-07-28](https://docs.rs/rust-mcp-schema/l
 
 Focus on your application logic, rust-mcp-sdk handles the protocol, transports, and the rest.
 
+> ⚠️ **Version notice:** This is `rust-mcp-sdk` **2.x**, implementing the new **MCP 2026-07-28** (stateless) specification.
+> For the previous **MCP 2025-11-25** specification, use **`rust-mcp-sdk` 1.x**:
+> ```toml
+> rust-mcp-sdk = "1"
+> ```
+> See the [upgrade guide](UPGRADING.md) to migrate from 1.x to 2.0.
+
 > **Version matrix:**
 > | SDK version | Protocol | Branch |
 > |---|---|---|
-> | 2.0 (beta) | MCP 2026-07-28 (stateless) | `main` |
+> | 2.0 | MCP 2026-07-28 (stateless) | `main` |
 > | 1.x (LTS) | MCP 2025-11-25 | `release-1.x` |
 >
 > **Upgrading?** See the [upgrade guide](UPGRADING.md).
@@ -84,7 +91,7 @@ Focus on your application logic, rust-mcp-sdk handles the protocol, transports, 
 Add to your Cargo.toml:
 ```toml
 [dependencies]
-rust-mcp-sdk = "2.0.0-beta"  # Check crates.io for the latest version
+rust-mcp-sdk = "2.0.0"  # Check crates.io for the latest version
 ```
 <!-- x-release-please-end -->
 
@@ -93,9 +100,11 @@ rust-mcp-sdk = "2.0.0-beta"  # Check crates.io for the latest version
 ```rs
 use async_trait::async_trait;
 use rust_mcp_sdk::{
-    error::SdkResult, macros,
-    mcp_server::{server_runtime, ServerHandler},
+    error::SdkResult, macros, mcp_icon,
+    mcp_server::{server_runtime, McpServerOptions, ServerHandler},
     schema::*,
+    McpServer, RequestContext, ServerDetails, StdioTransport, ToMcpServerHandler,
+    TransportOptions,
 };
 
 // Define an MCP tool
@@ -174,7 +183,12 @@ async fn main() -> SdkResult<()> {
 
     let transport = StdioTransport::new(TransportOptions::default())?;
     let handler = HelloHandler::default().to_mcp_server_handler();
-    let server = server_runtime::create_server(server_details, transport, handler);
+    let server = server_runtime::create_server(McpServerOptions {
+        server_details,
+        transport,
+        handler,
+        message_observer: None,
+    });
     server.start().await
 }
 ```
@@ -295,8 +309,9 @@ Following is implementation of an MCP client that starts the [@modelcontextproto
 use async_trait::async_trait;
 use rust_mcp_sdk::{
     error::SdkResult,
-    mcp_client::{client_runtime, ClientHandler},
+    mcp_client::{client_runtime, ClientHandler, McpClientOptions},
     schema::*,
+    ClientDetails, McpClient, StdioTransport, ToMcpClientHandler, TransportOptions,
 };
 
 pub struct MyClientHandler;
@@ -328,12 +343,16 @@ async fn main() -> SdkResult<()> {
     )?;
 
     let handler = MyClientHandler {};
-    let client = client_runtime::create_client(client_details, transport, handler);
+    let client = client_runtime::create_client(McpClientOptions::new(
+        client_details,
+        transport,
+        handler.to_mcp_client_handler(),
+    ));
     client.clone().start().await?;
 
     // Discover the server
-    let discover = client.request_discover().await?;
-    println!("Server: {}@{}", discover.server_info.name, discover.server_info.version);
+    let discover = client.request_discover(Default::default()).await?;
+    println!("Supported protocol versions: {:?}", discover.supported_versions);
 
     // List tools
     let tools = client.request_tool_list(None).await?.tools;
@@ -345,6 +364,8 @@ async fn main() -> SdkResult<()> {
     let result = client.call_tool(CallToolRequestParams {
         name: "say_hello".to_string(),
         arguments: None,
+        input_responses: None,
+        request_state: None,
         meta: RequestMetaObject::default(),
     }).await?;
 
@@ -472,7 +493,7 @@ All features are enabled by default:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "2.0.0-beta"
+rust-mcp-sdk = "2.0.0"
 ```
 <!-- x-release-please-end -->
 
@@ -482,7 +503,7 @@ rust-mcp-sdk = "2.0.0-beta"
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "2.0.0-beta", default-features = false, features = ["server", "macros", "stdio"] }
+rust-mcp-sdk = { version = "2.0.0", default-features = false, features = ["server", "macros", "stdio"] }
 ```
 <!-- x-release-please-end -->
 
@@ -492,7 +513,7 @@ rust-mcp-sdk = { version = "2.0.0-beta", default-features = false, features = ["
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "2.0.0-beta", default-features = false, features = ["client", "stdio"] }
+rust-mcp-sdk = { version = "2.0.0", default-features = false, features = ["client", "stdio"] }
 ```
 <!-- x-release-please-end -->
 
@@ -514,11 +535,10 @@ Same principles apply on the client side: use `client_runtime::create_client()` 
 Implement `McpObserver` to intercept all incoming and outgoing MCP messages for telemetry, logging, debugging, or monitoring.
 
 ```rs
-let server = server_runtime::create_server_with_options(ServerOptions {
+let server = server_runtime::create_server(McpServerOptions {
     server_details,
     transport,
     handler: handler.to_mcp_server_handler(),
-    extensions: None,
     message_observer: Some(SimpleServerObserver::new()),
 });
 ```
