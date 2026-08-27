@@ -8,8 +8,7 @@ use rust_mcp_sdk::{
     mcp_http::McpAppState,
     mcp_http::McpHttpHandler,
     mcp_server::McpServerHandler,
-    schema::InitializeResult,
-    session_store::InMemorySessionStore,
+    ServerDetails,
 };
 use std::sync::Arc;
 
@@ -26,15 +25,11 @@ pub struct ActixServer {
 impl ActixServer {
     /// Creates a new `ActixServer` instance.
     pub fn new(
-        server_details: InitializeResult,
+        server_details: ServerDetails,
         handler: Arc<dyn McpServerHandler + 'static>,
         mut server_options: ActixServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
-            session_store: server_options
-                .session_store
-                .take()
-                .unwrap_or_else(|| Arc::new(InMemorySessionStore::default())),
             id_generator: server_options
                 .session_id_generator
                 .take()
@@ -45,10 +40,10 @@ impl ActixServer {
             ping_interval: server_options.ping_interval,
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
-            event_store: server_options.event_store.as_ref().map(Arc::clone),
-            task_store: server_options.task_store.take(),
-            client_task_store: server_options.client_task_store.take(),
             message_observer: server_options.message_observer.take(),
+            extensions: Arc::new(tokio::sync::RwLock::new(None)),
+            active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            max_listen_streams: server_options.max_listen_streams,
         });
 
         let mut middlewares: Vec<Arc<dyn Middleware>> = vec![];

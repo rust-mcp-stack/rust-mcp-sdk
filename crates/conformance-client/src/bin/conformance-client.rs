@@ -25,8 +25,23 @@ async fn main() {
     match scenario.as_str() {
         "initialize" | "" => client::scenarios::initialize::run(server_url).await,
         "tools_call" => client::scenarios::tools_call::run(server_url).await,
+        "request-metadata" => client::scenarios::request_metadata::run(server_url).await,
+        "http-custom-headers" => {
+            client::scenarios::http_custom_headers::run(server_url, &context).await
+        }
+        "http-invalid-tool-headers" => {
+            client::scenarios::http_invalid_tool_headers::run(server_url).await
+        }
+        "http-standard-headers" => client::scenarios::http_standard_headers::run(server_url).await,
+        "json-schema-ref-no-deref" => {
+            client::scenarios::json_schema_ref_no_deref::run(server_url).await
+        }
         s if s.starts_with("elicitation") => client::scenarios::elicitation::run(server_url).await,
         s if s.starts_with("sse") => client::scenarios::sse_retry::run(server_url).await,
+        s if s.starts_with("sep-2322") => client::scenarios::mrtr::run(server_url).await,
+        s if s.starts_with("subscriptions") => {
+            client::scenarios::subscriptions_listen::run(server_url).await
+        }
         s if s.starts_with("auth/") => client::auth::run(server_url, &context).await,
         other => {
             eprintln!("Unknown or unimplemented scenario: {}", other);

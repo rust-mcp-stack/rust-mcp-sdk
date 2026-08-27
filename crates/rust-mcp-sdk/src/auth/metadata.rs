@@ -574,7 +574,7 @@ impl<'a> AuthMetadataBuilder<'a> {
         let jwks_uri = Self::parse_optional_url_field("jwks_uri", self.jwks_uri, Some(&issuer))?;
 
         let authorization_server_metadata = AuthorizationServerMetadata {
-            issuer,
+            issuer: issuer.to_string(),
             authorization_endpoint,
             token_endpoint,
             registration_endpoint,
@@ -620,6 +620,7 @@ impl<'a> AuthMetadataBuilder<'a> {
                 .map(|v| v.into_iter().map(|c| c.into_owned()).collect()),
             jwks_uri: jwks_uri.clone(),
             client_id_metadata_document_supported: None,
+            authorization_response_iss_parameter_supported: None,
         };
 
         let resource = Self::parse_url_field("resource", self.resource, None)?;

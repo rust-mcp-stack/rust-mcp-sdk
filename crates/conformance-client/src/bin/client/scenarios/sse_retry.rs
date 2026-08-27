@@ -11,25 +11,30 @@
 //! from the resumed standalone stream. The rust-mcp-sdk transport handles
 //! this transparently — this scenario merely exercises the flow.
 
-use rust_mcp_sdk::schema::CallToolRequestParams;
+use rust_mcp_sdk::schema::{CallToolRequestParams, RequestMetaObject};
 use std::time::Duration;
 
 use crate::client::transport;
 
 pub async fn run(server_url: &str) {
-    let client = transport::connect(server_url)
-        .await
-        .expect("Failed to connect for sse-retry");
+    let Ok(client) = transport::connect(server_url).await else {
+        eprintln!("Failed to connect for sse-retry (may require auth)");
+        return;
+    };
 
-    let tools = client
-        .request_tool_list(None)
-        .await
-        .expect("Failed to list tools");
-    let tool = tools.tools.first().expect("Expected at least one tool");
-
-    let _ = client
-        .request_tool_call(CallToolRequestParams::new(&tool.name))
-        .await;
+    if let Ok(tools) = client.request_tool_list(None).await {
+        if let Some(tool) = tools.tools.first() {
+            let _ = client
+                .request_tool_call(CallToolRequestParams {
+                    name: tool.name.clone(),
+                    arguments: Some(serde_json::Map::new()),
+                    meta: RequestMetaObject::default(),
+                    input_responses: None,
+                    request_state: None,
+                })
+                .await;
+        }
+    }
 
     // Give the SDK time to perform the reconnect so the test framework
     // observes the second GET with `Last-Event-ID`.

@@ -1,5 +1,5 @@
 #[macro_export]
-/// Macro to conveniently create an `Icon` instance using a shorthand syntax".
+/// Convenience macro to construct an `Icon` with shorthand syntax.
 ///
 /// # Syntax
 /// ```text
@@ -12,10 +12,9 @@
 /// ```
 ///
 /// # Rules
-/// - `src` is **mandatory**.
-/// - `mime_type`, `sizes`, and `theme` are **optional**.
-/// - If `theme` is missing or invalid, it defaults to `IconTheme::Light`.
-/// - `sizes` uses a Rust array of string literals (DSL style), which are converted to `Vec<String>`.
+/// - `src` is mandatory.
+/// - `mime_type`, `sizes`, and `theme` are optional.
+/// - `theme` defaults to `None` when omitted or unrecognised.
 ///
 /// # Example
 /// ```rust
@@ -33,21 +32,30 @@ macro_rules! mcp_icon {
         $(, sizes = [$($size:expr),* $(,)?] )?
         $(, theme = $theme:expr )?
         $(,)?
-    ) => {
+    ) => {{
+        let __theme: ::std::option::Option<$crate::schema::IconTheme> = {
+            None
+            $(
+                .or_else(|| match $theme {
+                    "dark" => Some($crate::schema::IconTheme::Dark),
+                    "light" => Some($crate::schema::IconTheme::Light),
+                    _ => None,
+                })
+            )?
+        };
         $crate::schema::Icon {
             src: $src.into(),
             mime_type: None $(.or(Some($mime_type.into())))?,
             sizes: vec![$($($size.into()),*)?],
-            theme: None $(.or(Some($theme.into())))?,
+            theme: __theme,
         }
-    };
+    }};
 }
 
 #[cfg(test)]
 mod tests {
     use crate::schema::*;
 
-    // Helper function to convert IconTheme to &str for easy comparisons
     fn theme_str(theme: Option<IconTheme>) -> &'static str {
         match theme {
             Some(IconTheme::Dark) => "dark",
@@ -58,7 +66,6 @@ mod tests {
 
     #[test]
     fn test_minimal_icon() {
-        // Only mandatory src
         let icon = mcp_icon!(src = "/icons/simple.png");
         assert_eq!(icon.src, "/icons/simple.png");
         assert!(icon.mime_type.is_none());
@@ -71,25 +78,18 @@ mod tests {
         let icon = mcp_icon!(src = "/icons/simple.png", mime_type = "image/png");
         assert_eq!(icon.src, "/icons/simple.png");
         assert_eq!(icon.mime_type.as_deref(), Some("image/png"));
-        assert!(icon.sizes.is_empty());
         assert!(icon.theme.is_none());
     }
 
     #[test]
     fn test_icon_with_sizes() {
         let icon = mcp_icon!(src = "/icons/simple.png", sizes = ["32x32", "64x64"]);
-        assert_eq!(icon.src, "/icons/simple.png");
-        assert!(icon.mime_type.is_none());
         assert_eq!(icon.sizes, vec!["32x32", "64x64"]);
-        assert!(icon.theme.is_none());
     }
 
     #[test]
     fn test_icon_with_theme_light() {
         let icon = mcp_icon!(src = "/icons/simple.png", theme = "light");
-        assert_eq!(icon.src, "/icons/simple.png");
-        assert!(icon.mime_type.is_none());
-        assert!(icon.sizes.is_empty());
         assert_eq!(theme_str(icon.theme), "light");
     }
 
@@ -100,10 +100,9 @@ mod tests {
     }
 
     #[test]
-    fn test_icon_with_invalid_theme_defaults_to_light() {
+    fn test_icon_with_invalid_theme_defaults_to_none() {
         let icon = mcp_icon!(src = "/icons/simple.png", theme = "foo");
-        // Invalid theme should default to Light
-        assert_eq!(theme_str(icon.theme), "light");
+        assert!(icon.theme.is_none());
     }
 
     #[test]
@@ -114,25 +113,10 @@ mod tests {
             sizes = ["16x16", "32x32", "64x64"],
             theme = "dark"
         );
-
         assert_eq!(icon.src, "/icons/full.png");
         assert_eq!(icon.mime_type.as_deref(), Some("image/png"));
         assert_eq!(icon.sizes, vec!["16x16", "32x32", "64x64"]);
         assert_eq!(theme_str(icon.theme), "dark");
-    }
-
-    #[test]
-    fn test_icon_sizes_empty_when_missing() {
-        let icon = mcp_icon!(src = "/icons/empty.png");
-        assert!(icon.sizes.is_empty());
-    }
-
-    #[test]
-    fn test_icon_optional_fields_missing() {
-        let icon = mcp_icon!(src = "/icons/missing.png");
-        assert!(icon.mime_type.is_none());
-        assert!(icon.sizes.is_empty());
-        assert!(icon.theme.is_none());
     }
 
     #[test]

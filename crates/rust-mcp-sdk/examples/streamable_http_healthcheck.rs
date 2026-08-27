@@ -11,13 +11,9 @@ use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::mcp_http::{self, GenericBodyExt};
 use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
+    Implementation, JsonObject, ServerCapabilities, ServerCapabilitiesTools,
 };
-use rust_mcp_sdk::{
-    error::SdkResult, event_store::InMemoryEventStore, mcp_icon, mcp_server::ToMcpServerHandler,
-    task_store::InMemoryTaskStore,
-};
-use serde_json::Map;
+use rust_mcp_sdk::{error::SdkResult, mcp_icon, mcp_server::ToMcpServerHandler, ServerDetails};
 use std::sync::Arc;
 
 /// Custom health check handler.
@@ -44,9 +40,8 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // STEP 1: Define server details and capabilities
-    let server_details = InitializeResult {
-        // server name and version
+    // 2026-07-28: InitializeResult replaced by ServerDetails
+    let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server Streamable Http/SSE".into(),
             version: "0.1.0".into(),
@@ -64,26 +59,22 @@ async fn main() -> SdkResult<()> {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
             resources: Some(ServerCapabilitiesResources{ list_changed: None, subscribe: None }),
-            completions:Some(Map::new()),
+            completions: Some(JsonObject(std::collections::BTreeMap::new())),
             ..Default::default() // Using default values for other fields
         },
         meta: None,
         instructions: Some("server instructions...".into()),
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
     // STEP 2: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandler {};
 
-    // STEP 3: instantiate AxumServer, providing `server_details` , `handler` and AxumServerOptions
+    // 2026-07-28: event_store, task_store, client_task_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
         AxumServerOptions {
             host: "127.0.0.1".into(),
-            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
-            task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
-            client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
             health_endpoint: Some("/health".into()), // enable health check endpoint
             health_handler: Some(Arc::new(CustomHealth {})), // use a custom health check handler
             ..Default::default()

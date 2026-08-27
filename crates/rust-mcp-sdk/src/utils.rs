@@ -1,9 +1,7 @@
 use crate::error::{McpSdkError, ProtocolErrorKind, SdkResult};
-use crate::schema::{ClientMessages, ProtocolVersion, SdkError};
-use std::cmp::Ordering;
+use crate::schema::ProtocolVersion;
+#[cfg(feature = "auth")]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use time::format_description::well_known::Iso8601;
-use time::OffsetDateTime;
 #[cfg(feature = "auth")]
 use url::Url;
 
@@ -12,11 +10,13 @@ use url::Url;
 /// This ensures that the associated task does not outlive the scope
 /// of this struct, preventing runaway or leaked background tasks.
 ///
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub struct AbortTaskOnDrop {
     /// The handle used to abort the spawned Tokio task.
     pub handle: tokio::task::AbortHandle,
 }
 
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 impl Drop for AbortTaskOnDrop {
     fn drop(&mut self) {
         // Automatically abort the associated task when this guard is dropped.
@@ -25,6 +25,7 @@ impl Drop for AbortTaskOnDrop {
 }
 
 // Function to convert Unix timestamp to SystemTime
+#[cfg(feature = "auth")]
 pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(timestamp)
 }
@@ -53,33 +54,47 @@ pub fn unix_timestamp_to_systemtime(timestamp: u64) -> SystemTime {
 /// use rust_mcp_sdk::error::McpSdkError;
 ///
 /// // Equal versions: compatible
-/// let result = ensure_server_protocol_compatibility("2024_11_05", "2024_11_05");
+/// let result = ensure_server_protocol_compatibility("2026-07-28", "2026-07-28");
 /// assert!(result.is_ok());
 ///
 /// // Client newer than server: compatible (backwards compat)
-/// let result = ensure_server_protocol_compatibility("2025_11_25", "2025_03_26");
+/// let result = ensure_server_protocol_compatibility("2026-07-28", "2025-11-25");
 /// assert!(result.is_ok());
 ///
 /// // Client older than server: incompatible (server uses newer spec)
-/// let result = ensure_server_protocol_compatibility("2024_11_05", "2025_03_26");
+/// let result = ensure_server_protocol_compatibility("2025-11-25", "2026-07-28");
 /// assert!(matches!(
 ///     result,
 ///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {ref requested, ref current}})
-///     if requested == "2024_11_05" && current == "2025_03_26"
+///     if requested == "2025-11-25" && current == "2026-07-28"
 /// ));
 /// ```
+#[cfg(feature = "client")]
 pub fn ensure_server_protocol_compatibility(
     client_protocol_version: &str,
     server_protocol_version: &str,
 ) -> SdkResult<()> {
-    match client_protocol_version.cmp(server_protocol_version) {
-        Ordering::Less => Err(McpSdkError::Protocol {
+    let client = parse_version(client_protocol_version).ok_or_else(|| McpSdkError::Protocol {
+        kind: ProtocolErrorKind::IncompatibleVersion {
+            requested: client_protocol_version.to_string(),
+            current: server_protocol_version.to_string(),
+        },
+    })?;
+    let server = parse_version(server_protocol_version).ok_or_else(|| McpSdkError::Protocol {
+        kind: ProtocolErrorKind::IncompatibleVersion {
+            requested: client_protocol_version.to_string(),
+            current: server_protocol_version.to_string(),
+        },
+    })?;
+    if client < server {
+        Err(McpSdkError::Protocol {
             kind: ProtocolErrorKind::IncompatibleVersion {
                 requested: client_protocol_version.to_string(),
                 current: server_protocol_version.to_string(),
             },
-        }),
-        Ordering::Equal | Ordering::Greater => Ok(()),
+        })
+    } else {
+        Ok(())
     }
 }
 
@@ -111,47 +126,59 @@ pub fn ensure_server_protocol_compatibility(
 /// use rust_mcp_sdk::error::McpSdkError;
 ///
 /// // Equal versions
-/// let result = enforce_compatible_protocol_version("2024_11_05", "2024_11_05");
+/// let result = enforce_compatible_protocol_version("2026-07-28", "2026-07-28");
 /// assert!(matches!(result, Ok(None)));
 ///
 /// // Client version lower (downgrade allowed)
-/// let result = enforce_compatible_protocol_version("2024_11_05", "2025_03_26");
-/// assert!(matches!(result, Ok(Some(ref v)) if v == "2024_11_05"));
+/// let result = enforce_compatible_protocol_version("2025-11-25", "2026-07-28");
+/// assert!(matches!(result, Ok(Some(ref v)) if v == "2025-11-25"));
 ///
 /// // Client version higher (incompatible)
-/// let result = enforce_compatible_protocol_version("2025_03_26", "2024_11_05");
+/// let result = enforce_compatible_protocol_version("2026-07-28", "2025-11-25");
 /// assert!(matches!(
 ///     result,
 ///     Err(McpSdkError::Protocol{kind: rust_mcp_sdk::error::ProtocolErrorKind::IncompatibleVersion {requested, current}})
-///     if requested == "2025_03_26" && current == "2024_11_05"
+///     if requested == "2026-07-28" && current == "2025-11-25"
 /// ));
 /// ```
+#[cfg(feature = "server")]
 pub fn enforce_compatible_protocol_version(
     client_protocol_version: &str,
     server_protocol_version: &str,
 ) -> SdkResult<Option<String>> {
-    match client_protocol_version.cmp(server_protocol_version) {
-        // if client protocol version is higher
-        Ordering::Greater => Err(McpSdkError::Protocol {
+    let client = parse_version(client_protocol_version).ok_or_else(|| McpSdkError::Protocol {
+        kind: ProtocolErrorKind::IncompatibleVersion {
+            requested: client_protocol_version.to_string(),
+            current: server_protocol_version.to_string(),
+        },
+    })?;
+    let server = parse_version(server_protocol_version).ok_or_else(|| McpSdkError::Protocol {
+        kind: ProtocolErrorKind::IncompatibleVersion {
+            requested: client_protocol_version.to_string(),
+            current: server_protocol_version.to_string(),
+        },
+    })?;
+    match client.cmp(&server) {
+        std::cmp::Ordering::Greater => Err(McpSdkError::Protocol {
             kind: ProtocolErrorKind::IncompatibleVersion {
                 requested: client_protocol_version.to_string(),
                 current: server_protocol_version.to_string(),
             },
         }),
-        Ordering::Equal => Ok(None),
-        Ordering::Less => {
-            // return the same version that was received from the client
-            Ok(Some(client_protocol_version.to_string()))
-        }
+        std::cmp::Ordering::Equal => Ok(None),
+        std::cmp::Ordering::Less => Ok(Some(client_protocol_version.to_string())),
     }
 }
 
-pub fn validate_mcp_protocol_version(mcp_protocol_version: &str) -> SdkResult<()> {
-    let _mcp_protocol_version =
-        ProtocolVersion::try_from(mcp_protocol_version).map_err(|err| McpSdkError::Protocol {
-            kind: ProtocolErrorKind::ParseError(err),
-        })?;
-    Ok(())
+/// Normalize a possibly-underscore-format protocol version string to the
+/// dash format that `ProtocolVersion::try_from` expects, then parse it.
+fn parse_version(raw: &str) -> Option<ProtocolVersion> {
+    let normalized = raw.replace('_', "-");
+    ProtocolVersion::try_from(normalized.as_str()).ok()
+}
+
+pub fn supported_protocol_versions() -> Vec<String> {
+    vec![ProtocolVersion::latest().to_string()]
 }
 
 /// Removes query string and hash fragment from a URL, returning the base path.
@@ -178,75 +205,6 @@ pub(crate) fn remove_query_and_hash(endpoint: &str) -> String {
     } else {
         without_query.to_string()
     }
-}
-
-/// Checks if the input string is valid JSON and represents an "initialize" method request.
-pub fn valid_initialize_method(json_str: &str) -> SdkResult<()> {
-    // Attempt to deserialize the input string into ClientMessages
-    let Ok(request) = serde_json::from_str::<ClientMessages>(json_str) else {
-        return Err(SdkError::bad_request()
-            .with_message("Bad Request: Session not found")
-            .into());
-    };
-
-    match request {
-        ClientMessages::Single(client_message) => {
-            if !client_message.is_initialize_request() {
-                return Err(SdkError::bad_request()
-                    .with_message("Bad Request: Session not found")
-                    .into());
-            }
-        }
-        ClientMessages::Batch(client_messages) => {
-            let count = client_messages
-                .iter()
-                .filter(|item| item.is_initialize_request())
-                .count();
-            if count > 1 {
-                return Err(SdkError::invalid_request()
-                    .with_message("Bad Request: Only one initialization request is allowed")
-                    .into());
-            }
-        }
-    };
-
-    Ok(())
-}
-
-/// Returns the current UTC time, optionally adjusted by a millisecond offset.
-///
-/// This function fetches the current UTC time and applies an optional offset in milliseconds.
-/// Positive values move the time into the future, negative values into the past.
-///
-/// If the offset would cause an overflow (i.e., exceed the valid range of `OffsetDateTime`),
-/// the time is clamped to a safe boundary instead of panicking.
-pub fn current_utc_time(ms_offset: Option<i64>) -> OffsetDateTime {
-    let mut dt = OffsetDateTime::now_utc();
-    if let Some(ms) = ms_offset {
-        let duration = time::Duration::milliseconds(ms);
-
-        dt = match dt.checked_add(duration) {
-            Some(new_dt) => new_dt,
-            None => {
-                if ms > 0 {
-                    dt.checked_add(time::Duration::milliseconds(180_000))
-                        .unwrap_or(dt)
-                } else {
-                    dt.checked_sub(time::Duration::milliseconds(180_000))
-                        .unwrap_or(dt)
-                }
-            }
-        };
-    }
-    dt
-}
-
-/// Formats an `OffsetDateTime` as an ISO 8601 string.
-///
-/// Uses the default ISO 8601 configuration (with nanosecond precision and `Z` suffix).
-/// If formatting fails for any reason (extremely unlikely), returns an empty string as fallback.
-pub fn iso8601_time(time_value: OffsetDateTime) -> String {
-    time_value.format(&Iso8601::DEFAULT).unwrap_or_default()
 }
 
 #[cfg(feature = "auth")]
@@ -321,5 +279,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result.to_string(), expect);
+    }
+
+    #[test]
+    fn compat_dash_and_underscore_both_parse() {
+        assert!(enforce_compatible_protocol_version("2026-07-28", "2026_07_28").is_ok());
+        assert!(ensure_server_protocol_compatibility("2026-07-28", "2026_07_28").is_ok());
+    }
+
+    #[test]
+    fn compat_rejects_unknown_versions() {
+        assert!(enforce_compatible_protocol_version("2026_13_99", "2026-07-28").is_err());
+        assert!(ensure_server_protocol_compatibility("2026-07-28", "garbage").is_err());
+    }
+
+    #[test]
+    fn compat_equal_returns_none() {
+        assert_eq!(
+            enforce_compatible_protocol_version("2026-07-28", "2026-07-28").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn compat_client_newer_rejected() {
+        assert!(enforce_compatible_protocol_version("2026-07-28", "2025-11-25").is_err());
     }
 }

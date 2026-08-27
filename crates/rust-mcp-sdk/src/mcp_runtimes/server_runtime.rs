@@ -1,43 +1,54 @@
 pub mod mcp_server_runtime;
 pub mod mcp_server_runtime_core;
+pub mod subscription_stream;
 use crate::auth::AuthInfo;
 use crate::error::SdkResult;
+use crate::mcp_traits::ServerDetails;
 use crate::mcp_traits::{
     McpObserver, McpServer, McpServerHandler, RequestIdGen, RequestIdGenNumeric,
 };
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use crate::schema::schema_utils::SdkError;
 use crate::schema::{
     schema_utils::{
-        ClientMessage, ClientMessages, FromMessage, MessageFromServer, SdkError, ServerMessage,
-        ServerMessages,
+        ClientMessage, ClientMessages, FromMessage, MessageFromServer, NotificationFromServer,
+        ServerMessage, ServerMessages,
     },
-    InitializeRequestParams, InitializeResult, RequestId, RpcError,
+    RequestId, RpcError, SubscriptionFilter,
 };
-use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 use crate::utils::AbortTaskOnDrop;
 use async_trait::async_trait;
-use futures::future::try_join_all;
 use futures::{StreamExt, TryFutureExt};
-use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
 use rust_mcp_transport::SessionId;
-use rust_mcp_transport::{IoStream, TaskId, TransportDispatcher};
-use std::panic;
+use rust_mcp_transport::{IoStream, TransportDispatcher};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{mpsc, oneshot, watch, Notify, RwLock, RwLockReadGuard};
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use tokio::sync::oneshot;
+#[cfg(feature = "sse")]
+use tokio::sync::Notify;
+use tokio::sync::{mpsc, RwLock, RwLockReadGuard};
 
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
 const TASK_CHANNEL_CAPACITY: usize = 500;
-/// How long `send()` waits for a live DEFAULT standalone transport before
-/// failing a server-initiated request (e.g. elicitation/sampling) when the
-/// GET SSE stream has not been registered yet, or the previous one shut down.
-const DEFAULT_TRANSPORT_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Maximum concurrent subscription filters per session.
+const DEFAULT_MAX_SUBSCRIPTIONS: usize = 256;
 
 tokio::task_local! {
     /// Per-request transport for sending notifications on the POST response SSE stream.
     /// Set via `scope()` in spawned handler tasks. Read by `send()` for notification routing.
-    /// Falls back to the GET standalone stream when not set (background tasks, on_initialized, etc.).
+    /// Falls back to the GET standalone stream when not set (e.g. background jobs).
     pub(crate) static ACTIVE_REQUEST_TRANSPORT: TransportType;
+}
+
+tokio::task_local! {
+    /// The active request's `RequestContext` (per-request `_meta`), scoped
+    /// around handler dispatch so notification gates can enforce per-request
+    /// policies (e.g. `_meta.logLevel` for log-message gating).
+    pub(crate) static ACTIVE_REQUEST_CONTEXT: crate::mcp_traits::RequestContext;
 }
 
 // Define a type alias for the TransportDispatcher trait object
@@ -55,8 +66,7 @@ pub(crate) type TransportType = Arc<
 pub struct ServerRuntime {
     // The handler for processing MCP messages
     handler: Arc<dyn McpServerHandler>,
-    // Information about the server
-    server_details: Arc<InitializeResult>,
+    server_details: Arc<ServerDetails>,
     session_id: Option<SessionId>,
     /// Holds the latest DEFAULT standalone transport, which may be alive or
     /// shut down. A shut-down entry is deliberately retained as an event-store
@@ -66,19 +76,28 @@ pub struct ServerRuntime {
     /// `None` means no transport was stored yet, or the session was shut down.
     /// Liveness must be judged via `is_shut_down()`, not by `is_some()`.
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
-    /// Signaled (via `notify_one`) immediately after the DEFAULT standalone
-    /// transport is stored in `transport_map`. Allows `create_standalone_stream`
-    /// and `send()` to wait until a live transport is available, preventing the
-    /// race where a request (e.g. `elicitation/create`, `sampling/createMessage`)
-    /// is sent before the transport is registered.
+    /// Signaled (via `notify_waiters`) immediately after the DEFAULT standalone
+    /// transport is stored in `transport_map`. Allows `wait_for_transport_ready`
+    /// to block until a live transport is available, preventing the race where
+    /// a request that needs a registered transport is processed before the
+    /// spawned `start_stream` task has called `store_transport`.
+    #[cfg(feature = "sse")]
     transport_ready: Notify,
     request_id_gen: Box<dyn RequestIdGen>,
-    client_details_tx: watch::Sender<Option<InitializeRequestParams>>,
-    client_details_rx: watch::Receiver<Option<InitializeRequestParams>>,
     auth_info: tokio::sync::RwLock<Option<AuthInfo>>,
-    task_store: Option<Arc<ServerTaskStore>>,
-    client_task_store: Option<Arc<ClientTaskStore>>,
     message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
+    subscriptions: tokio::sync::RwLock<Option<SubscriptionFilter>>,
+    subscription_count: std::sync::atomic::AtomicUsize,
+    max_subscriptions: usize,
+    stream_state: subscription_stream::SubscriptionStreamState,
+    /// The transport of the active `subscriptions/listen` stream, stored when
+    /// a listen request succeeds so subscription-scoped notifications can find
+    /// the right delivery channel regardless of which request triggers them.
+    notification_transport: tokio::sync::RwLock<Option<TransportType>>,
+    /// `_meta.logLevel` of the currently-dispatched request. Set by the
+    /// handler before dispatching so `send_notification` can enforce
+    /// per-request log-message gating (SEP-2575).
+    active_log_level: tokio::sync::RwLock<Option<crate::schema::LoggingLevel>>,
 }
 
 pub struct McpServerOptions<T>
@@ -91,35 +110,14 @@ where
         ServerMessage,
     >,
 {
-    pub server_details: InitializeResult,
+    pub server_details: ServerDetails,
     pub transport: T,
     pub handler: Arc<dyn McpServerHandler>,
-    pub task_store: Option<Arc<ServerTaskStore>>,
-    pub client_task_store: Option<Arc<ClientTaskStore>>,
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 }
 
 #[async_trait]
 impl McpServer for ServerRuntime {
-    fn task_store(&self) -> Option<Arc<ServerTaskStore>> {
-        self.task_store.clone()
-    }
-
-    fn client_task_store(&self) -> Option<Arc<ClientTaskStore>> {
-        self.client_task_store.clone()
-    }
-
-    /// Set the client details, storing them in client_details
-    async fn set_client_details(&self, client_details: InitializeRequestParams) -> SdkResult<()> {
-        self.client_details_tx
-            .send(Some(client_details))
-            .map_err(|_| {
-                RpcError::internal_error()
-                    .with_message("Failed to set client details".to_string())
-                    .into()
-            })
-    }
-
     async fn update_auth_info(&self, new_auth_info: Option<AuthInfo>) {
         let should_update = {
             let current = self.auth_info.read().await;
@@ -142,16 +140,6 @@ impl McpServer for ServerRuntime {
     async fn auth_info_cloned(&self) -> Option<AuthInfo> {
         let guard = self.auth_info.read().await;
         guard.clone()
-    }
-
-    async fn wait_for_initialization(&self) {
-        loop {
-            if self.client_details_rx.borrow().is_some() {
-                return;
-            }
-            let mut rx = self.client_details_rx.clone();
-            rx.changed().await.ok();
-        }
     }
 
     async fn send(
@@ -189,20 +177,12 @@ impl McpServer for ServerRuntime {
             observer.on_send(&mcp_message);
         }
 
-        let transport = if is_notification {
-            // use the current DEFAULT transport even if it is shut down. A shut-down standalone
-            // transport still persists the event to the event store so it can be replayed
-            // when the client reconnects.
+        let transport = {
             let transport_map = self.transport_map.read().await;
             transport_map.as_ref().cloned().ok_or(
                 RpcError::internal_error()
                     .with_message("transport stream does not exists or is closed!".to_string()),
             )?
-        } else {
-            // wait for the DEFAULT standalone transport to be registered (and alive) instead of failing
-            // instantly when the GET SSE stream has not been processed yet, or a shut-down transport from a previous connection is still in the map.
-            self.wait_for_live_default_transport(DEFAULT_TRANSPORT_WAIT_TIMEOUT)
-                .await?
         };
 
         // The read guard is dropped above, before `send_message()` is
@@ -216,40 +196,6 @@ impl McpServer for ServerRuntime {
         Ok(response)
     }
 
-    async fn send_batch(
-        &self,
-        messages: Vec<ServerMessage>,
-        request_timeout: Option<Duration>,
-    ) -> SdkResult<Option<Vec<ClientMessage>>> {
-        let transport_map = self.transport_map.read().await;
-        let transport = transport_map.as_ref().ok_or(
-            RpcError::internal_error()
-                .with_message("transport stream does not exists or is closed!".to_string()),
-        )?;
-
-        // telemetry
-        if let Some(observer) = self.message_observer.as_ref() {
-            messages.iter().for_each(|msg| observer.on_send(msg));
-        }
-
-        transport
-            .send_batch(messages, request_timeout)
-            .map_err(|err| err.into())
-            .await
-    }
-
-    /// Returns the server's details, including server capability,
-    /// instructions, protocol_version , server_info and optional meta data
-    fn server_info(&self) -> &InitializeResult {
-        &self.server_details
-    }
-
-    /// Returns the client information if available, after successful initialization , otherwise returns None
-    fn client_info(&self) -> Option<InitializeRequestParams> {
-        self.client_details_rx.borrow().clone()
-    }
-
-    /// Main runtime loop, processes incoming messages and handles requests
     async fn start(self: Arc<Self>) -> SdkResult<()> {
         let self_clone = self.clone();
         let transport_map = self_clone.transport_map.read().await;
@@ -299,35 +245,10 @@ impl McpServer for ServerRuntime {
                     });
                 }
                 ClientMessages::Batch(client_messages) => {
-                    let transport = transport.clone();
-                    let self = self_clone.clone();
-                    let tx = tx.clone();
-
-                    tokio::spawn(async move {
-                        let handling_tasks: Vec<_> = client_messages
-                            .into_iter()
-                            .map(|client_message| self.handle_message(client_message, &transport))
-                            .collect();
-
-                        let send_result = match try_join_all(handling_tasks).await {
-                            Ok(results) => {
-                                let results: Vec<_> = results.into_iter().flatten().collect();
-                                if !results.is_empty() {
-                                    transport
-                                        .send_message(ServerMessages::Batch(results), None)
-                                        .map_err(|e| e.into())
-                                        .await
-                                } else {
-                                    Ok(None)
-                                }
-                            }
-                            Err(error) => Err(error),
-                        };
-
-                        if let Err(error) = tx.send(send_result).await {
-                            tracing::error!("Failed to send batch result to channel: {}", error);
-                        }
-                    });
+                    tracing::warn!(
+                        "Batch messages are not supported; ignoring {} messages",
+                        client_messages.len()
+                    );
                 }
             }
 
@@ -365,9 +286,227 @@ impl McpServer for ServerRuntime {
     fn session_id(&self) -> Option<SessionId> {
         self.session_id.to_owned()
     }
+
+    fn server_details(&self) -> &ServerDetails {
+        &self.server_details
+    }
+
+    fn store_subscription(&self, filter: SubscriptionFilter) {
+        let count = filter.resource_subscriptions.len();
+        if let Ok(mut guard) = self.subscriptions.try_write() {
+            *guard = Some(filter);
+            self.subscription_count
+                .store(count, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    fn clear_subscription(&self) {
+        if let Ok(mut guard) = self.subscriptions.try_write() {
+            *guard = None;
+            self.subscription_count
+                .store(0, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    /// Reject `subscriptions/listen` requests whose resource-subscription
+    /// count exceeds the per-session ceiling.
+    fn is_within_subscription_limit(&self, requested: usize) -> bool {
+        requested <= self.max_subscriptions
+    }
+
+    fn subscription_filter(&self) -> Option<SubscriptionFilter> {
+        self.subscriptions
+            .try_read()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
+
+    fn stream_started(&self) -> bool {
+        self.stream_state.stream_started()
+    }
+
+    fn stream_ended(&self) -> bool {
+        self.stream_state.stream_ended()
+    }
+
+    fn is_stream_active(&self) -> bool {
+        self.stream_state.is_stream_active()
+    }
+
+    fn register_notification_transport(&self) {
+        if let Ok(t) = ACTIVE_REQUEST_TRANSPORT.try_with(|t| t.clone()) {
+            if let Ok(mut guard) = self.notification_transport.try_write() {
+                *guard = Some(t);
+            }
+        }
+    }
+
+    fn set_active_log_level(&self, level: Option<crate::schema::LoggingLevel>) {
+        if let Ok(mut guard) = self.active_log_level.try_write() {
+            *guard = level;
+        }
+    }
+
+    async fn send_notification(&self, notification: NotificationFromServer) -> SdkResult<()> {
+        if !self.is_subscribed_to(&notification) {
+            return Ok(());
+        }
+        // SEP-2575: log messages are opt-in per request via `_meta.logLevel`;
+        // without it they MUST NOT be emitted.
+        if matches!(
+            &notification,
+            NotificationFromServer::LoggingMessageNotification(_)
+        ) && !self.active_request_allows_logging()
+        {
+            return Ok(());
+        }
+        // Subscription-scoped notifications are only meaningful on an active
+        // `subscriptions/listen` stream; without one they are dropped. The
+        // event-store resumability layer can queue them when enabled.
+        if is_subscription_scoped(&notification) && !self.is_stream_active() {
+            return Ok(());
+        }
+        let delivered = self.try_deliver_notification(notification).await?;
+        if delivered {
+            self.stream_state.touch();
+        }
+        Ok(())
+    }
 }
 
 impl ServerRuntime {
+    /// Register a transport as the session's notification channel (the open
+    /// `subscriptions/listen` stream), so subscription-scoped notifications
+    /// find the right delivery target even when emitted by an unrelated
+    /// request's handler.
+    #[allow(dead_code)]
+    pub(crate) async fn store_notification_transport(&self, transport: TransportType) {
+        let mut guard = self.notification_transport.write().await;
+        *guard = Some(transport);
+    }
+
+    /// If `transport` is the currently-registered notification channel,
+    /// clear it and mark the stream as ended.
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
+    async fn end_notification_stream_if_matches(&self, transport: &TransportType) {
+        let guard = self.notification_transport.read().await;
+        if let Some(stored) = guard.as_ref() {
+            if std::sync::Arc::ptr_eq(stored, transport) {
+                drop(guard);
+                self.clear_notification_transport().await;
+            }
+        }
+    }
+
+    /// Clear the notification channel and mark the stream as ended (called
+    /// when the listen stream closes).
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
+    async fn clear_notification_transport(&self) {
+        let mut guard = self.notification_transport.write().await;
+        if guard.take().is_some() {
+            self.stream_ended();
+        }
+    }
+
+    /// Delivers a notification on the appropriate channel and reports whether
+    /// it was written to a live transport.
+    ///
+    /// Routing policy (2026-07-28):
+    /// - **request-scoped** notifications (progress, log messages,
+    ///   cancellation) ride the in-flight request's own response stream via
+    ///   the `ACTIVE_REQUEST_TRANSPORT` task-local, falling back to the
+    ///   session's default (standalone) stream;
+    /// - **subscription-scoped** notifications (list-changed, resource
+    ///   updates, …) go to the session's registered notification stream
+    ///   (the open `subscriptions/listen` response), never to the unrelated
+    ///   request's stream.
+    ///
+    /// Delivery is best-effort as the spec allows ("the receiver is not
+    /// obligated to provide these notifications"): `Ok(false)` is returned
+    /// when no channel exists, and transport write failures are logged
+    /// rather than propagated, so an advisory notification can never fail
+    /// the handler that emitted it.
+    async fn try_deliver_notification(
+        &self,
+        notification: NotificationFromServer,
+    ) -> SdkResult<bool> {
+        let subscription_scoped = is_subscription_scoped(&notification);
+        let message = MessageFromServer::NotificationFromServer(notification);
+        let outgoing_request_id = self.request_id_gen.request_id_for_message(&message, None);
+        let mcp_message = ServerMessage::from_message(message, outgoing_request_id)?;
+        if let Some(observer) = self.message_observer.as_ref() {
+            observer.on_send(&mcp_message);
+        }
+
+        // Candidate channels in preference order.
+        let mut candidates: Vec<TransportType> = Vec::new();
+        if !subscription_scoped {
+            if let Ok(req_transport) = ACTIVE_REQUEST_TRANSPORT.try_with(|t| t.clone()) {
+                candidates.push(req_transport);
+            }
+        }
+        // Subscription-scoped notifications prefer the registered listen stream
+        // over the session's default standalone stream.
+        if let Some(listen_transport) = self.notification_transport.read().await.as_ref().cloned() {
+            candidates.push(listen_transport);
+        }
+        {
+            let transport_map = self.transport_map.read().await;
+            if let Some(default_transport) = transport_map.as_ref() {
+                candidates.push(default_transport.clone());
+            }
+        }
+
+        for transport in candidates {
+            match transport
+                .send_message(ServerMessages::Single(mcp_message.clone()), None)
+                .await
+            {
+                Ok(_) => return Ok(true),
+                Err(error) => {
+                    tracing::warn!("Dropping undeliverable notification: {error}");
+                }
+            }
+        }
+        tracing::debug!("Notification dropped: no active delivery stream for this session");
+        Ok(false)
+    }
+}
+
+/// Whether a notification is meaningful only within a subscription
+/// relationship (`subscriptions/listen`), as opposed to being tied to an
+/// in-flight request.
+///
+/// - **Subscription-scoped**: resource list/updates, tool/prompt list
+///   changes, the `subscriptions/acknowledged` handshake, and custom
+///   notifications (conservatively treated as subscription traffic so they
+///   are never leaked to clients that did not ask for them).
+/// - **Request-scoped** (returns `false`): progress, log messages and
+///   cancellation, which the client requests per request via `_meta`.
+fn is_subscription_scoped(notification: &NotificationFromServer) -> bool {
+    match notification {
+        NotificationFromServer::ResourceUpdatedNotification(_)
+        | NotificationFromServer::ResourceListChangedNotification(_)
+        | NotificationFromServer::PromptListChangedNotification(_)
+        | NotificationFromServer::ToolListChangedNotification(_)
+        | NotificationFromServer::SubscriptionsAcknowledgedNotification(_)
+        | NotificationFromServer::CustomNotification(_) => true,
+        NotificationFromServer::ProgressNotification(_)
+        | NotificationFromServer::LoggingMessageNotification(_)
+        | NotificationFromServer::CancelledNotification(_) => false,
+    }
+}
+
+impl ServerRuntime {
+    fn active_request_allows_logging(&self) -> bool {
+        self.active_log_level
+            .try_read()
+            .ok()
+            .and_then(|g| g.clone())
+            .is_some()
+    }
+
+    #[allow(dead_code)]
     pub(crate) async fn consume_payload_string(&self, payload: &str) -> SdkResult<()> {
         let transport_map = self.transport_map.read().await;
 
@@ -403,23 +542,24 @@ impl ServerRuntime {
             // Handle a client request
             ClientMessage::Request(client_jsonrpc_request) => {
                 let request_id = client_jsonrpc_request.request_id().clone();
+                let method = client_jsonrpc_request.method().to_string();
+                let span = tracing::info_span!(
+                    "mcp.dispatch",
+                    request.method = %method,
+                    request.id = %request_id,
+                );
+                let _enter = span.enter();
 
                 let result = self
                     .handler
                     .handle_request(client_jsonrpc_request, self.clone())
                     .await;
 
-                // create a response to send back to the client
+                // create a response to send back to the client;
+                // handler errors become JSON-RPC error responses.
                 let response: MessageFromServer = match result {
                     Ok(success_value) => success_value.into(),
-                    Err(error_value) => {
-                        // Error occurred during initialization.
-                        // A likely cause could be an unsupported protocol version.
-                        if !self.is_initialized() {
-                            return Err(error_value.into());
-                        }
-                        MessageFromServer::Error(error_value)
-                    }
+                    Err(error_value) => MessageFromServer::Error(error_value),
                 };
 
                 let mpc_message: ServerMessage =
@@ -469,6 +609,7 @@ impl ServerRuntime {
         Ok(response)
     }
 
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub(crate) async fn store_transport(
         &self,
         stream_id: &str,
@@ -490,75 +631,45 @@ impl ServerRuntime {
             tracing::trace!("save transport for stream id : {}", stream_id);
             *transport_map = Some(transport);
         } // release write lock before notifying
-          // ensure wait_for_transport_ready wont miss this wakeup regardless of
+          // ensure wait_for_transport_ready won't miss this wakeup regardless of
           // scheduling order.
-        self.transport_ready.notify_one();
+        #[cfg(feature = "sse")]
+        self.transport_ready.notify_waiters();
         Ok(())
     }
 
     /// Waits until the DEFAULT standalone transport has been stored in
-    /// `transport_map` and is alive (not shut down), then returns a clone of it.
+    /// `transport_map`. Returns immediately if it is already present.
+    ///
+    /// The spawned `start_stream` task calls `store_transport` asynchronously;
+    /// callers that return an HTTP response to the client before that task
+    /// completes must block here so the client cannot send a follow-up request
+    /// that needs a registered transport before it is ready.
     ///
     /// Returns `Err` if the timeout elapses, which indicates the spawned
-    /// `start_stream` task failed or hung before calling `store_transport`,
-    /// or no live standalone stream exists.
-    ///
-    /// # Race-free logic
-    ///  - Fast path: a live transport is already in the map → returned immediately.
-    ///  - `store_transport()` fires `notify_one()`, whose stored permit guarantees
-    ///    no missed wakeup if it ran between the map check and the `await`.
-    ///  - On every wakeup the map is re-checked, so a stale/shut-down entry
-    ///    (e.g. from a previous connection) is never returned.
-    ///  - A cascading `notify_one()` re-arms the permit so other parked waiters
-    ///    also get to re-check the map.
-    async fn wait_for_live_default_transport(
-        &self,
-        timeout: std::time::Duration,
-    ) -> SdkResult<TransportType> {
-        let deadline = tokio::time::Instant::now() + timeout;
-        loop {
-            {
-                let transport_map = self.transport_map.read().await;
-                if let Some(transport) = transport_map.as_ref() {
-                    if !transport.is_shut_down().await {
-                        // Cascade the wakeup so other parked waiters re-check the map.
-                        self.transport_ready.notify_one();
-                        return Ok(transport.clone());
-                    }
-                }
-            }
-            let now = tokio::time::Instant::now();
-            if now >= deadline {
-                return Err(SdkError::internal_error()
-                    .with_message("Timed out waiting for DEFAULT transport storage")
-                    .into());
-            }
-            tracing::trace!("Waiting for a live DEFAULT transport to be stored…");
-            tokio::time::timeout(deadline - now, self.transport_ready.notified())
-                .await
-                .map_err(|_| {
-                    SdkError::internal_error()
-                        .with_message("Timed out waiting for DEFAULT transport storage")
-                })?;
-        }
-    }
-
-    /// Waits until the DEFAULT standalone transport has been stored in
-    /// `transport_map` and is alive. Returns immediately if it already is.
-    ///
-    /// Returns `Err` if the timeout elapses, which indicates the
-    /// spawned `start_stream` task failed or hung before calling
-    /// `store_transport`.
+    /// `start_stream` task failed or hung before calling `store_transport`.
+    #[cfg(feature = "sse")]
     pub(crate) async fn wait_for_transport_ready(
         &self,
         timeout: std::time::Duration,
     ) -> SdkResult<()> {
-        self.wait_for_live_default_transport(timeout)
+        // Fast path: transport already stored — no need to wait.
+        if self.transport_map.read().await.is_some() {
+            return Ok(());
+        }
+        tracing::trace!("Waiting for DEFAULT transport to be stored…");
+        tokio::time::timeout(timeout, self.transport_ready.notified())
             .await
-            .map(|_| ())
+            .map_err(|_| {
+                SdkError::internal_error()
+                    .with_message("Timed out waiting for DEFAULT transport storage")
+            })?;
+        tracing::trace!("DEFAULT transport stored, proceeding.");
+        Ok(())
     }
 
     //TODO: re-visit and simplify unnecessary hashmap
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub(crate) async fn remove_transport(
         &self,
         stream_id: &str,
@@ -593,6 +704,7 @@ impl ServerRuntime {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn default_stream_exists(&self) -> bool {
         let transport_map = self.transport_map.read().await;
         let live_transport = if let Some(t) = transport_map.as_ref() {
@@ -603,6 +715,7 @@ impl ServerRuntime {
         live_transport
     }
 
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub(crate) async fn start_stream(
         self: Arc<Self>,
         transport: Arc<
@@ -624,7 +737,7 @@ impl ServerRuntime {
             self.store_transport(stream_id, transport.clone()).await?;
         }
 
-        let self_clone = self.clone();
+        let _self_clone = self.clone();
 
         let (disconnect_tx, mut disconnect_rx) = oneshot::channel::<()>();
         let abort_alive_task = transport
@@ -642,6 +755,7 @@ impl ServerRuntime {
         if let Some(payload) = payload {
             if let Err(err) = transport.consume_string_payload(&payload).await {
                 let _ = self.remove_transport(stream_id, &transport).await;
+                self.end_notification_stream_if_matches(&transport).await;
                 return Err(err.into());
             }
         }
@@ -684,34 +798,7 @@ impl ServerRuntime {
                             }));
                         }
                         ClientMessages::Batch(client_messages) => {
-
-                            let transport = transport.clone();
-                            let self_clone = self_clone.clone();
-                            let tx = tx.clone();
-
-                            tokio::spawn(ACTIVE_REQUEST_TRANSPORT.scope(transport.clone(), async move {
-                                let handling_tasks: Vec<_> = client_messages
-                                    .into_iter()
-                                    .map(|client_message| self_clone.handle_message(client_message, &transport))
-                                    .collect();
-
-                                    let send_result = match try_join_all(handling_tasks).await {
-                                         Ok(results) => {
-                                             let results: Vec<_> = results.into_iter().flatten().collect();
-                                             if !results.is_empty() {
-                                                 transport.send_message(ServerMessages::Batch(results), None)
-                                                 .map_err(|e| e.into())
-                                                 .await
-                                             }else {
-                                                 Ok(None)
-                                             }
-                                         },
-                                        Err(error) => Err(error),
-                                    };
-                                    if let Err(error) = tx.send(send_result).await {
-                                        tracing::error!("Failed to send batch result to channel: {}", error);
-                                    }
-                            }));
+                            tracing::warn!("Batch messages are not supported; ignoring {} messages", client_messages.len());
                         }
                     }
 
@@ -736,6 +823,7 @@ impl ServerRuntime {
                         result?; // Propagate errors
                     }
                     self.remove_transport(stream_id, &transport).await?;
+                    self.end_notification_stream_if_matches(&transport).await;
                     // Disconnection detected by keep-alive task
                     return Err(SdkError::connection_closed().into());
 
@@ -744,64 +832,33 @@ impl ServerRuntime {
         }
     }
 
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub(crate) fn new_instance(
-        server_details: Arc<InitializeResult>,
+        server_details: Arc<ServerDetails>,
         handler: Arc<dyn McpServerHandler>,
         session_id: SessionId,
         auth_info: Option<AuthInfo>,
-        task_store: Option<Arc<ServerTaskStore>>,
-        client_task_store: Option<Arc<ClientTaskStore>>,
         message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
     ) -> Arc<Self> {
         use tokio::sync::RwLock;
 
-        let (client_details_tx, client_details_rx) =
-            watch::channel::<Option<InitializeRequestParams>>(None);
         Arc::new(Self {
             server_details,
             handler,
             session_id: Some(session_id),
             transport_map: tokio::sync::RwLock::new(None),
+            #[cfg(feature = "sse")]
             transport_ready: Notify::new(),
-            client_details_tx,
-            client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(auth_info),
-            task_store,
-            client_task_store,
             message_observer,
+            subscriptions: RwLock::new(None),
+            subscription_count: std::sync::atomic::AtomicUsize::new(0),
+            max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
+            stream_state: subscription_stream::SubscriptionStreamState::new(),
+            notification_transport: tokio::sync::RwLock::new(None),
+            active_log_level: tokio::sync::RwLock::new(None),
         })
-    }
-
-    pub async fn poll_task_status(
-        self: Arc<ServerRuntime>,
-        task_id: TaskId,
-        session_id: Option<String>,
-        task_store: Arc<ClientTaskStore>,
-    ) -> SdkResult<TaskStatusUpdate> {
-        let result = self
-            .request_get_task(GetTaskParams {
-                task_id: task_id.to_string(),
-            })
-            .await?;
-
-        if result.is_terminal() {
-            let task_payload = self
-                .request_get_task_payload(GetTaskPayloadParams {
-                    task_id: task_id.clone(),
-                })
-                .await?;
-
-            task_store
-                .store_task_result(
-                    task_id.as_str(),
-                    result.status,
-                    task_payload.into(),
-                    session_id.as_ref(),
-                )
-                .await;
-        }
-        Ok((result.status, result.poll_interval))
     }
 
     pub(crate) fn new<T>(options: McpServerOptions<T>) -> Arc<Self>
@@ -814,57 +871,22 @@ impl ServerRuntime {
             ServerMessage,
         >,
     {
-        let (client_details_tx, client_details_rx) =
-            watch::channel::<Option<InitializeRequestParams>>(None);
-
-        let runtime = Arc::new(Self {
+        Arc::new(Self {
             server_details: Arc::new(options.server_details),
             handler: options.handler,
             session_id: None,
             transport_map: tokio::sync::RwLock::new(Some(Arc::new(options.transport))),
+            #[cfg(feature = "sse")]
             transport_ready: Notify::new(),
-            client_details_tx,
-            client_details_rx,
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
             auth_info: RwLock::new(None),
-            task_store: options.task_store,
-            client_task_store: options.client_task_store,
             message_observer: options.message_observer,
-        });
-
-        let runtime_clone = runtime.clone();
-        if let Some(task_store) = runtime_clone.task_store() {
-            // send TaskStatusNotification  if task_store is present and supports subscribe()
-            if let Some(mut stream) = task_store.subscribe() {
-                tokio::spawn(async move {
-                    while let Some((params, _)) = stream.next().await {
-                        let _ = runtime_clone.notify_task_status(params).await;
-                    }
-                });
-            }
-        }
-
-        // Task polling for server initiated tasks
-        if let Some(client_task_store) = runtime.client_task_store.clone() {
-            let task_store_clone = client_task_store.clone();
-            let runtime_clone = runtime.clone();
-
-            let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
-                let task_store_clone = client_task_store.clone();
-                let runtime_clone = runtime_clone.clone();
-
-                Box::pin(async move {
-                    runtime_clone
-                        .poll_task_status(task_id, session_id, task_store_clone)
-                        .await
-                })
-            });
-
-            if let Err(error) = task_store_clone.start_task_polling(callback) {
-                tracing::error!("Failed to start task polling: {error}");
-            }
-        }
-
-        runtime
+            subscriptions: RwLock::new(None),
+            subscription_count: std::sync::atomic::AtomicUsize::new(0),
+            max_subscriptions: DEFAULT_MAX_SUBSCRIPTIONS,
+            stream_state: subscription_stream::SubscriptionStreamState::new(),
+            notification_transport: tokio::sync::RwLock::new(None),
+            active_log_level: tokio::sync::RwLock::new(None),
+        })
     }
 }

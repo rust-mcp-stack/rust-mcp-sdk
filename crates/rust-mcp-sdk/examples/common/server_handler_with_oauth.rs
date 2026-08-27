@@ -2,19 +2,15 @@ use async_trait::async_trait;
 use rust_mcp_sdk::auth::AuthInfo;
 use rust_mcp_sdk::schema::{
     schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ListToolsResult,
-    PaginatedRequestParams, RpcError, TextContent,
+    ListToolsResultCacheScope, PaginatedRequestParams, RpcError, ServerResult, TextContent,
 };
 use rust_mcp_sdk::{
     macros::{mcp_tool, JsonSchema},
     mcp_server::ServerHandler,
-    McpServer,
+    McpServer, RequestContext,
 };
 use std::sync::Arc;
-use std::vec;
 
-//*******************************//
-//  Show Authentication Info  //
-//*******************************//
 #[mcp_tool(
     name = "show_auth_info",
     description = "Shows current user authentication info in json format"
@@ -24,7 +20,7 @@ pub struct ShowAuthInfo {}
 impl ShowAuthInfo {
     pub fn call_tool(&self, auth_info: Option<AuthInfo>) -> Result<CallToolResult, CallToolError> {
         let auth_info_json = serde_json::to_string_pretty(&auth_info).map_err(|err| {
-            CallToolError::from_message(format!("Undable to display auth info as string :{err}"))
+            CallToolError::from_message(format!("Unable to display auth info as string: {err}"))
         })?;
         Ok(CallToolResult::text_content(vec![TextContent::from(
             auth_info_json,
@@ -32,40 +28,40 @@ impl ShowAuthInfo {
     }
 }
 
-// Custom Handler to handle MCP Messages
 pub struct ServerHandlerAuth;
-
-// To check out a list of all the methods in the trait that you can override, take a look at
-// https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_server_handler.rs
 
 #[async_trait]
 #[allow(unused)]
 impl ServerHandler for ServerHandlerAuth {
-    // Handle ListToolsRequest, return list of available tools as ListToolsResult
     async fn handle_list_tools_request(
         &self,
-        params: Option<PaginatedRequestParams>,
-        runtime: Arc<dyn McpServer>,
+        _params: Option<PaginatedRequestParams>,
+        _context: &RequestContext,
+        _runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
+            cache_scope: ListToolsResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
             meta: None,
             next_cursor: None,
             tools: vec![ShowAuthInfo::tool()],
         })
     }
 
-    /// Handles incoming CallToolRequest and processes it using the appropriate tool.
     async fn handle_call_tool_request(
         &self,
         params: CallToolRequestParams,
+        _context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
+    ) -> std::result::Result<ServerResult, CallToolError> {
         if params.name.eq(&ShowAuthInfo::tool_name()) {
             let tool = ShowAuthInfo::default();
             tool.call_tool(runtime.auth_info_cloned().await)
+                .map(|r| r.into())
         } else {
             Err(CallToolError::from_message(format!(
-                "Tool \"{}\" does not exists or inactive!",
+                "Tool \"{}\" does not exist or inactive!",
                 params.name,
             )))
         }

@@ -1,12 +1,9 @@
 use crate::auth::AuthInfo;
 use crate::mcp_http::types::GenericBody;
 use crate::schema::schema_utils::{ClientMessage, SdkError};
-#[cfg(feature = "server")]
-use crate::McpServer;
 use crate::{
-    error::SdkResult,
+    error::{McpSdkError, SdkResult},
     mcp_http::{McpAppState, McpHttpError, McpHttpResult},
-    utils::validate_mcp_protocol_version,
 };
 #[cfg(feature = "server")]
 use crate::{
@@ -14,17 +11,18 @@ use crate::{
     mcp_server::{server_runtime, ServerRuntime},
     mcp_traits::{IdGenerator, McpServerHandler},
 };
+use base64::Engine as _;
 use bytes::Bytes;
 use futures::stream;
 use http::{
     header::{ACCEPT, CONNECTION, CONTENT_TYPE},
-    HeaderMap, HeaderValue, StatusCode,
+    HeaderMap, StatusCode,
 };
 use http_body::Frame;
 use http_body_util::{BodyExt, Full, StreamBody};
 use rust_mcp_transport::{
-    EventId, McpDispatch, SessionId, SseEvent, SseTransport, StreamId, ID_SEPARATOR,
-    MCP_PROTOCOL_VERSION_HEADER, MCP_SESSION_ID_HEADER,
+    EventId, SessionId, SseEvent, SseTransport, StreamId, MCP_METHOD_HEADER, MCP_NAME_HEADER,
+    MCP_PROTOCOL_VERSION_HEADER,
 };
 use serde_json::{Map, Value};
 use std::sync::Arc;
@@ -48,6 +46,7 @@ const DUPLEX_BUFFER_SIZE: usize = 8192;
 ///
 /// # Returns
 /// * `Result<Event, Infallible>` - The constructed SSE event, infallible
+#[cfg(feature = "sse")]
 fn initial_sse_event(endpoint: &str) -> Result<Bytes, McpHttpError> {
     Ok(SseEvent::default()
         .with_event("endpoint")
@@ -73,6 +72,7 @@ pub fn url_base(url: &url::Url) -> String {
 /// This function performs a **case-insensitive** check for the `Bearer`
 /// authentication scheme. If present, the prefix is removed and the
 /// remaining parameter string is returned trimmed.
+#[cfg(feature = "auth")]
 fn strip_bearer_prefix(header: &str) -> &str {
     let lower = header.to_lowercase();
     if lower.starts_with("bearer ") {
@@ -160,7 +160,7 @@ async fn create_sse_stream(
     state: Arc<McpAppState>,
     payload: Option<&str>,
     standalone: bool,
-    last_event_id: Option<EventId>,
+    _last_event_id: Option<EventId>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
     let payload_string = payload.map(|p| p.to_string());
 
@@ -178,26 +178,20 @@ async fn create_sse_stream(
     // writable stream to deliver message to the client
     let (write_tx, write_rx) = duplex(DUPLEX_BUFFER_SIZE);
 
-    let session_id = Arc::new(session_id);
+    let _session_id = Arc::new(session_id);
     let stream_id: Arc<StreamId> = if standalone {
         Arc::new(DEFAULT_STREAM_ID.to_string())
     } else {
         Arc::new(state.stream_id_gen.generate())
     };
 
-    let event_store = state.event_store.as_ref().map(Arc::clone);
-    let resumability_enabled = event_store.is_some();
-
-    let mut transport = SseTransport::<ClientMessage>::new(
+    let transport = SseTransport::<ClientMessage>::new(
         read_rx,
         write_tx,
         read_tx,
         Arc::clone(&state.transport_options),
     )
     .map_err(|err| McpHttpError::TransportError(err.to_string()))?;
-    if let Some(event_store) = event_store.clone() {
-        transport.make_resumable((*session_id).clone(), (*stream_id).clone(), event_store);
-    }
     let transport = Arc::new(transport);
 
     let ping_interval = state.ping_interval;
@@ -206,6 +200,27 @@ async fn create_sse_stream(
     let transport_clone = transport.clone();
     let transport_for_remove: crate::mcp_runtimes::server_runtime::TransportType =
         transport.clone();
+
+    // Register long-lived `subscriptions/listen` streams so graceful shutdown
+    // can close them; reject new listen streams at the configured ceiling.
+    let is_listen = payload_string
+        .as_deref()
+        .map(is_listen_request)
+        .unwrap_or(false);
+    if is_listen && !state.register_listen_stream(transport.clone()).await {
+        tracing::warn!("listen-stream ceiling reached; rejecting subscriptions/listen");
+        let body = Full::new(Bytes::from(
+            r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Too many active subscription streams"}}"#,
+        ))
+        .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        .boxed();
+        let response = http::Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .header(CONTENT_TYPE, "application/json")
+            .body(body)
+            .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
+        return Ok(response);
+    }
 
     //Start the server runtime
     tokio::spawn(async move {
@@ -224,46 +239,61 @@ async fn create_sse_stream(
         let _ = runtime
             .remove_transport(&stream_id_clone, &transport_for_remove)
             .await;
+        if is_listen {
+            state.unregister_listen_stream(&transport_for_remove).await;
+        }
     });
 
     // Construct SSE stream
-    let reader = BufReader::new(write_rx);
+    let mut reader = BufReader::new(write_rx);
+
+    // Peek at the first outgoing message so JSON-RPC errors map to the
+    // HTTP status SEP-2575 prescribes (e.g. -32601 → 404, -32602 → 400).
+    // Notifications (no request in the payload) produce no response message
+    // and are answered with 202 Accepted as before.
+    let mut first_line: Option<String> = None;
+    let mut status_code = if payload_contains_request {
+        StatusCode::OK
+    } else {
+        StatusCode::ACCEPTED
+    };
+    if payload_contains_request {
+        let mut line = String::new();
+        match reader.read_line(&mut line).await {
+            Ok(0) => {} // EOF before any message
+            Ok(_) => {
+                let trimmed = line.trim_end_matches('\n').to_owned();
+                if let Some(code) = rpc_error_code_in_payload(&trimmed) {
+                    status_code = status_for_rpc_error_code(code);
+                }
+                first_line = Some(trimmed);
+            }
+            Err(_) => {}
+        }
+    }
 
     // send outgoing messages from server to the client over the sse stream
-    let message_stream = stream::unfold(reader, move |mut reader| {
+    let message_stream = stream::unfold((first_line, reader), move |(mut pending, mut reader)| {
         async move {
-            let mut line = String::new();
-
-            match reader.read_line(&mut line).await {
-                Ok(0) => None, // EOF
-                Ok(_) => {
-                    let trimmed_line = line.trim_end_matches('\n').to_owned();
-
-                    // empty sse comment to keep-alive
-                    if is_empty_sse_message(&trimmed_line) {
-                        return Some((Ok(SseEvent::default().as_bytes()), reader));
-                    }
-
-                    let (event_id, message) = match (
-                        resumability_enabled,
-                        trimmed_line.split_once(char::from(ID_SEPARATOR)),
-                    ) {
-                        (true, Some((id, msg))) => (Some(id.to_string()), msg.to_string()),
-                        _ => (None, trimmed_line),
-                    };
-
-                    let event = match event_id {
-                        Some(id) => SseEvent::default()
-                            .with_data(message)
-                            .with_id(id)
-                            .as_bytes(),
-                        None => SseEvent::default().with_data(message).as_bytes(),
-                    };
-
-                    Some((Ok(event), reader))
+            let trimmed_line = if let Some(line) = pending.take() {
+                line
+            } else {
+                let mut line = String::new();
+                match reader.read_line(&mut line).await {
+                    Ok(0) => return None, // EOF
+                    Ok(_) => line.trim_end_matches('\n').to_owned(),
+                    Err(e) => return Some((Err(e), (pending, reader))),
                 }
-                Err(e) => Some((Err(e), reader)),
+            };
+
+            // empty sse comment to keep-alive
+            if is_empty_sse_message(&trimmed_line) {
+                return Some((Ok(SseEvent::default().as_bytes()), (pending, reader)));
             }
+
+            let event = SseEvent::default().with_data(trimmed_line).as_bytes();
+
+            Some((Ok(event), (pending, reader)))
         }
     });
 
@@ -274,47 +304,13 @@ async fn create_sse_stream(
                 .map_err(|err: std::io::Error| McpHttpError::HttpError(err.to_string()))
         })));
 
-    let session_id_value = HeaderValue::from_str(&session_id)
-        .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
-
-    let status_code = if !payload_contains_request {
-        StatusCode::ACCEPTED
-    } else {
-        StatusCode::OK
-    };
-
     let response = http::Response::builder()
         .status(status_code)
         .header(CONTENT_TYPE, "text/event-stream")
-        .header(MCP_SESSION_ID_HEADER, session_id_value)
         .header(CONNECTION, "keep-alive")
+        .header("X-Accel-Buffering", "no")
         .body(streaming_body)
         .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
-
-    // if last_event_id exists we replay messages from the event-store
-    tokio::spawn(async move {
-        if let Some(last_event_id) = last_event_id {
-            if let Some(event_store) = state.event_store.as_ref() {
-                let events = event_store
-                    .events_after(last_event_id)
-                    .await
-                    .unwrap_or_else(|err| {
-                        tracing::error!("{err}");
-                        None
-                    });
-
-                if let Some(events) = events {
-                    for message_payload in events.messages {
-                        // skip storing replay messages
-                        let error = transport.write_str(&message_payload, true).await;
-                        if let Err(error) = error {
-                            tracing::trace!("Error replaying message: {error}")
-                        }
-                    }
-                }
-            }
-        }
-    });
 
     Ok(response)
 }
@@ -335,126 +331,33 @@ fn contains_request(json_str: &str) -> Result<bool, serde_json::Error> {
     }
 }
 
-fn is_result(json_str: &str) -> Result<bool, serde_json::Error> {
-    let value: serde_json::Value = serde_json::from_str(json_str)?;
+/// Returns `true` if the JSON payload is a `subscriptions/listen` request.
+///
+/// A listen request opens a long-lived SSE stream that has no natural end;
+/// the transport registry tracks it so graceful shutdown can close it.
+#[cfg(feature = "server")]
+fn is_listen_request(json_str: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) else {
+        return false;
+    };
     match value {
-        serde_json::Value::Object(obj) => Ok(obj.contains_key("result")),
-        serde_json::Value::Array(arr) => Ok(arr.iter().all(|item| {
+        serde_json::Value::Object(obj) => {
+            obj.get("method").and_then(|m| m.as_str()) == Some("subscriptions/listen")
+        }
+        serde_json::Value::Array(arr) => arr.iter().any(|item| {
             item.as_object()
-                .map(|obj| obj.contains_key("result"))
-                .unwrap_or(false)
-        })),
-        _ => Ok(false),
+                .and_then(|obj| obj.get("method"))
+                .and_then(|m| m.as_str())
+                == Some("subscriptions/listen")
+        }),
+        _ => false,
     }
 }
 
-#[cfg(feature = "server")]
-pub(crate) async fn create_standalone_stream(
-    session_id: SessionId,
-    last_event_id: Option<EventId>,
-    state: Arc<McpAppState>,
-    auth_info: Option<AuthInfo>,
-) -> McpHttpResult<http::Response<GenericBody>> {
-    let runtime = state
-        .session_store
-        .get(&session_id)
-        .await
-        .ok_or(McpHttpError::SessionIdInvalid(session_id.to_string()))?;
-
-    runtime.update_auth_info(auth_info).await;
-
-    if runtime.default_stream_exists().await {
-        let error =
-            SdkError::bad_request().with_message("Only one SSE stream is allowed per session");
-        return error_response(StatusCode::CONFLICT, error)
-            .map_err(|err| McpHttpError::HttpError(err.to_string()));
-    }
-
-    if let Some(last_event_id) = last_event_id.as_ref() {
-        tracing::trace!(
-            "SSE stream re-connected with last-event-id: {}",
-            last_event_id
-        );
-    }
-
-    let mut response = create_sse_stream(
-        runtime.clone(),
-        session_id.clone(),
-        state.clone(),
-        None,
-        true,
-        last_event_id,
-    )
-    .await?;
-
-    // Wait for the DEFAULT transport to be stored in transport_map before
-    // returning the SSE response to the client. The spawned start_stream task
-    // inside create_sse_stream calls store_transport() asynchronously; we must
-    // block here so the client cannot send tools/call (which needs transport_map
-    // for reverse requests like sampling/createMessage) before it is ready.
-    runtime
-        .wait_for_transport_ready(state.ping_interval)
-        .await
-        .map_err(|err| {
-            McpHttpError::HttpError(format!("Failed waiting for transport readiness: {err}"))
-        })?;
-
-    *response.status_mut() = StatusCode::OK;
-    Ok(response)
-}
-
-#[cfg(feature = "server")]
-pub(crate) async fn start_new_session(
-    state: Arc<McpAppState>,
-    payload: &str,
-    auth_info: Option<AuthInfo>,
-) -> McpHttpResult<http::Response<GenericBody>> {
-    if state.session_store.is_full().await {
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            SdkError::internal_error()
-                .with_message("Server is at maximum session capacity, try again later."),
-        );
-    }
-
-    let session_id: SessionId = state.id_generator.generate();
-
-    let h: Arc<dyn McpServerHandler> = state.handler.clone();
-    // create a new server instance with unique session_id and
-    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
-        Arc::clone(&state.server_details),
-        h,
-        session_id.to_owned(),
-        auth_info,
-        state.task_store.clone(),
-        state.client_task_store.clone(),
-        state.message_observer.clone(),
-    );
-
-    tracing::info!("a new client joined : {}", &session_id);
-
-    let response = create_sse_stream(
-        runtime.clone(),
-        session_id.clone(),
-        state.clone(),
-        Some(payload),
-        false,
-        None,
-    )
-    .await;
-
-    if response.is_ok() {
-        state
-            .session_store
-            .set(session_id.to_owned(), runtime.clone())
-            .await;
-    }
-    response
-}
 #[cfg(feature = "server")]
 async fn single_shot_stream(
     runtime: Arc<ServerRuntime>,
-    session_id: SessionId,
+    _session_id: SessionId,
     state: Arc<McpAppState>,
     payload: Option<&str>,
     standalone: bool,
@@ -509,20 +412,20 @@ async fn single_shot_stream(
         Err(e) => Some(Err(e)),
     };
 
-    let session_id_value = HeaderValue::from_str(&session_id)
-        .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
-
     match response {
         Some(response_result) => match response_result {
             Ok(response_str) => {
+                // Map JSON-RPC error codes to their SEP-2575 HTTP status.
+                let status = rpc_error_code_in_payload(&response_str)
+                    .map(status_for_rpc_error_code)
+                    .unwrap_or(StatusCode::OK);
                 let body = Full::new(Bytes::from(response_str))
                     .map_err(|err| McpHttpError::HttpError(err.to_string()))
                     .boxed();
 
                 http::Response::builder()
-                    .status(StatusCode::OK)
+                    .status(status)
                     .header(CONTENT_TYPE, "application/json")
-                    .header(MCP_SESSION_ID_HEADER, session_id_value)
                     .body(body)
                     .map_err(|err| McpHttpError::HttpError(err.to_string()))
             }
@@ -554,114 +457,57 @@ async fn single_shot_stream(
 
 #[cfg(feature = "server")]
 pub(crate) async fn process_incoming_message_return(
-    session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
     auth_info: Option<AuthInfo>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
-    match state.session_store.get(&session_id).await {
-        Some(runtime) => {
-            runtime.update_auth_info(auth_info).await;
-            single_shot_stream(
-                runtime.clone(),
-                session_id,
-                state.clone(),
-                Some(payload),
-                false,
-            )
-            .await
-            // Ok(StatusCode::OK.into_response())
-        }
-        None => {
-            let error = SdkError::session_not_found();
-            error_response(StatusCode::NOT_FOUND, error)
-                .map_err(|err| McpHttpError::HttpError(err.to_string()))
-        }
-    }
+    let session_id: SessionId = state.id_generator.generate();
+    let h: Arc<dyn McpServerHandler> = state.handler.clone();
+    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
+        Arc::clone(&state.server_details),
+        h,
+        session_id.to_owned(),
+        auth_info,
+        state.message_observer.clone(),
+    );
+    single_shot_stream(
+        runtime.clone(),
+        session_id,
+        state.clone(),
+        Some(payload),
+        false,
+    )
+    .await
 }
 
 #[cfg(feature = "server")]
 pub(crate) async fn process_incoming_message(
-    session_id: SessionId,
     state: Arc<McpAppState>,
     payload: &str,
     auth_info: Option<AuthInfo>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
-    match state.session_store.get(&session_id).await {
-        Some(runtime) => {
-            runtime.update_auth_info(auth_info).await;
-            // when receiving a result in a streamable_http server, that means it was sent by the standalone sse transport
-            // it should be processed by the same transport , therefore no need to call create_sse_stream
-            let Ok(is_result) = is_result(payload) else {
-                return error_response(StatusCode::BAD_REQUEST, SdkError::parse_error());
-            };
-
-            if is_result {
-                match runtime.consume_payload_string(payload).await {
-                    Ok(()) => {
-                        let body = Full::new(Bytes::new())
-                            .map_err(|err| McpHttpError::HttpError(err.to_string()))
-                            .boxed();
-                        http::Response::builder()
-                            .status(200)
-                            .header("Content-Type", "application/json")
-                            .body(body)
-                            .map_err(|err| McpHttpError::HttpError(err.to_string()))
-                    }
-                    Err(err) => {
-                        let error =
-                            SdkError::internal_error().with_message(err.to_string().as_ref());
-                        error_response(StatusCode::BAD_REQUEST, error)
-                    }
-                }
-            } else {
-                create_sse_stream(
-                    runtime.clone(),
-                    session_id.clone(),
-                    state.clone(),
-                    Some(payload),
-                    false,
-                    None,
-                )
-                .await
-            }
-        }
-        None => {
-            let error = SdkError::session_not_found();
-            error_response(StatusCode::NOT_FOUND, error)
-        }
-    }
+    let session_id: SessionId = state.id_generator.generate();
+    let h: Arc<dyn McpServerHandler> = state.handler.clone();
+    let runtime: Arc<ServerRuntime> = server_runtime::create_server_instance(
+        Arc::clone(&state.server_details),
+        h,
+        session_id.to_owned(),
+        auth_info,
+        state.message_observer.clone(),
+    );
+    create_sse_stream(
+        runtime.clone(),
+        session_id,
+        state.clone(),
+        Some(payload),
+        false,
+        None,
+    )
+    .await
 }
 
 pub(crate) fn is_empty_sse_message(sse_payload: &str) -> bool {
     sse_payload.is_empty() || sse_payload.trim() == ":"
-}
-
-#[cfg(feature = "server")]
-pub(crate) async fn delete_session(
-    session_id: SessionId,
-    state: Arc<McpAppState>,
-) -> McpHttpResult<http::Response<GenericBody>> {
-    match state.session_store.get(&session_id).await {
-        Some(runtime) => {
-            runtime.shutdown().await;
-            state.session_store.delete(&session_id).await;
-            tracing::info!("client disconnected : {}", &session_id);
-
-            let body = Full::new(Bytes::from("ok"))
-                .map_err(|err| McpHttpError::HttpError(err.to_string()))
-                .boxed();
-            http::Response::builder()
-                .status(200)
-                .header("Content-Type", "application/json")
-                .body(body)
-                .map_err(|err| McpHttpError::HttpError(err.to_string()))
-        }
-        None => {
-            let error = SdkError::session_not_found();
-            error_response(StatusCode::NOT_FOUND, error)
-        }
-    }
 }
 
 pub(crate) fn acceptable_content_type(headers: &HeaderMap) -> bool {
@@ -674,6 +520,7 @@ pub(crate) fn acceptable_content_type(headers: &HeaderMap) -> bool {
         .any(|val| val.trim().starts_with("application/json"))
 }
 
+#[cfg(feature = "server")]
 pub(crate) fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkResult<()> {
     let protocol_version_header = headers
         .get(MCP_PROTOCOL_VERSION_HEADER)
@@ -685,18 +532,377 @@ pub(crate) fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkRe
         return Ok(());
     }
 
-    validate_mcp_protocol_version(protocol_version_header)
+    // Only the header *form* is validated here: any non-empty printable value
+    // is a syntactically acceptable version string. Whether the version is
+    // actually supported is negotiated later (SEP-2575) and answered with an
+    // `UnsupportedProtocolVersionError` (-32022) — not a parse rejection.
+    if protocol_version_header
+        .chars()
+        .all(|c| matches!(c as u32, 0x21..=0x7E))
+    {
+        Ok(())
+    } else {
+        Err(McpSdkError::Protocol {
+            kind: crate::error::ProtocolErrorKind::IncompatibleVersion {
+                requested: protocol_version_header.to_string(),
+                current: crate::schema::ProtocolVersion::latest().to_string(),
+            },
+        })
+    }
 }
 
-pub(crate) fn accepts_event_stream(headers: &HeaderMap) -> bool {
-    let accept_header = headers
-        .get(ACCEPT)
-        .and_then(|val| val.to_str().ok())
-        .unwrap_or("");
+/// Stateless-request validation gate (SEP-2575), applied to every JSON-RPC
+/// request received over HTTP before it is dispatched to a session.
+///
+/// Returns `Some((status, error, request_id))` when the request must be
+/// rejected, `None` when it may proceed. Notifications (no `id`) and
+/// unparseable payloads are passed through (the transport's own parse-error
+/// handling covers those).
+///
+/// Enforced rules:
+/// - the request's `params._meta` exists and carries
+///   `io.modelcontextprotocol/protocolVersion` and
+///   `io.modelcontextprotocol/clientCapabilities` — otherwise
+///   `Invalid params` (-32602) with HTTP 400,
+/// - the `MCP-Protocol-Version` header (when present) matches the `_meta`
+///   protocol version — otherwise `HeaderMismatch` (-32020) with HTTP 400,
+/// - the `_meta` protocol version is one the server supports — otherwise
+///   `UnsupportedProtocolVersion` (-32022) with HTTP 400, its data carrying
+///   the `supported` versions and echoing the `requested` version.
+#[cfg(feature = "server")]
+pub(crate) fn validate_stateless_request(
+    headers: &HeaderMap,
+    payload: &str,
+) -> Option<(StatusCode, SdkError, Option<Value>)> {
+    let payload_json: Value = serde_json::from_str(payload).ok()?;
 
-    accept_header
-        .split(',')
-        .any(|val| val.trim().starts_with("text/event-stream"))
+    let method = payload_json.get("method").and_then(|m| m.as_str());
+    method?;
+    let request_id = payload_json.get("id").cloned();
+    // Notifications (no id) pass through.
+    request_id.as_ref()?;
+
+    let meta = payload_json.get("params").and_then(|p| p.get("_meta"));
+
+    // Required `_meta` fields.
+    const PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+    const CLIENT_CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
+    let mut missing: Vec<&str> = Vec::new();
+    if meta
+        .and_then(|m| m.get(PROTOCOL_VERSION_KEY))
+        .and_then(|v| v.as_str())
+        .is_none()
+    {
+        missing.push(PROTOCOL_VERSION_KEY);
+    }
+    if meta.and_then(|m| m.get(CLIENT_CAPABILITIES_KEY)).is_none() {
+        missing.push(CLIENT_CAPABILITIES_KEY);
+    }
+    if !missing.is_empty() {
+        return Some((
+            StatusCode::BAD_REQUEST,
+            SdkError {
+                code: crate::schema::INVALID_PARAMS,
+                message: format!("Invalid params: missing _meta keys: {}", missing.join(", ")),
+                data: None,
+            },
+            request_id,
+        ));
+    }
+
+    let meta_version = meta
+        .and_then(|m| m.get(PROTOCOL_VERSION_KEY))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+
+    // Header vs `_meta` version match (when the header is present).
+    if let Some(header_val) = headers
+        .get(MCP_PROTOCOL_VERSION_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
+        if header_val != meta_version {
+            return Some((
+                StatusCode::BAD_REQUEST,
+                SdkError {
+                    code: crate::schema::HEADER_MISMATCH,
+                    message: format!(
+                        "Protocol version mismatch: header declares '{header_val}' but request _meta declares '{meta_version}'"
+                    ),
+                    data: None,
+                },
+                request_id,
+            ));
+        }
+    }
+
+    // Version support.
+    if !crate::utils::supported_protocol_versions().contains(&meta_version.to_string()) {
+        return Some((
+            StatusCode::BAD_REQUEST,
+            SdkError {
+                code: crate::schema::UNSUPPORTED_PROTOCOL_VERSION,
+                message: format!("Unsupported protocol version '{meta_version}'"),
+                data: Some(serde_json::json!({
+                    "supported": crate::utils::supported_protocol_versions(),
+                    "requested": meta_version,
+                })),
+            },
+            request_id,
+        ));
+    }
+
+    None
+}
+
+/// Standard-header validation (SEP-2243), applied to every JSON-RPC request
+/// after [`validate_stateless_request`]. Returns `Some((status, error, id))`
+/// when the request must be rejected.
+///
+/// Enforced rules (header names are matched case-insensitively by the HTTP
+/// layer; values are case-sensitive; surrounding whitespace is trimmed per
+/// RFC 9110 §5.5):
+/// - every request MUST carry an `Mcp-Method` header equal to the body's
+///   JSON-RPC method,
+/// - requests whose params identify a target — `tools/call` (`name`),
+///   `prompts/get` (`name`), `resources/read` (`uri`) — MUST carry an
+///   `Mcp-Name` header equal to that target.
+#[cfg(feature = "server")]
+pub(crate) fn validate_standard_headers(
+    headers: &HeaderMap,
+    payload: &str,
+) -> Option<(StatusCode, SdkError, Option<Value>)> {
+    let payload_json: Value = serde_json::from_str(payload).ok()?;
+    let method = payload_json.get("method").and_then(|m| m.as_str())?;
+    let request_id = payload_json.get("id").cloned();
+    // Notifications (no id) pass through.
+    request_id.as_ref()?;
+
+    let header_mismatch = |message: String| {
+        Some((
+            StatusCode::BAD_REQUEST,
+            SdkError {
+                code: crate::schema::HEADER_MISMATCH,
+                message,
+                data: None,
+            },
+            request_id.clone(),
+        ))
+    };
+
+    let method_header = headers
+        .get(MCP_METHOD_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim);
+
+    match method_header {
+        None => {
+            return header_mismatch(format!(
+                "Missing required Mcp-Method header for '{method}' request"
+            ));
+        }
+        Some(h) if h != method => {
+            return header_mismatch(format!(
+                "Mcp-Method header '{h}' does not match request method '{method}'"
+            ));
+        }
+        _ => {}
+    }
+
+    // Target name/uri for methods that address a specific object.
+    let target = match method {
+        "tools/call" | "prompts/get" => payload_json
+            .get("params")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str()),
+        "resources/read" => payload_json
+            .get("params")
+            .and_then(|p| p.get("uri"))
+            .and_then(|n| n.as_str()),
+        "tasks/get" | "tasks/update" | "tasks/cancel" => payload_json
+            .get("params")
+            .and_then(|p| p.get("taskId"))
+            .and_then(|n| n.as_str()),
+        _ => None,
+    };
+
+    if let Some(target) = target {
+        let name_header = headers
+            .get(MCP_NAME_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim);
+        match name_header {
+            None => {
+                return header_mismatch(format!(
+                    "Missing required Mcp-Name header for '{method}' request targeting '{target}'"
+                ));
+            }
+            Some(h) if h != target => {
+                return header_mismatch(format!(
+                    "Mcp-Name header '{h}' does not match request target '{target}'"
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// SEP-2243 custom-header validation (`Mcp-Param-*`). For `tools/call`
+/// on a tool that carries `x-mcp-header` annotations, the server MUST:
+/// - verify a matching `Mcp-Param-<HeaderName>` header exists for every
+///   annotated argument present in the body,
+/// - decode `=?base64?…?=` wrappers with strict Base64 (reject invalid
+///   padding or non-alphabet characters),
+/// - treat unwrapped values as literal (compare directly),
+/// - reject the request with HTTP 400 and `-32020` when validation fails.
+#[cfg(feature = "server")]
+pub(crate) fn validate_custom_headers(
+    headers: &HeaderMap,
+    payload: &str,
+    state: &McpAppState,
+) -> Option<(StatusCode, SdkError, Option<Value>)> {
+    let payload_json: Value = serde_json::from_str(payload).ok()?;
+    if payload_json.get("method").and_then(|m| m.as_str()) != Some("tools/call") {
+        return None;
+    }
+    let request_id = payload_json.get("id").cloned();
+    request_id.as_ref()?;
+
+    let tool_name = payload_json
+        .get("params")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())?;
+
+    let annotations = state.handler.tool_header_annotations(tool_name);
+    if annotations.is_empty() {
+        return None;
+    }
+
+    let empty = Map::new();
+    let arguments = payload_json
+        .get("params")
+        .and_then(|p| p.get("arguments"))
+        .and_then(|a| a.as_object())
+        .unwrap_or(&empty);
+
+    for annotation in &annotations {
+        let Some(body_value) = arguments.get(&annotation.param_name) else {
+            continue;
+        };
+
+        let header_name = format!("mcp-param-{}", annotation.header_name.to_ascii_lowercase());
+        let header_value = headers
+            .get(&header_name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim);
+
+        let Some(hdr_val) = header_value else {
+            return Some((
+                StatusCode::BAD_REQUEST,
+                SdkError {
+                    code: crate::schema::HEADER_MISMATCH,
+                    message: format!(
+                        "Missing required Mcp-Param-{} header for tool '{tool_name}'; body argument '{}' is present",
+                        annotation.header_name, annotation.param_name
+                    ),
+                    data: None,
+                },
+                request_id,
+            ));
+        };
+
+        let body_str = body_value.as_str().unwrap_or("");
+
+        // =?base64?…?= wrapper → strict decode; else literal.
+        let expected = if let Some(b64) = hdr_val
+            .strip_prefix("=?base64?")
+            .and_then(|rest| rest.strip_suffix("?="))
+        {
+            match base64::engine::general_purpose::STANDARD.decode(b64) {
+                Ok(decoded) => match std::str::from_utf8(&decoded) {
+                    Ok(s) => s.to_string(),
+                    Err(_) => {
+                        return Some((
+                            StatusCode::BAD_REQUEST,
+                            SdkError {
+                                code: crate::schema::HEADER_MISMATCH,
+                                message: format!(
+                                    "Invalid Base64+UTF-8 value in Mcp-Param-{} header",
+                                    annotation.header_name
+                                ),
+                                data: None,
+                            },
+                            request_id,
+                        ));
+                    }
+                },
+                Err(_) => {
+                    return Some((
+                        StatusCode::BAD_REQUEST,
+                        SdkError {
+                            code: crate::schema::HEADER_MISMATCH,
+                            message: format!(
+                                "Invalid Base64 in Mcp-Param-{} header",
+                                annotation.header_name
+                            ),
+                            data: None,
+                        },
+                        request_id,
+                    ));
+                }
+            }
+        } else {
+            hdr_val.to_string()
+        };
+
+        if expected != body_str {
+            return Some((
+                StatusCode::BAD_REQUEST,
+                SdkError {
+                    code: crate::schema::HEADER_MISMATCH,
+                    message: format!(
+                        "Mcp-Param-{} value does not match body argument '{}'",
+                        annotation.header_name, annotation.param_name
+                    ),
+                    data: None,
+                },
+                request_id,
+            ));
+        }
+    }
+
+    None
+}
+
+/// Maps a JSON-RPC error code to the HTTP status the stateless transport
+/// prescribes for it (SEP-2575): `-32601` → 404; `-32602`, `-32020`,
+/// `-32021`, `-32022` → 400; everything else → 200.
+#[cfg(feature = "server")]
+pub(crate) fn status_for_rpc_error_code(code: i64) -> StatusCode {
+    match code {
+        c if c == crate::schema::METHOD_NOT_FOUND => StatusCode::NOT_FOUND,
+        c if c == crate::schema::INVALID_PARAMS
+            || c == crate::schema::HEADER_MISMATCH
+            || c == crate::schema::MISSING_REQUIRED_CLIENT_CAPABILITY
+            || c == crate::schema::UNSUPPORTED_PROTOCOL_VERSION =>
+        {
+            StatusCode::BAD_REQUEST
+        }
+        _ => StatusCode::OK,
+    }
+}
+
+/// Best-effort extraction of the JSON-RPC error code from an outgoing
+/// response payload (a raw JSON message), used to set the HTTP status of
+/// single-shot and SSE responses.
+#[cfg(feature = "server")]
+pub(crate) fn rpc_error_code_in_payload(payload: &str) -> Option<i64> {
+    let value: Value = serde_json::from_str(payload).ok()?;
+    value
+        .get("error")
+        .and_then(|e| e.get("code"))
+        .and_then(|c| c.as_i64())
 }
 
 pub(crate) fn valid_streaming_http_accept_header(headers: &HeaderMap) -> bool {
@@ -728,31 +934,36 @@ pub fn error_response(
         .map_err(|err| McpHttpError::HttpError(err.to_string()))
 }
 
-/// Extracts the value of a query parameter from an HTTP request by key.
-///
-/// This function parses the query string from the request URI and searches
-/// for the specified key. If found, it returns the corresponding value as a `String`.
-///
-/// # Arguments
-/// * `request` - The HTTP request containing the URI with the query string.
-/// * `key` - The name of the query parameter to retrieve.
-///
-/// # Returns
-/// * `Some(String)` containing the value of the query parameter if found.
-/// * `None` if the query string is missing or the key is not present.
-///
-pub(crate) fn query_param(request: &http::Request<&str>, key: &str) -> Option<String> {
-    request.uri().query().and_then(|query| {
-        for pair in query.split('&') {
-            let mut split = pair.splitn(2, '=');
-            let k = split.next()?;
-            let v = split.next().unwrap_or("");
-            if k == key {
-                return Some(v.to_string());
-            }
-        }
-        None
-    })
+/// Like [`error_response`] but wraps the error in a JSON-RPC error envelope
+/// (`{jsonrpc, id, error}`), echoing the rejected request's id as SEP-2575
+/// requires for HTTP-level rejections.
+#[cfg(feature = "server")]
+pub fn jsonrpc_error_response(
+    status_code: StatusCode,
+    error: SdkError,
+    request_id: Option<Value>,
+) -> McpHttpResult<http::Response<GenericBody>> {
+    let mut error_obj = serde_json::Map::new();
+    error_obj.insert("code".to_string(), Value::from(error.code));
+    error_obj.insert("message".to_string(), Value::from(error.message));
+    if let Some(data) = error.data {
+        error_obj.insert("data".to_string(), data);
+    }
+    let envelope = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": request_id.unwrap_or(Value::Null),
+        "error": Value::Object(error_obj),
+    });
+    let error_string = serde_json::to_string(&envelope).unwrap_or_default();
+    let body = Full::new(Bytes::from(error_string))
+        .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        .boxed();
+
+    http::Response::builder()
+        .status(status_code)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body)
+        .map_err(|err| McpHttpError::HttpError(err.to_string()))
 }
 
 #[cfg(all(feature = "sse", feature = "server"))]
@@ -761,14 +972,6 @@ pub(crate) async fn handle_sse_connection(
     sse_message_endpoint: Option<&str>,
     auth_info: Option<AuthInfo>,
 ) -> McpHttpResult<http::Response<GenericBody>> {
-    if state.session_store.is_full().await {
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            SdkError::internal_error()
-                .with_message("Server is at maximum session capacity, try again later."),
-        );
-    }
-
     let session_id: SessionId = state.id_generator.generate();
 
     let sse_message_endpoint = sse_message_endpoint.unwrap_or(DEFAULT_MESSAGES_ENDPOINT);
@@ -801,27 +1004,18 @@ pub(crate) async fn handle_sse_connection(
         h,
         session_id.to_owned(),
         auth_info,
-        state.task_store.clone(),
-        state.client_task_store.clone(),
         state.message_observer.clone(),
     );
 
-    state
-        .session_store
-        .set(session_id.to_owned(), server.clone())
-        .await;
-
     tracing::info!("A new client joined : {}", session_id.to_owned());
 
+    let ping_interval = state.ping_interval;
+
     // Start the server
+    let server_for_stream = server.clone();
     tokio::spawn(async move {
-        match server
-            .start_stream(
-                Arc::new(transport),
-                DEFAULT_STREAM_ID,
-                state.ping_interval,
-                None,
-            )
+        match server_for_stream
+            .start_stream(Arc::new(transport), DEFAULT_STREAM_ID, ping_interval, None)
             .await
         {
             Ok(_) => tracing::info!("server {} exited gracefully.", session_id.to_owned()),
@@ -831,9 +1025,19 @@ pub(crate) async fn handle_sse_connection(
                 err
             ),
         };
-
-        state.session_store.delete(&session_id).await;
     });
+
+    // Wait for the DEFAULT transport to be stored in `transport_map` before
+    // returning the SSE response. The spawned `start_stream` task calls
+    // `store_transport` asynchronously; blocking here prevents the client from
+    // sending a follow-up request that needs a registered transport before it
+    // is ready.
+    server
+        .wait_for_transport_ready(ping_interval)
+        .await
+        .map_err(|err| {
+            McpHttpError::HttpError(format!("Failed waiting for transport readiness: {err}"))
+        })?;
 
     // Initial SSE message to inform the client about the server's endpoint
     let initial_sse_event = stream::once(async move { initial_sse_event(&messages_endpoint) });
@@ -867,8 +1071,40 @@ pub(crate) async fn handle_sse_connection(
         .status(StatusCode::OK)
         .header(CONTENT_TYPE, "text/event-stream")
         .header(CONNECTION, "keep-alive")
+        .header("X-Accel-Buffering", "no")
         .body(streaming_body)
         .map_err(|err| McpHttpError::HttpError(err.to_string()))?;
 
     Ok(response)
+}
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_listen_request_detects_listen() {
+        let listen = r#"{"jsonrpc":"2.0","id":1,"method":"subscriptions/listen","params":{}}"#;
+        assert!(is_listen_request(listen));
+    }
+
+    #[test]
+    fn is_listen_request_rejects_other_methods() {
+        let call = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}"#;
+        assert!(!is_listen_request(call));
+
+        let discover = r#"{"jsonrpc":"2.0","id":2,"method":"server/discover","params":{}}"#;
+        assert!(!is_listen_request(discover));
+    }
+
+    #[test]
+    fn is_listen_request_handles_batch() {
+        let batch = r#"[{"jsonrpc":"2.0","id":1,"method":"tools/list"},{"jsonrpc":"2.0","id":2,"method":"subscriptions/listen"}]"#;
+        assert!(is_listen_request(batch));
+    }
+
+    #[test]
+    fn is_listen_request_handles_invalid_json() {
+        assert!(!is_listen_request("not json"));
+    }
 }

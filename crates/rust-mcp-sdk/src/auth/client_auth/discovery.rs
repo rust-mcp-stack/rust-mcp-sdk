@@ -99,11 +99,21 @@ pub async fn discover_oauth_server_info(
     let resource_metadata =
         discover_protected_resource_metadata(http_client, mcp_server_url, explicit_prm_url).await;
 
+    // RFC 9728 / RFC 8707: the PRM's `resource` MUST identify the server the
+    // client connected to; reject the whole discovery on mismatch.
+    let resource_metadata =
+        resource_metadata.filter(|prm| prm_resource_matches(prm, mcp_server_url));
+
     if let Some(prm) = resource_metadata.as_ref() {
         for auth_server in &prm.authorization_servers {
             let auth_url = auth_server.as_str().trim_end_matches('/').to_string();
             for url in metadata_url_fallbacks(&auth_url) {
                 if let Some(meta) = try_fetch_metadata(http_client, &url).await {
+                    // SEP-2468 / RFC 8414 §3.3: discard metadata whose `issuer`
+                    // does not match the authorization server URL.
+                    if !metadata_issuer_matches(&meta, &auth_url) {
+                        continue;
+                    }
                     return Some(OauthServerInfo {
                         authorization_server_url: auth_url,
                         authorization_server_metadata: meta,
@@ -117,6 +127,9 @@ pub async fn discover_oauth_server_info(
     // Phase 2: fallback — treat the MCP server itself as the auth server
     for url in metadata_url_fallbacks(mcp_server_url) {
         if let Some(meta) = try_fetch_metadata(http_client, &url).await {
+            if !metadata_issuer_matches(&meta, mcp_server_url) {
+                continue;
+            }
             return Some(OauthServerInfo {
                 authorization_server_url: mcp_server_url.trim_end_matches('/').to_string(),
                 authorization_server_metadata: meta,
@@ -166,8 +179,7 @@ fn prm_url_candidates(mcp_server_url: &str, explicit_prm_url: Option<&str>) -> V
 /// 3. `https://example.com/tenant1/.well-known/openid-configuration` (OIDC Discovery 1.0, append)
 ///
 /// For a URL with root path (e.g. `https://example.com`):
-/// 1. `https://example.com/.well-known/oauth-authorization-server`
-/// 2. `https://example.com/.well-known/openid-configuration`
+/// 1. `https://example.com/.well-known/oauth-authorization-server`/// 2. `https://example.com/.well-known/openid-configuration`
 pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
     let mut urls = Vec::new();
     let Ok(parsed) = url::Url::parse(server_url) else {
@@ -210,6 +222,55 @@ pub fn metadata_url_fallbacks(server_url: &str) -> Vec<String> {
     }
 
     urls
+}
+
+/// Derive the issuer value that a metadata document fetched from a well-known
+/// URL is expected to declare (RFC 8414 §3.3 / OpenID Connect Discovery 1.0
+/// §4.3): the issuer is the authorization server URL the well-known path was
+/// constructed from — origin plus path, with any trailing slash removed.
+///
+/// MCP clients MUST discard metadata whose `issuer` does not match this value
+/// (SEP-2468, `metadata-issuer-mismatch`): a mismatch indicates the document
+/// was not served by the authorization server it claims to describe.
+pub fn expected_issuer_for_base_url(server_url: &str) -> Option<String> {
+    let parsed = url::Url::parse(server_url).ok()?;
+    let origin = format!("{}://{}", parsed.scheme(), parsed.authority());
+    let path = parsed.path().trim_end_matches('/');
+    if path.is_empty() || path == "/" {
+        Some(origin)
+    } else {
+        Some(format!("{origin}{path}"))
+    }
+}
+
+/// Validate a fetched metadata document against the authorization server URL
+/// whose well-known endpoint produced it. Returns `true` when the document's
+/// `issuer` matches the expected issuer exactly (simple string comparison).
+pub fn metadata_issuer_matches(metadata: &AuthorizationServerMetadata, server_url: &str) -> bool {
+    match expected_issuer_for_base_url(server_url) {
+        Some(expected) => metadata.issuer == expected,
+        None => false,
+    }
+}
+
+/// Validate that a Protected Resource Metadata document's `resource` matches
+/// the MCP server URL the client is accessing (RFC 9728 / RFC 8707).
+///
+/// MCP clients MUST reject authorization when the PRM `resource` does not
+/// identify the server they connected to — a mismatch indicates a confused-
+/// deputy attempt (`auth/resource-mismatch`).
+///
+/// The resource identifies the protected resource as a whole, so it may be
+/// the server URL itself or an ancestor of it at a path-segment boundary
+/// (e.g. `https://host` covers `https://host/mcp`). Anything else — a
+/// different origin, scheme, or an unrelated path — is rejected.
+pub fn prm_resource_matches(
+    resource_metadata: &OauthProtectedResourceMetadata,
+    mcp_server_url: &str,
+) -> bool {
+    let resource = resource_metadata.resource.as_str().trim_end_matches('/');
+    let server = mcp_server_url.trim_end_matches('/');
+    server == resource || server.starts_with(&format!("{resource}/"))
 }
 
 #[cfg(test)]

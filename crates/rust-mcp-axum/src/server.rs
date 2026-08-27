@@ -9,6 +9,9 @@ use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use rust_mcp_sdk::auth::AuthProvider;
 use rust_mcp_sdk::mcp_http::middleware::AuthMiddleware;
+use rust_mcp_sdk::mcp_http::{
+    Middleware, DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT, DEFAULT_STREAMABLE_HTTP_ENDPOINT,
+};
 use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
 use rust_mcp_sdk::{
     error::SdkResult,
@@ -16,18 +19,9 @@ use rust_mcp_sdk::{
     mcp_http::{
         resolve_dns_middleware, DnsRebindingOptions, HealthHandler, McpAppState, McpHttpHandler,
     },
-    session_store::{InMemorySessionStore, SessionStore},
-    task_store::{ClientTaskStore, ServerTaskStore},
-    IdGenerator, McpObserver, McpServerHandler,
+    IdGenerator, McpObserver, McpServerHandler, ServerDetails,
 };
-use rust_mcp_sdk::{event_store::EventStore, SessionId, TransportOptions};
-use rust_mcp_sdk::{
-    mcp_http::{
-        Middleware, DEFAULT_MESSAGES_ENDPOINT, DEFAULT_SSE_ENDPOINT,
-        DEFAULT_STREAMABLE_HTTP_ENDPOINT,
-    },
-    schema::InitializeResult,
-};
+use rust_mcp_sdk::{SessionId, TransportOptions};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -83,35 +77,6 @@ pub struct AxumServerOptions {
     /// Shared transport configuration used by the server
     pub transport_options: Arc<TransportOptions>,
 
-    /// Event store for resumability support
-    /// If provided, resumability will be enabled, allowing clients to reconnect and resume messages
-    pub event_store: Option<Arc<dyn EventStore>>,
-
-    /// Task store for handling incoming task-augmented requests from the client.
-    /// In other words, for tasks executed on this server.
-    ///
-    /// When the server receives a task-augmented request (e.g., on `tools/call` or other supported methods),
-    /// it uses this store to create, manage, and track the lifecycle of the task. This includes generating
-    /// unique task IDs, storing task state, enforcing TTL, and providing status/results via `tasks/get`,
-    /// `tasks/result`, etc.
-    ///
-    /// See the MCP tasks specification for details:
-    /// <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
-    pub task_store: Option<Arc<ServerTaskStore>>,
-
-    /// Task store for managing outgoing task-augmented requests sent to the client.
-    /// In other words, for tasks executed on the client.
-    ///
-    /// When server (acting as requestor) sends a task-augmented request to the client, it uses this store
-    /// to track the task ID, poll for status updates using `tasks/get` (respecting the suggested `pollInterval`),
-    /// retrieve results via `tasks/result` once completed.
-    ///
-    /// Polling continues until the task reaches a terminal status (`completed`, `failed`, or `cancelled`).
-    ///
-    /// See the MCP tasks specification for details:
-    /// <https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks>
-    pub client_task_store: Option<Arc<ClientTaskStore>>,
-
     /// This setting only applies to streamable HTTP.
     /// If true, the server will return JSON responses instead of starting an SSE stream.
     /// This can be useful for simple request/response scenarios without streaming.
@@ -125,12 +90,6 @@ pub struct AxumServerOptions {
     /// than this are rejected with `413 Payload Too Large`.
     /// Defaults to 4 MiB when `None`.
     pub max_request_body_size: Option<usize>,
-    /// Optional session store implementation. Defaults to a bounded
-    /// [`InMemorySessionStore`] (10k max sessions, no idle TTL) when `None`.
-    /// Pass your own [`SessionStore`] implementation to use Redis, custom
-    /// limits, or any other session backend.
-    pub session_store: Option<Arc<dyn SessionStore>>,
-
     /// Enables SSL/TLS if set to `true`
     pub enable_ssl: bool,
 
@@ -176,6 +135,11 @@ pub struct AxumServerOptions {
     /// Optional observer for incoming/outgoing messages.
     /// Implementations should be fast and preferably non-blocking.
     pub message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
+
+    /// Maximum number of concurrently-open `subscriptions/listen` streams.
+    /// New listen requests beyond this are rejected with `429 Too Many Requests`.
+    /// Defaults to [`rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS`] (1024).
+    pub max_listen_streams: usize,
 }
 
 impl AxumServerOptions {
@@ -318,7 +282,6 @@ impl Default for AxumServerOptions {
             custom_messages_endpoint: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             max_request_body_size: None,
-            session_store: None,
             transport_options: Default::default(),
             enable_ssl: false,
             ssl_cert_path: None,
@@ -327,13 +290,11 @@ impl Default for AxumServerOptions {
             enable_json_response: None,
             sse_support: true,
             dns_rebinding: DnsRebindingOptions::default(),
-            event_store: None,
             auth: None,
-            task_store: None,
-            client_task_store: None,
             health_endpoint: None,
             health_handler: None,
             message_observer: None,
+            max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
         }
     }
 }
@@ -352,22 +313,18 @@ impl AxumServer {
     /// Initializes the server with the provided server details, handler, and options.
     ///
     /// # Arguments
-    /// * `server_details` - Initialization result from the MCP schema
+    /// * `server_details` - Server identity, capabilities and instructions
     /// * `handler` - Shared MCP server handler with static lifetime
     /// * `server_options` - Server configuration options
     ///
     /// # Returns
     /// * `Self` - A new AxumServer instance
     pub fn new(
-        server_details: InitializeResult,
+        server_details: ServerDetails,
         handler: Arc<dyn McpServerHandler + 'static>,
         mut server_options: AxumServerOptions,
     ) -> Self {
         let state: Arc<McpAppState> = Arc::new(McpAppState {
-            session_store: server_options
-                .session_store
-                .take()
-                .unwrap_or_else(|| Arc::new(InMemorySessionStore::default())),
             id_generator: server_options
                 .session_id_generator
                 .take()
@@ -378,10 +335,10 @@ impl AxumServer {
             ping_interval: server_options.ping_interval,
             transport_options: Arc::clone(&server_options.transport_options),
             enable_json_response: server_options.enable_json_response.unwrap_or(false),
-            event_store: server_options.event_store.as_ref().map(Arc::clone),
-            task_store: server_options.task_store.take(),
-            client_task_store: server_options.client_task_store.take(),
             message_observer: server_options.message_observer.take(),
+            extensions: Arc::new(tokio::sync::RwLock::new(None)),
+            active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            max_listen_streams: server_options.max_listen_streams,
         });
 
         // populate middlewares
@@ -601,7 +558,11 @@ async fn shutdown_signal(handle: Handle<SocketAddr>, state: Arc<McpAppState>) {
     }
 
     tracing::info!("Signal received, starting graceful shutdown");
-    state.session_store.clear().await;
+
+    // Close long-lived `subscriptions/listen` streams first so the server can
+    // finish draining in-flight requests without hanging on open SSE bodies.
+    state.shutdown_all_listen_streams().await;
+
     // Trigger graceful shutdown with a timeout
     handle.graceful_shutdown(Some(Duration::from_secs(GRACEFUL_SHUTDOWN_TIMEOUT_SECS)));
 }

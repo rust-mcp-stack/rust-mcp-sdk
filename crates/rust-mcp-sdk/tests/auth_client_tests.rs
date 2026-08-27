@@ -345,25 +345,25 @@ impl CountingStore {
 
 #[async_trait]
 impl TokenStore for CountingStore {
-    async fn get_access_token(&self) -> Option<String> {
+    async fn get_access_token(&self, _issuer: &str) -> Option<String> {
         self.gets.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let lock = self.token.read().await;
         lock.as_ref().map(|t| t.access_token.clone())
     }
 
-    async fn get_refresh_token(&self) -> Option<String> {
+    async fn get_refresh_token(&self, _issuer: &str) -> Option<String> {
         let lock = self.token.read().await;
         lock.as_ref().and_then(|t| t.refresh_token.clone())
     }
 
-    async fn set_tokens(&self, token: TokenResponse) -> Result<(), TokenStoreError> {
+    async fn set_tokens(&self, _issuer: &str, token: TokenResponse) -> Result<(), TokenStoreError> {
         self.sets.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut lock = self.token.write().await;
         *lock = Some(token);
         Ok(())
     }
 
-    async fn clear(&self) -> Result<(), TokenStoreError> {
+    async fn clear(&self, _issuer: &str) -> Result<(), TokenStoreError> {
         let mut lock = self.token.write().await;
         *lock = None;
         Ok(())

@@ -2,13 +2,11 @@ use async_trait::async_trait;
 use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_sdk::{
     error::SdkResult,
-    event_store::InMemoryEventStore,
     macros, mcp_icon,
     mcp_server::{ServerHandler, ToMcpServerHandler},
     schema::*,
-    McpServer,
+    McpServer, RequestContext, ServerDetails,
 };
-use std::sync::Arc;
 
 /// A minimal MCP tool
 #[macros::mcp_tool(
@@ -22,29 +20,42 @@ pub struct SayHelloTool {}
 #[derive(Default)]
 struct HelloHandler;
 
+// 2026-07-28: handlers now take context param; ListToolsResult requires new fields;
+// handle_call_tool_request returns ServerResult; CallToolResult::text_content removed
 #[async_trait]
 impl ServerHandler for HelloHandler {
     async fn handle_list_tools_request(
         &self,
         _request: Option<PaginatedRequestParams>,
+        _context: &RequestContext,
         _runtime: std::sync::Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             tools: vec![SayHelloTool::tool()],
             meta: None,
             next_cursor: None,
+            cache_scope: ListToolsResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
         })
     }
 
     async fn handle_call_tool_request(
         &self,
         params: CallToolRequestParams,
+        _context: &RequestContext,
         _runtime: std::sync::Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
+    ) -> std::result::Result<ServerResult, CallToolError> {
         if params.name == "say_hello" {
-            Ok(CallToolResult::text_content(vec![
-                "Hello from Rust MCP SDK (Axum)!".into(),
-            ]))
+            let text_content: ContentBlock =
+                TextContent::new("Hello from Rust MCP SDK (Axum)!".to_string(), None, None).into();
+            Ok(ServerResult::CallToolResult(CallToolResult {
+                content: vec![text_content],
+                is_error: None,
+                meta: None,
+                result_type: "complete".to_string(),
+                structured_content: None,
+            }))
         } else {
             Err(CallToolError::unknown_tool(params.name))
         }
@@ -55,8 +66,8 @@ impl ServerHandler for HelloHandler {
 async fn main() -> SdkResult<()> {
     tracing_subscriber::fmt::init();
 
-    // STEP 1: Define server details and capabilities
-    let server_details = InitializeResult {
+    // 2026-07-28: InitializeResult → ServerDetails
+    let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server (Axum)".into(),
             version: "0.1.0".into(),
@@ -76,20 +87,15 @@ async fn main() -> SdkResult<()> {
         },
         meta: None,
         instructions: Some("An axum-based hello-world MCP server.".into()),
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
-    // STEP 2: Create and start the Axum MCP server
-    // By default it listens on http://127.0.0.1:8080
-    //   • Streamable HTTP: http://127.0.0.1:8080/mcp
-    //   • SSE (backward compat): http://127.0.0.1:8080/sse
+    // 2026-07-28: event_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         HelloHandler.to_mcp_server_handler(),
         AxumServerOptions {
             host: "127.0.0.1".into(),
-            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
-            health_endpoint: Some("/health".into()),                    // optional health check
+            health_endpoint: Some("/health".into()), // optional health check
             ..Default::default()
         },
     );

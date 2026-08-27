@@ -1,71 +1,67 @@
 # Versioning Policy
 
-## Semver Commitment
+## Active lines
 
-`rust-mcp-sdk` follows [Cargo SemVer](https://doc.rust-lang.org/cargo/reference/semver.html) strictly.
+| Version | Protocol | Status |
+|---|---|---|
+| **2.x** | MCP 2026-07-28 | Current (beta → stable) |
+| **1.x** | MCP 2025-11-25 | LTS (security fixes only) |
 
-- **Major bumps (1.x → 2.x):** Reserved for intentional breaking changes to the public API. Deprecation warnings are issued one minor version prior when possible. A migration guide is provided with every major release.
-- **Minor bumps (1.0 → 1.1):** New features, public API additions, new optional dependencies. No breaking changes.
-- **Patch bumps (1.0.0 → 1.0.1):** Bug fixes, internal refactors, documentation improvements, dependency bumps with no public API impact.
+## 2.0 (2026-07-28)
 
-## Workspace Crate Versioning
+Released as **2.0.0-beta.x** prereleases targeting the 2026-07-28 stateless
+protocol.  No backwards-compatibility with 1.x.
 
-Each crate in the monorepo is independently versioned:
+> **Status (August 2026):** The pre-release channel is active. `2.0.0-beta.1` is
+> the current beta. Server conformance (110/110) and client conformance (440/440)
+> are passing on `--spec-version 2026-07-28`. A stable `2.0.0` is expected after
+> community soak.
 
-| Crate | Type | Versioning |
-|-------|------|------------|
-| `rust-mcp-sdk` | Core SDK | Own version |
-| `rust-mcp-transport` | Transport layer | Own version |
-| `rust-mcp-macros` | Proc-macro | Own version |
-| `rust-mcp-extra` | Extensions | Own version |
-| `rust-mcp-axum` | Axum integration | Own version |
-| `rust-mcp-actix` | Actix-web integration | Own version |
+### Pre-release channel
 
-Inter-crate dependency pins in the workspace root `Cargo.toml` are synchronized automatically by the release workflow. When a crate's public API changes, only that crate's version is bumped — downstream crates update their pin but not their own version unless their own public API changes.
+- `2.0.0-beta.1` — initial beta
+- `2.0.0-beta.N` — iteration on feedback
+- `2.0.0` — stable (after conformance suite passes + community soak)
 
-## What Constitutes a Breaking Change
+### Crate versions
 
-For the purposes of semver, the following are breaking changes:
+| Crate | Version |
+|---|---|
+| `rust-mcp-schema` | `0.10.x` (see its own repo) |
+| `rust-mcp-sdk` | `2.0.0-beta.x` → `2.0.0` |
+| `rust-mcp-transport` | `2.0.0-beta.x` → `2.0.0` |
+| `rust-mcp-macros` | `2.0.0-beta.x` → `2.0.0` |
+| `rust-mcp-axum` | `2.0.0-beta.x` → `2.0.0` |
+| `rust-mcp-actix` | `2.0.0-beta.x` → `2.0.0` |
+| `rust-mcp-extra` | `2.0.0-beta.x` → `2.0.0` |
 
-- Removing or renaming public types, functions, methods, traits, or modules
-- Changing function signatures (adding required parameters, changing types)
-- Removing or renaming public trait methods
-- Changing the variant set of a public enum
-- Adding `#[non_exhaustive]` to a public struct or enum (prevents struct literals and exhaustive matching)
-- Removing or renaming public feature flags
-- Increasing the MSRV in a minor or patch release
-- Changing the protocol version requirement in `rust-mcp-sdk`
-- Removing or renaming re-exports
+## 1.x LTS (`release-1.x` branch)
 
-The following are **not** breaking changes:
+The **1.x** line targets MCP **2025-11-25** and receives **critical
+security fixes** until at least **2027-07-28** (one year after the 2.0
+stable release).
 
-- Adding new public types, functions, methods, or modules
-- Adding new trait methods with default implementations
-- Adding new enum variants to `#[non_exhaustive]` enums
-- Adding new optional feature flags
-- Internal refactors that don't affect the public API surface
-- Dependency version bumps that don't affect the public API
+### Scope of LTS fixes
 
-## Deprecation Policy
+- Security vulnerabilities (CVEs)
+- Build regressions on current stable Rust
+- Critical protocol compliance gaps (verified via conformance suite)
 
-1. A public API item is marked with `#[deprecated]` in a minor release, stating the replacement and removal target version.
-2. The deprecated item remains functional for at least one full minor release cycle.
-3. The item is removed in the next major release.
+### Out of scope
 
-Example: An API deprecated in v1.2.0 will be removed no earlier than v2.0.0.
+- New 2026-07-28 features
+- Non-critical bug fixes
+- Dependency upgrades beyond security
 
-## Release Process
+### Migration
 
-- **Patch releases:** Bug fixes, security patches, dependency updates.
-- **Minor releases:** New features and public API additions.
-- **Major releases:** Reserved for breaking changes, accompanied by a migration guide.
+See [`UPGRADING.md`] for the 1.x → 2.0 migration guide.
 
-All releases are automated via [Release Please](https://github.com/googleapis/release-please) and published to [crates.io](https://crates.io/).
+## Semver compliance
 
-## MSRV Policy
+All crates follow [Semantic Versioning](https://semver.org).
 
-The minimum supported Rust version (MSRV) is **1.80.0**. MSRV is only increased in minor or major releases when required by upstream dependencies or new language features. Any MSRV change includes a 30-day notice in the changelog.
-
-## Pre-1.0 Stability
-
-Versions prior to 1.0.0 (v0.x) followed Cargo's pre-1.0 semver compatibility rules: minor version bumps could include breaking changes. With the 1.0.0 release (2026-07-25), all crates are committed to the semver guarantee above.
+- **Major** (X.0.0): breaking API changes (e.g. removed methods, changed
+  signatures)
+- **Minor** (0.X.0): new features, non-breaking additions
+- **Patch** (0.0.X): bug fixes, performance improvements

@@ -92,8 +92,6 @@ pub(crate) fn from_actix_request<'a>(
 /// Converts an `McpHttpError` into an Actix `HttpResponse` with a JSON error body.
 ///
 /// Maps error variants to appropriate HTTP status codes:
-/// - `SessionIdMissing` → 400 Bad Request
-/// - `SessionIdInvalid` → 404 Not Found
 /// - `StreamIoError` → 500 Internal Server Error
 /// - `HttpError` → 500 Internal Server Error
 /// - `TransportError` → 502 Bad Gateway
@@ -101,8 +99,6 @@ pub(crate) fn to_actix_error(err: rust_mcp_sdk::mcp_http::McpHttpError) -> HttpR
     use rust_mcp_sdk::mcp_http::McpHttpError;
 
     let status = match &err {
-        McpHttpError::SessionIdMissing => actix_web::http::StatusCode::BAD_REQUEST,
-        McpHttpError::SessionIdInvalid(_) => actix_web::http::StatusCode::NOT_FOUND,
         McpHttpError::StreamIoError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         McpHttpError::HttpError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         McpHttpError::TransportError(_) => actix_web::http::StatusCode::BAD_GATEWAY,

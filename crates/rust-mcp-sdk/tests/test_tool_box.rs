@@ -3,7 +3,7 @@ pub mod common;
 
 use common::sample_tools::{SayGoodbyeTool, SayHelloTool};
 use rust_mcp_macros::{mcp_tool, JsonSchema};
-use rust_mcp_sdk::schema::CallToolRequestParams;
+use rust_mcp_sdk::schema::{CallToolRequestParams, RequestMetaObject};
 use rust_mcp_sdk::tool_box;
 
 // Define tool box without trailing comma
@@ -39,7 +39,7 @@ fn test_tools_without_trailing_comma() {
 
 #[test]
 fn test_tool_deserializes_when_arguments_omitted() {
-    let params = CallToolRequestParams::new("no_args_tool");
+    let params = CallToolRequestParams::new("no_args_tool", RequestMetaObject::default());
     assert!(matches!(
         NoArgsTools::try_from(params),
         Ok(NoArgsTools::NoArgsTool(_))
@@ -48,7 +48,8 @@ fn test_tool_deserializes_when_arguments_omitted() {
 
 #[test]
 fn test_tool_deserializes_from_empty_arguments() {
-    let params = CallToolRequestParams::new("no_args_tool").with_arguments(serde_json::Map::new());
+    let params = CallToolRequestParams::new("no_args_tool", RequestMetaObject::default())
+        .with_arguments(serde_json::Map::new());
     assert!(matches!(
         NoArgsTools::try_from(params),
         Ok(NoArgsTools::NoArgsTool(_))

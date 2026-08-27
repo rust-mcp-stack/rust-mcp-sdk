@@ -1,6 +1,7 @@
 use rust_mcp_macros::{mcp_resource, mcp_resource_template};
 use rust_mcp_sdk::schema::{
-    BlobResourceContents, ReadResourceResult, RpcError, TextResourceContents,
+    BlobResourceContents, ReadResourceResult, ReadResourceResultCacheScope, RpcError,
+    TextResourceContents,
 };
 
 const IMAGE_BASE64: &str =
@@ -41,7 +42,10 @@ impl StaticTextResource {
             )
             .with_mime_type("text/plain")
             .into()],
+            cache_scope: ReadResourceResultCacheScope::Public,
             meta: None,
+            result_type: "complete".to_string(),
+            ttl_ms: 3_600_000,
         })
     }
 }
@@ -64,7 +68,10 @@ impl StaticBinaryResource {
             contents: vec![BlobResourceContents::new(IMAGE_BASE64, &uri)
                 .with_mime_type("image/png")
                 .into()],
+            cache_scope: ReadResourceResultCacheScope::Public,
             meta: None,
+            result_type: "complete".to_string(),
+            ttl_ms: 3_600_000,
         })
     }
 }
@@ -104,7 +111,10 @@ impl TemplateDataResource {
                     .with_mime_type("application/json")
                     .into(),
             ],
+            cache_scope: ReadResourceResultCacheScope::Public,
             meta: None,
+            result_type: "complete".to_string(),
+            ttl_ms: 3_600_000,
         })
     }
 }
@@ -130,7 +140,10 @@ impl EmbeddedTestResource {
             )
             .with_mime_type("text/plain")
             .into()],
+            cache_scope: ReadResourceResultCacheScope::Public,
             meta: None,
+            result_type: "complete".to_string(),
+            ttl_ms: 3_600_000,
         })
     }
 }
@@ -165,7 +178,10 @@ impl WatchedResource {
                     .with_mime_type("application/json")
                     .into(),
             ],
+            cache_scope: ReadResourceResultCacheScope::Private,
             meta: None,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
         })
     }
 }

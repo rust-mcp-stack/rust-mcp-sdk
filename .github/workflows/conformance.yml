@@ -1,4 +1,4 @@
-name: 🧪 MCP Conformance
+name: 🧪 MCP Conformance (2026-07-28)
 on:
   push:
     branches:
@@ -15,6 +15,8 @@ jobs:
   server-conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      MCP_CONFORMANCE_PORT: "3101"
     steps:
       - uses: actions/checkout@v7
 
@@ -32,12 +34,14 @@ jobs:
       - name: Start server
         run: |
           cargo run -p conformance-server --release &
-          timeout 30 bash -c 'until curl -sf http://localhost:3000/health; do sleep 0.5; done'
+          timeout 30 bash -c 'until curl -sf http://127.0.0.1:3101/health; do sleep 0.5; done'
 
-      - uses: modelcontextprotocol/conformance@v0.1.16
-        with:
-          mode: server
-          url: http://localhost:3000/mcp
+      - name: Run conformance (2026-07-28)
+        run: |
+          npx @modelcontextprotocol/conformance@0.2.0-alpha.10 server \
+            --url http://127.0.0.1:3101/mcp \
+            --spec-version 2026-07-28 \
+            --suite all
 
   client-conformance:
     runs-on: ubuntu-latest
@@ -56,8 +60,9 @@ jobs:
       - name: Build conformance client
         run: cargo build -p conformance-client --release
 
-      - uses: modelcontextprotocol/conformance@v0.1.16
-        with:
-          mode: client
-          command: ./target/release/conformance-client
-          suite: core
+      - name: Run conformance (2026-07-28)
+        run: |
+          npx @modelcontextprotocol/conformance@0.2.0-alpha.10 client \
+            --command ./target/release/conformance-client \
+            --spec-version 2026-07-28 \
+            --suite all

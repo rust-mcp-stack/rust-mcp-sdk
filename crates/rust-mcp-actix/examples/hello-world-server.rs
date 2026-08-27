@@ -1,43 +1,56 @@
 use rust_mcp_actix::{create_actix_server, ActixServerOptions};
 use rust_mcp_schema::{
-    schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ListToolsResult,
-    PaginatedRequestParams, RpcError,
+    schema_utils::CallToolError, CallToolRequestParams, CallToolResult, ContentBlock,
+    ListToolsResult, ListToolsResultCacheScope, PaginatedRequestParams, RpcError, ServerResult,
+    TextContent,
 };
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
-};
-use rust_mcp_sdk::{error::SdkResult, ToMcpServerHandler};
+use rust_mcp_sdk::schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools};
+use rust_mcp_sdk::{error::SdkResult, RequestContext, ServerDetails, ToMcpServerHandler};
 use std::sync::Arc;
 
 struct HelloHandler;
 #[async_trait::async_trait]
 impl ServerHandler for HelloHandler {
+    // 2026-07-28: handle_list_tools_request now takes 4 params (added context)
     async fn handle_list_tools_request(
         &self,
         _request: Option<PaginatedRequestParams>,
+        _context: &RequestContext,
         _runtime: Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Ok(ListToolsResult {
             tools: vec![],
             meta: None,
             next_cursor: None,
+            // 2026-07-28: ListToolsResult requires these new fields
+            cache_scope: ListToolsResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
         })
     }
 
+    // 2026-07-28: handle_call_tool_request now takes 4 params (added context)
     async fn handle_call_tool_request(
         &self,
         params: CallToolRequestParams,
+        _context: &RequestContext,
         _runtime: Arc<dyn rust_mcp_sdk::McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
-        Ok(CallToolResult::text_content(vec![
-            rust_mcp_schema::TextContent::new(
-                format!("Hello from Actix MCP! You asked: {}", params.name),
-                None,
-                None,
-            ),
-        ]))
+    ) -> std::result::Result<ServerResult, CallToolError> {
+        let text_content: ContentBlock = TextContent::new(
+            format!("Hello from Actix MCP! You asked: {}", params.name),
+            None,
+            None,
+        )
+        .into();
+        Ok(ServerResult::CallToolResult(CallToolResult {
+            content: vec![text_content],
+            is_error: None,
+            meta: None,
+            result_type: "complete".to_string(),
+            structured_content: None,
+        }))
     }
 }
 
@@ -45,7 +58,8 @@ impl ServerHandler for HelloHandler {
 async fn main() -> SdkResult<()> {
     tracing_subscriber::fmt::init();
 
-    let server_details = InitializeResult {
+    // 2026-07-28: InitializeResult replaced by ServerDetails
+    let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server (Actix)".into(),
             version: "0.1.0".into(),
@@ -65,7 +79,6 @@ async fn main() -> SdkResult<()> {
         },
         meta: None,
         instructions: Some("server instructions...".into()),
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
     let server = create_actix_server(

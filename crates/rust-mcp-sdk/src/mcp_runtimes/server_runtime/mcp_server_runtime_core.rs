@@ -1,17 +1,17 @@
 use super::ServerRuntime;
 use crate::error::SdkResult;
 use crate::mcp_handlers::mcp_server_handler_core::ServerHandlerCore;
+use crate::mcp_runtimes::server_runtime::mcp_server_runtime::method_name_for_request;
 use crate::mcp_runtimes::server_runtime::McpServerOptions;
-use crate::mcp_traits::{McpServer, McpServerHandler};
-use crate::schema::schema_utils::{
-    ClientMessage, MessageFromServer, ResultFromServer, ServerMessage,
-};
+use crate::mcp_traits::{McpServer, McpServerHandler, RequestContext};
+use crate::schema::schema_utils::{ClientMessage, MessageFromServer, ServerMessage};
 use crate::schema::{
     schema_utils::{ClientMessages, ServerMessages},
-    RpcError,
+    RequestMetaObject, RpcError, ServerResult,
 };
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
+use rust_mcp_schema::ClientRequest;
 use rust_mcp_transport::TransportDispatcher;
 use std::sync::Arc;
 
@@ -62,20 +62,22 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
         &self,
         client_jsonrpc_request: ClientJsonrpcRequest,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ResultFromServer, RpcError> {
-        // store the client details if the request is a client initialization request
-        if let ClientJsonrpcRequest::InitializeRequest(initialize_request) = &client_jsonrpc_request
-        {
-            // keep a copy of the InitializeRequestParams which includes client_info and capabilities
-            runtime
-                .set_client_details(initialize_request.params.clone())
-                .await
-                .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
+    ) -> std::result::Result<ServerResult, RpcError> {
+        let context = match &client_jsonrpc_request {
+            ClientJsonrpcRequest::Standard(standard) => {
+                RequestContext::from_request_meta(request_meta(standard))?
+            }
+            ClientJsonrpcRequest::Custom(_) => RequestContext::empty(),
+        };
+        if let ClientJsonrpcRequest::Standard(ref standard) = &client_jsonrpc_request {
+            let method = method_name_for_request(standard);
+            context.ensure_capabilities(
+                method,
+                &self.handler.required_capabilities_for_method(method),
+            )?;
         }
-
-        // handle request and get the result
         self.handler
-            .handle_request(client_jsonrpc_request.into(), runtime)
+            .handle_request(client_jsonrpc_request.into(), &context, runtime)
             .await
     }
     async fn handle_error(
@@ -91,15 +93,26 @@ impl McpServerHandler for RuntimeCoreInternalHandler<Box<dyn ServerHandlerCore>>
         client_jsonrpc_notification: ClientJsonrpcNotification,
         runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()> {
-        // Trigger the `on_initialized()` callback if an `initialized_notification` is received from the client.
-        if client_jsonrpc_notification.is_initialized_notification() {
-            self.handler.on_initialized(runtime.clone()).await;
-        }
-
         // handle notification
         self.handler
             .handle_notification(client_jsonrpc_notification.into(), runtime)
             .await?;
         Ok(())
+    }
+}
+
+fn request_meta(request: &ClientRequest) -> &RequestMetaObject {
+    use rust_mcp_schema::ClientRequest::*;
+    match request {
+        DiscoverRequest(r) => &r.params.meta,
+        ListResourcesRequest(r) => &r.params.meta,
+        ListResourceTemplatesRequest(r) => &r.params.meta,
+        ReadResourceRequest(r) => &r.params.meta,
+        SubscriptionsListenRequest(r) => &r.params.meta,
+        ListPromptsRequest(r) => &r.params.meta,
+        GetPromptRequest(r) => &r.params.meta,
+        ListToolsRequest(r) => &r.params.meta,
+        CallToolRequest(r) => &r.params.meta,
+        CompleteRequest(r) => &r.params.meta,
     }
 }

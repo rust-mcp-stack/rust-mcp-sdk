@@ -27,6 +27,17 @@ pub enum ClientError {
     #[error("invalid server response: {0}")]
     InvalidResponse(String),
 
+    #[error(
+        "authorization server metadata issuer mismatch: expected '{expected}', got '{actual}'"
+    )]
+    MetadataIssuerMismatch { expected: String, actual: String },
+
+    #[error("authorization response `iss` mismatch: expected '{expected}', got '{actual}'")]
+    IssuerMismatch { expected: String, actual: String },
+
+    #[error("authorization response is missing the required `iss` parameter")]
+    MissingIssuerParameter,
+
     #[error("HTTP transport error: {0}")]
     Http(#[from] reqwest::Error),
 

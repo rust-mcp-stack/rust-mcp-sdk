@@ -9,7 +9,7 @@ mod readable_channel;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 mod sse_event;
 
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
+#[cfg(feature = "streamable-http")]
 mod sse_parser;
 
 #[cfg(feature = "sse")]
@@ -20,7 +20,7 @@ mod streamable_http_stream;
 
 mod time_utils;
 
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
+#[cfg(feature = "sse")]
 mod writable_channel;
 
 use crate::error::{TransportError, TransportResult};
@@ -39,7 +39,7 @@ pub(crate) use readable_channel::*;
 #[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub use sse_event::*;
 
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
+#[cfg(feature = "streamable-http")]
 pub(crate) use sse_parser::*;
 
 #[cfg(feature = "sse")]
@@ -48,9 +48,11 @@ pub(crate) use sse_stream::*;
 #[cfg(feature = "streamable-http")]
 pub(crate) use streamable_http_stream::*;
 
+// Re-exported for upcoming request-signing work; currently unused within the crate.
+#[allow(unused_imports)]
 pub use time_utils::*;
 use tokio::time::{timeout, Duration};
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
+#[cfg(feature = "sse")]
 pub(crate) use writable_channel::*;
 
 pub async fn await_timeout<F, T, E>(operation: F, timeout_duration: Duration) -> TransportResult<T>

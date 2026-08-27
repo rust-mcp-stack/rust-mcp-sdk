@@ -167,13 +167,13 @@ mod tests {
     use super::*;
     use crate::auth::AuthMetadataBuilder;
     use crate::mcp_icon;
-    use crate::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
+    use crate::mcp_traits::ServerDetails;
+    use crate::schema::{Implementation, ServerCapabilities};
     use crate::{
         auth::{OauthTokenVerifier, RemoteAuthProvider},
         error::SdkResult,
         id_generator::{FastIdGenerator, UuidGenerator},
         mcp_server::{ServerHandler, ToMcpServerHandler},
-        session_store::InMemorySessionStore,
     };
     use crate::{mcp_http::GenericBodyExt, mcp_http::McpHttpError};
     use bytes::Bytes;
@@ -278,16 +278,14 @@ mod tests {
         let handler = TestHandler {};
 
         Arc::new(McpAppState {
-            session_store: Arc::new(InMemorySessionStore::new()),
             id_generator: Arc::new(UuidGenerator {}),
             stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-            server_details: Arc::new(InitializeResult {
+            server_details: Arc::new(ServerDetails {
                 capabilities: ServerCapabilities {
                     ..Default::default()
                 },
                 instructions: None,
                 meta: None,
-                protocol_version: ProtocolVersion::V2025_06_18.to_string(),
                 server_info: Implementation {
                     name: "server".to_string(),
                     title: None,
@@ -306,10 +304,10 @@ mod tests {
             ping_interval: Duration::from_secs(15),
             transport_options: Arc::new(rust_mcp_transport::TransportOptions::default()),
             enable_json_response: false,
-            event_store: None,
-            task_store:None,
-            client_task_store:None,
-            message_observer:None
+            message_observer:None,
+            extensions: Arc::new(tokio::sync::RwLock::new(None)),
+            active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            max_listen_streams: crate::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
         })
     }
 

@@ -1,7 +1,7 @@
 use crate::server::ActixServer;
 use crate::ActixServerOptions;
 use rust_mcp_sdk::mcp_server::McpServerHandler;
-use rust_mcp_sdk::schema::InitializeResult;
+use rust_mcp_sdk::ServerDetails;
 use std::sync::Arc;
 
 /// Creates a new `ActixServer` with the given server details, handler, and options.
@@ -18,7 +18,7 @@ use std::sync::Arc;
 /// server.start().await?;
 /// ```
 pub fn create_actix_server(
-    server_details: InitializeResult,
+    server_details: ServerDetails,
     handler: Arc<dyn McpServerHandler + 'static>,
     server_options: ActixServerOptions,
 ) -> ActixServer {

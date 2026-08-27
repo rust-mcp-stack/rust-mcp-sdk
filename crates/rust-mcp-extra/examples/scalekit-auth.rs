@@ -5,7 +5,7 @@ use crate::common::{
 };
 use rust_mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::auth_provider::scalekit::{ScalekitAuthOptions, ScalekitAuthProvider};
-use rust_mcp_sdk::{error::SdkResult, event_store::InMemoryEventStore, ToMcpServerHandler};
+use rust_mcp_sdk::{error::SdkResult, ToMcpServerHandler};
 use std::{env, sync::Arc};
 
 #[tokio::main]
@@ -36,7 +36,7 @@ async fn main() -> SdkResult<()> {
         AxumServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
-            event_store: Some(std::sync::Arc::new(InMemoryEventStore::default())), // enable resumability
+            // 2026-07-28: event_store removed from AxumServerOptions
             auth: Some(Arc::new(auth_provider)), // enable authentication
             sse_support: false,
             ..Default::default()

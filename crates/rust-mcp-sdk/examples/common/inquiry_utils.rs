@@ -1,14 +1,9 @@
-//! This module contains utility functions for querying and displaying server capabilities.
-
 use colored::Colorize;
-use rust_mcp_sdk::schema::CallToolRequestParams;
+use rust_mcp_sdk::schema::{CallToolRequestParams, RequestMetaObject};
 use rust_mcp_sdk::McpClient;
 use rust_mcp_sdk::{error::SdkResult, mcp_client::ClientRuntime};
 use serde_json::json;
-use std::io::Write;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
 
 const GREY_COLOR: (u8, u8, u8) = (90, 90, 90);
 const HEADER_SIZE: usize = 31;
@@ -27,153 +22,112 @@ impl InquiryUtils {
 
     fn print_list(&self, list_items: Vec<(String, String)>) {
         list_items.iter().enumerate().for_each(|(index, item)| {
-            println!("{}. {}: {}", index + 1, item.0.yellow(), item.1.cyan(),);
+            println!("{}. {}: {}", index + 1, item.0.yellow(), item.1.cyan());
         });
     }
 
     pub fn print_server_info(&self) {
         self.print_header("Server info");
-        let server_version = self.client.server_version().unwrap();
-        println!("{} {}", "Server name:".bold(), server_version.name.cyan());
         println!(
             "{} {}",
-            "Server version:".bold(),
-            server_version.version.cyan()
+            "Use server/discover to query server identity and capabilities".bold(),
+            "".cyan()
         );
     }
 
     pub fn print_server_capabilities(&self) {
         self.print_header("Capabilities");
-        let capability_vec = [
-            ("tools", self.client.server_has_tools()),
-            ("prompts", self.client.server_has_prompts()),
-            ("resources", self.client.server_has_resources()),
-            ("logging", self.client.server_supports_logging()),
-            ("experimental", self.client.server_has_experimental()),
-        ];
-
-        capability_vec.iter().for_each(|(tool_name, opt)| {
-            println!(
-                "{}: {}",
-                tool_name.bold(),
-                opt.map(|b| if b { "Yes" } else { "No" })
-                    .unwrap_or("Unknown")
-                    .cyan()
-            );
-        });
+        println!(
+            "{}",
+            "Use server/discover to query server capabilities".cyan()
+        );
     }
 
-    pub async fn print_tool_list(&self) -> SdkResult<()> {
-        // Return if the MCP server does not support tools
-        if !self.client.server_has_tools().unwrap_or(false) {
-            return Ok(());
-        }
-
-        let tools = self.client.request_tool_list(None).await?;
+    pub async fn print_tools(&self) -> SdkResult<()> {
         self.print_header("Tools");
-        self.print_list(
-            tools
-                .tools
-                .iter()
-                .map(|item| {
-                    (
-                        item.name.clone(),
-                        item.description.clone().unwrap_or_default(),
-                    )
-                })
-                .collect(),
-        );
-
+        let result = self.client.request_tool_list(None).await?;
+        let tool_list = result.tools;
+        if tool_list.is_empty() {
+            println!("{}", "No tools found!".red());
+            return Ok(());
+        }
+        let items: Vec<(String, String)> = tool_list
+            .iter()
+            .map(|tool| {
+                (
+                    tool.name.clone(),
+                    tool.description.clone().unwrap_or_default(),
+                )
+            })
+            .collect();
+        self.print_list(items);
         Ok(())
     }
 
-    pub async fn print_prompts_list(&self) -> SdkResult<()> {
-        // Return if the MCP server does not support prompts
-        if !self.client.server_has_prompts().unwrap_or(false) {
-            return Ok(());
-        }
-
-        let prompts = self.client.request_prompt_list(None).await?;
-
+    pub async fn print_prompts(&self) -> SdkResult<()> {
         self.print_header("Prompts");
-        self.print_list(
-            prompts
-                .prompts
-                .iter()
-                .map(|item| {
-                    (
-                        item.name.clone(),
-                        item.description.clone().unwrap_or_default(),
-                    )
-                })
-                .collect(),
-        );
+        let result = self.client.request_prompt_list(None).await?;
+        let prompt_list = result.prompts;
+        if prompt_list.is_empty() {
+            println!("{}", "No prompts found!".red());
+            return Ok(());
+        }
+        let items: Vec<(String, String)> = prompt_list
+            .iter()
+            .map(|prompt| {
+                (
+                    prompt.name.clone(),
+                    prompt.description.clone().unwrap_or_default(),
+                )
+            })
+            .collect();
+        self.print_list(items);
         Ok(())
     }
 
-    pub async fn print_resource_list(&self) -> SdkResult<()> {
-        // Return if the MCP server does not support resources
-        if !self.client.server_has_resources().unwrap_or(false) {
+    pub async fn print_resources(&self) -> SdkResult<()> {
+        self.print_header("Resources");
+        let result = self.client.request_resource_list(None).await?;
+        let resource_list = result.resources;
+        if resource_list.is_empty() {
+            println!("{}", "No resources found!".red());
             return Ok(());
         }
-
-        let resources = self.client.request_resource_list(None).await?;
-
-        self.print_header("Resources");
-
-        self.print_list(
-            resources
-                .resources
-                .iter()
-                .map(|item| {
-                    (
-                        item.name.clone(),
-                        format!(
-                            "( uri: {} , mime: {}",
-                            item.uri,
-                            item.mime_type.as_ref().unwrap_or(&"?".to_string()),
-                        ),
-                    )
-                })
-                .collect(),
-        );
-
+        let items: Vec<(String, String)> = resource_list
+            .iter()
+            .map(|res| {
+                (
+                    res.name.clone(),
+                    res.description.clone().unwrap_or_default(),
+                )
+            })
+            .collect();
+        self.print_list(items);
         Ok(())
     }
 
     pub async fn print_resource_templates(&self) -> SdkResult<()> {
-        // Return if the MCP server does not support resources
-        if !self.client.server_has_resources().unwrap_or(false) {
+        self.print_header("Resource Templates");
+        let result = self.client.request_resource_template_list(None).await?;
+        let templates = result.resource_templates;
+        if templates.is_empty() {
+            println!("{}", "No resource templates found!".red());
             return Ok(());
         }
-
-        let templates = self.client.request_resource_template_list(None).await?;
-
-        self.print_header("Resource Templates");
-
-        self.print_list(
-            templates
-                .resource_templates
-                .iter()
-                .map(|item| {
-                    (
-                        item.name.clone(),
-                        item.description.clone().unwrap_or_default(),
-                    )
-                })
-                .collect(),
-        );
+        let items: Vec<(String, String)> = templates
+            .iter()
+            .map(|rt| (rt.name.clone(), rt.description.clone().unwrap_or_default()))
+            .collect();
+        self.print_list(items);
         Ok(())
     }
 
-    pub async fn call_get_sum_tool(&self, a: i64, b: i64) -> SdkResult<()> {
-        // Invoke the "get-sum" tool with 100 and 25 as arguments, and display the result
+    pub async fn call_test_tool(&self, a: i32, b: i32) -> SdkResult<()> {
         println!(
             "{}",
             format!("\nCalling the \"get-sum\" tool with {a} and {b} ...").magenta()
         );
 
-        // Create a `Map<String, Value>` to represent the tool parameters
         let params = json!({
             "a": a,
             "b": b
@@ -182,43 +136,20 @@ impl InquiryUtils {
         .unwrap()
         .clone();
 
-        // invoke the tool
         let result = self
             .client
             .request_tool_call(CallToolRequestParams {
                 name: "get-sum".to_string(),
                 arguments: Some(params),
-                meta: None,
-                task: None,
+                meta: RequestMetaObject::default(),
+                input_responses: None,
+                request_state: None,
             })
             .await?;
 
-        // Retrieve the result content and print it to the stdout
         let result_content = result.content.first().unwrap().as_text_content()?;
         println!("{}", result_content.text.green());
 
         Ok(())
-    }
-
-    pub async fn ping_n_times(&self, n: i32) {
-        let max_pings = n;
-        println!();
-        for ping_index in 1..=max_pings {
-            print!("Ping the server ({ping_index} out of {max_pings})...");
-            std::io::stdout().flush().unwrap();
-            let ping_result = self.client.ping(None, None).await;
-            print!(
-                "\rPing the server ({} out of {}) : {}",
-                ping_index,
-                max_pings,
-                if ping_result.is_ok() {
-                    "success".bright_green()
-                } else {
-                    "failed".bright_red()
-                }
-            );
-            println!();
-            sleep(Duration::from_secs(2)).await;
-        }
     }
 }

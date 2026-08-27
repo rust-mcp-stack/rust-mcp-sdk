@@ -7,14 +7,14 @@ use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::McpAppState;
 use rust_mcp_sdk::mcp_http::McpHttpHandler;
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
-use rust_mcp_sdk::session_store::InMemorySessionStore;
-use rust_mcp_sdk::ToMcpServerHandler;
+// 2026-07-28: InitializeResult → ServerDetails; InMemorySessionStore removed
+use rust_mcp_sdk::schema::{Implementation, ServerCapabilities};
+use rust_mcp_sdk::{ServerDetails, ToMcpServerHandler};
 use std::sync::Arc;
 use tower::ServiceExt;
 
-fn test_server_details() -> InitializeResult {
-    InitializeResult {
+fn test_server_details() -> ServerDetails {
+    ServerDetails {
         server_info: Implementation {
             name: "test-server".into(),
             version: "0.1.0".into(),
@@ -26,7 +26,6 @@ fn test_server_details() -> InitializeResult {
         capabilities: ServerCapabilities::default(),
         meta: None,
         instructions: None,
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     }
 }
 
@@ -36,7 +35,6 @@ impl ServerHandler for DummyHandler {}
 
 fn make_app(http_handler: McpHttpHandler, mount: &McpMountOptions) -> Router {
     let state = Arc::new(McpAppState {
-        session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
         server_details: Arc::new(test_server_details()),
@@ -44,10 +42,10 @@ fn make_app(http_handler: McpHttpHandler, mount: &McpMountOptions) -> Router {
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
-        event_store: None,
-        task_store: None,
-        client_task_store: None,
         message_observer: None,
+        extensions: Arc::new(tokio::sync::RwLock::new(None)),
+        active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
     });
     mcp_routes(state, mount, http_handler)
 }
@@ -370,33 +368,6 @@ async fn test_messages_endpoint_rejects_invalid_session() {
 
     // Without valid sessionId, should return an error
     assert!(!response.status().is_success());
-}
-
-// =====================================================================
-// Error bridge: McpHttpError -> TransportServerError -> IntoResponse
-// =====================================================================
-
-#[tokio::test]
-async fn test_error_bridge_session_id_missing() {
-    let handler = McpHttpHandler::new(None, vec![], None);
-    let mount = default_mount();
-    let app = make_app(handler, &mount);
-
-    // POST to /messages without sessionId query param
-    let response = app
-        .oneshot(
-            axum::http::Request::builder()
-                .method(Method::POST)
-                .uri("/messages")
-                .header("Content-Type", "application/json")
-                .body(Body::from("{}"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // TransportServerError::SessionIdMissing maps to 500 via IntoResponse
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 // =====================================================================

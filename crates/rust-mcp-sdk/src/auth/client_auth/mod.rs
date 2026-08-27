@@ -1,7 +1,6 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
-pub mod flow;
 pub mod in_memory_store;
 pub mod pkce;
 pub mod registration;
@@ -16,11 +15,10 @@ pub use discovery::{
     fetch_protected_resource_metadata, metadata_url_fallbacks, OauthServerInfo,
 };
 pub use error::{ClientError, ClientResult};
-pub use flow::{
-    acquire_auth_headers, bearer_headers, discover_auth_server, escalate_auth_headers,
-    probe_www_authenticate, ClientAuthFlowOptions, DiscoveredAuthServer, ScopeChallengeProbe,
-    WwwAuthenticateChallenge,
-};
+// NOTE(merge): main's `flow` module (1.x auth-flow extraction) NOT taken —
+// superseded by this branch's rewritten client auth flow for 2026-07-28.
+// main's `mcp-client-oauth-flow` example depends on it and was removed too;
+// porting that example to the new API is a Phase-4 follow-up.
 pub use in_memory_store::InMemoryTokenStore;
 pub use pkce::{generate_pkce_params, PkceParams};
 pub use registration::RegistrationResponse;

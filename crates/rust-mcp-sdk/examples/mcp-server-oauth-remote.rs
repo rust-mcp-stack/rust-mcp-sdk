@@ -6,15 +6,12 @@ use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
-use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-    LATEST_PROTOCOL_VERSION,
-};
+// 2026-07-28: InitializeResult removed — use ServerDetails instead
+use rust_mcp_sdk::schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools};
 use rust_mcp_sdk::{
     auth::{Audience, AuthMetadataBuilder, RemoteAuthProvider},
     error::SdkResult,
-    event_store::InMemoryEventStore,
-    mcp_icon, ToMcpServerHandler,
+    mcp_icon, ServerDetails, ToMcpServerHandler,
 };
 use std::env;
 use std::sync::Arc;
@@ -35,19 +32,6 @@ pub async fn create_oauth_provider() -> SdkResult<RemoteAuthProvider> {
     .await?
     .resource_name("MCP Server with Remote Oauth")
     .build()?;
-
-    // Alternatively, build metadata manually:
-    // let (auth_server_meta, protected_resource_meta) =
-    //     AuthMetadataBuilder::new("http://localhost:3000")
-    //         .issuer("http://localhost:8080/realms/master")
-    //         .authorization_endpoint("/protocol/openid-connect/auth")
-    //         .token_endpoint("/protocol/openid-connect/token")
-    //         .jwks_uri("/protocol/openid-connect/certs")
-    //         .introspection_endpoint("/protocol/openid-connect/token/introspect")
-    //         .authorization_servers(vec!["http://localhost:8080/realms/master"])
-    //         .scopes_supported(vec!["mcp:tools", "phone"])
-    //         .resource_name("MCP Server with Remote Oauth")
-    //         .build()?;
 
     // create a token verifier with Jwks and Introspection strategies
     //  GenericOauthTokenVerifier is used from rust-mcp-extra crate
@@ -97,8 +81,8 @@ async fn main() -> SdkResult<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let server_details = InitializeResult {
-        // server name and version
+    // 2026-07-28: InitializeResult replaced by ServerDetails — no protocol_version
+    let server_details = ServerDetails {
         server_info: Implementation {
             name: "Remote Oauth Test MCP Server".into(),
             version: "0.1.0".into(),
@@ -115,17 +99,17 @@ async fn main() -> SdkResult<()> {
         capabilities: ServerCapabilities {
             // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
-            ..Default::default() // Using default values for other fields
+            ..Default::default()
         },
         meta: None,
         instructions: Some("server instructions...".into()),
-        protocol_version: LATEST_PROTOCOL_VERSION.into(),
     };
 
     let handler = ServerHandlerAuth {};
 
     let oauth_metadata_provider = create_oauth_provider().await?;
 
+    // 2026-07-28: event_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
@@ -134,8 +118,7 @@ async fn main() -> SdkResult<()> {
             port: 3000,
             custom_streamable_http_endpoint: Some("/".into()),
             ping_interval: Duration::from_secs(5),
-            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
-            auth: Some(Arc::new(oauth_metadata_provider)),              // enable authentication
+            auth: Some(Arc::new(oauth_metadata_provider)), // enable authentication
             ..Default::default()
         },
     );

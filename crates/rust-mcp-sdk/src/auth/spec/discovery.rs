@@ -3,14 +3,36 @@ use crate::{
     error::McpSdkError,
     mcp_http::url_base,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use url::Url;
+
+/// Deserializes a URL into its exact string form while validating syntax.
+///
+/// RFC 9207 (MCP SEP-2468) compares the `iss` authorization-response
+/// parameter against the recorded issuer with simple string comparison —
+/// `url::Url` normalizes empty paths (appends `/`), so the raw document
+/// string must be preserved for that comparison.
+fn deserialize_validated_url_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    Url::parse(&value).map_err(serde::de::Error::custom)?;
+    Ok(value)
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthorizationServerMetadata {
     /// The base URL of the authorization server (e.g., "http://localhost:8080/realms/master/").
-    pub issuer: Url,
+    ///
+    /// Stored as the raw string from the metadata document (validated to be a
+    /// well-formed URL): RFC 9207 / MCP SEP-2468 requires comparing a
+    /// redirect's `iss` parameter against this value using simple string
+    /// comparison, and `url::Url` normalizes empty paths (appends `/`), which
+    /// would corrupt that comparison.
+    #[serde(deserialize_with = "deserialize_validated_url_string")]
+    pub issuer: String,
 
     /// URL to which the client redirects the user for authorization.
     pub authorization_endpoint: Url,
@@ -103,6 +125,15 @@ pub struct AuthorizationServerMetadata {
     /// Metadata Document as their `client_id` instead of registering via DCR.
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub client_id_metadata_document_supported: Option<bool>,
+
+    /// RFC 9207 (`iss` authorization response parameter) support flag
+    /// (MCP SEP-2468). When `true`, the authorization server includes an
+    /// `iss` parameter in authorization responses and clients MUST require
+    /// its presence and validate it. Regardless of this flag, a client that
+    /// receives an `iss` parameter MUST compare it against the recorded
+    /// issuer using simple string comparison (no URL normalization).
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub authorization_response_iss_parameter_supported: Option<bool>,
 }
 
 impl AuthorizationServerMetadata {
@@ -120,7 +151,9 @@ impl AuthorizationServerMetadata {
         authorization_endpoint: &str,
         token_endpoint: &str,
     ) -> Result<Self, url::ParseError> {
-        let issuer = Url::parse(issuer)?;
+        // Validate URL syntax while preserving the caller's exact string form.
+        let _ = Url::parse(issuer)?;
+        let issuer = issuer.to_string();
         let authorization_endpoint = Url::parse(authorization_endpoint)?;
         let token_endpoint = Url::parse(token_endpoint)?;
 
@@ -146,7 +179,17 @@ impl AuthorizationServerMetadata {
             code_challenge_methods_supported: Default::default(),
             userinfo_endpoint: Default::default(),
             client_id_metadata_document_supported: Default::default(),
+            authorization_response_iss_parameter_supported: Default::default(),
         })
+    }
+
+    /// Parses the `issuer` into a [`Url`].
+    ///
+    /// The issuer is stored as the exact string from the metadata document
+    /// (see the field documentation); this accessor re-parses it for callers
+    /// that need a structured URL.
+    pub fn issuer_url(&self) -> Result<Url, url::ParseError> {
+        Url::parse(&self.issuer)
     }
 
     /// Fetches authorization server metadata from a remote `.well-known/openid-configuration`

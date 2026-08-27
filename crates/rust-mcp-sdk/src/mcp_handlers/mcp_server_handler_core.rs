@@ -1,6 +1,8 @@
 use crate::mcp_server::server_runtime_core::RuntimeCoreInternalHandler;
 use crate::mcp_traits::McpServer;
-use crate::mcp_traits::{McpServerHandler, ToMcpServerHandlerCore};
+use crate::mcp_traits::{
+    McpServerHandler, RequestContext, RequiredClientCapability, ToMcpServerHandlerCore,
+};
 use crate::schema::*;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -10,25 +12,27 @@ use std::sync::Arc;
 /// while ensures type-safe processing of the messages through three distinct handlers for requests, notifications, and errors.
 #[async_trait]
 pub trait ServerHandlerCore: Send + Sync + 'static {
-    /// Invoked when the server finishes initialization and receives an `initialized_notification` from the client.
-    ///
-    /// The `runtime` parameter provides access to the server's runtime environment, allowing
-    /// interaction with the server's capabilities.
-    /// The default implementation does nothing.
-    async fn on_initialized(&self, _runtime: Arc<dyn McpServer>) {}
-
+    /// Returns the set of client capabilities this handler requires for
+    /// the given method. Before dispatching a request the runtime calls
+    /// this method and rejects the request with
+    /// [`MISSING_REQUIRED_CLIENT_CAPABILITY`] (-32021) when the client
+    /// did not declare every required capability.
+    fn required_capabilities_for_method(&self, _method: &str) -> Vec<RequiredClientCapability> {
+        Vec::new()
+    }
     /// Asynchronously handles an incoming request from the client.
     ///
     /// # Parameters
     /// - `request` – The request data received from the MCP client.
     ///
     /// # Returns
-    /// A `ResultFromServer`, which represents the server's response to the client's request.
+    /// A `ServerResult`, which represents the server's response to the client's request.
     async fn handle_request(
         &self,
         request: RequestFromClient,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ResultFromServer, RpcError>;
+    ) -> std::result::Result<ServerResult, RpcError>;
 
     /// Asynchronously handles an incoming notification from the client.
     ///

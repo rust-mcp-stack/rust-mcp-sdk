@@ -147,7 +147,12 @@ impl WorkOsAuthProvider {
             });
         };
 
-        let userinfo_uri = join_url(&auth_server_meta.issuer, "oauth2/userinfo")
+        let issuer_url = auth_server_meta
+            .issuer_url()
+            .map_err(|err| McpSdkError::Internal {
+                description: format!("invalid issuer url :{err}"),
+            })?;
+        let userinfo_uri = join_url(&issuer_url, "oauth2/userinfo")
             .map_err(|err| McpSdkError::Internal {
                 description: format!("invalid userinfo url :{err}"),
             })?

@@ -299,6 +299,8 @@ impl StreamableHttpStream {
         }
     }
 
+    // Pre-existing WIP (SEP-1699 standalone SSE reconnect); not wired up yet.
+    #[allow(dead_code)]
     pub(crate) async fn run_standalone(
         &mut self,
         cancellation_token: &CancellationToken,

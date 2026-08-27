@@ -4,10 +4,9 @@ use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
-};
-use rust_mcp_sdk::session_store::InMemorySessionStore;
+// 2026-07-28: InitializeResult replaced by ServerDetails
+use rust_mcp_sdk::schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools};
+use rust_mcp_sdk::ServerDetails;
 use rust_mcp_sdk::ToMcpServerHandler;
 use std::sync::Arc;
 
@@ -19,11 +18,11 @@ impl ServerHandler for HelloHandler {}
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt::init();
 
+    // 2026-07-28: InitializeResult → ServerDetails; InMemorySessionStore removed
     let state = Arc::new(McpAppState {
-        session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-        server_details: Arc::new(InitializeResult {
+        server_details: Arc::new(ServerDetails {
             server_info: Implementation {
                 name: "MCP Server Actix BYO".into(),
                 version: "0.1.0".into(),
@@ -43,16 +42,15 @@ async fn main() -> std::io::Result<()> {
             },
             meta: None,
             instructions: None,
-            protocol_version: ProtocolVersion::V2025_11_25.into(),
         }),
         handler: HelloHandler.to_mcp_server_handler(),
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
-        event_store: None,
-        task_store: None,
-        client_task_store: None,
         message_observer: None,
+        extensions: Arc::new(tokio::sync::RwLock::new(None)),
+        active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
     });
     let http_handler = Arc::new(McpHttpHandler::new(None, vec![], None));
 

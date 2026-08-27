@@ -24,7 +24,7 @@ rust-mcp-axum = { version = "1.0.2", path = "crates/rust-mcp-axum" }
 rust-mcp-actix = { version = "1.0.2", path = "crates/rust-mcp-actix" }
 
 # External crates
-rust-mcp-schema = { version="1.0",  default-features = false }
+rust-mcp-schema = { version = "2.0.0", default-features = false }
 
 futures = { version = "0.3" }
 tokio = { version = "1.4", features = ["full"] }

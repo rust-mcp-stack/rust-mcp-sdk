@@ -3,10 +3,12 @@ name: Version Docs
 on:
   release:
     types: [published]
+  # Manual escape hatch: snapshot the current `docs/` into a major's folder on
+  # demand (used when a new major's docs are finished, or to fix a frozen major).
   workflow_dispatch:
     inputs:
       version:
-        description: 'SDK version to version/refresh docs for (e.g. 1.1.0)'
+        description: 'SDK version to snapshot the docs for (e.g. 2.0.0)'
         required: true
         type: string
 
@@ -21,14 +23,14 @@ concurrency:
 
 jobs:
   version-docs:
-    # Version the docs when the main SDK crate gets a stable release, or when
-    # run manually via workflow_dispatch. Tags look like: rust-mcp-sdk-v1.1.0
-    # Prereleases (rc/beta/alpha) are skipped so a new major can ship before
-    # its docs exist — see .opencode/docs-site.md §5.5.
+    # release path: only the main SDK crate's stable releases version the docs
+    # (tags look like `rust-mcp-sdk-v1.1.0`; prereleases are skipped).
+    # workflow_dispatch path: always runs — it is the explicit manual action.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (startsWith(github.ref, 'refs/tags/rust-mcp-sdk-v') &&
-       !github.event.release.prerelease)
+      (github.event_name == 'release' &&
+       startsWith(github.ref, 'refs/tags/rust-mcp-sdk-v') &&
+       !github.event.release.prerelease) ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,7 +61,7 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
+            VERSION="${{ github.event.inputs.version }}"
           else
             VERSION="${GITHUB_REF_NAME#rust-mcp-sdk-v}"
           fi
@@ -70,8 +72,30 @@ jobs:
           MAJOR="${VERSION%%.*}"
           echo "label=$MAJOR.x" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+
+      - name: Gate — skip if docs/ describes a different major
+        id: gate
+        run: |
+          # On the release path, only snapshot when the released major matches
+          # the major that `docs/` currently documents (`.docs-major`). This
+          # (a) lets a new major ship as stable before its docs exist, and
+          # (b) prevents an old-major release from overwriting a frozen snapshot
+          # with the new major's `docs/` content.
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            DOCS_MAJOR="$(cat .docs-major)"
+            if [ "${{ steps.version.outputs.major }}" != "$DOCS_MAJOR" ]; then
+              echo "Released major (${{ steps.version.outputs.major }}) != docs major ($DOCS_MAJOR) — skipping snapshot."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Refresh rolling major snapshot
+        if: steps.gate.outputs.skip != 'true'
         run: |
           LABEL="${{ steps.version.outputs.label }}"
           # Remove the existing snapshot so docs:version can recreate it
@@ -82,6 +106,7 @@ jobs:
           pnpm docusaurus docs:version "$LABEL"
 
       - name: Update displayed version label
+        if: steps.gate.outputs.skip != 'true'
         run: |
           node -e "const fs=require('fs');const p='version-labels.json';const labels=JSON.parse(fs.readFileSync(p,'utf8'));labels['${{ steps.version.outputs.label }}']={label:'${{ steps.version.outputs.version }}',banner:'none'};fs.writeFileSync(p,JSON.stringify(labels,null,2)+'\n');"
 

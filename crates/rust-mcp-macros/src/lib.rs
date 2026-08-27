@@ -24,7 +24,9 @@ use crate::tool::parser::McpToolMacroAttributes;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields};
-use utils::{base_crate, is_option, is_vec_string, renamed_field, type_to_json_schema};
+use utils::{
+    base_crate, is_option, is_vec_string, parse_x_mcp_header, renamed_field, type_to_json_schema,
+};
 
 /// A procedural macro attribute to generate rust_mcp_schema::Tool related utility methods for a struct.
 ///
@@ -128,7 +130,6 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         title,
         output_schema,
         annotations,
-        execution,
         icons,
     } = generate_tool_tokens(macro_attributes);
 
@@ -142,9 +143,8 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             #title
             #meta
             #annotations
-            #execution
             #icons
-            input_schema: #base_crate::ToolInputSchema::new(required, properties, None)
+            input_schema: #base_crate::ToolInputSchema::new(None, extra)
         }
     };
 
@@ -173,7 +173,7 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
             /// # Returns
             /// A `CallToolRequestParams` with the tool name set.
             pub fn request_params() -> #base_crate::CallToolRequestParams {
-               #base_crate::CallToolRequestParams::new(#tool_name.to_string())
+               #base_crate::CallToolRequestParams::new(#tool_name.to_string(), #base_crate::RequestMetaObject::default())
             }
 
             /// Constructs and returns a `rust_mcp_schema::Tool` instance.
@@ -213,6 +213,19 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
                             })
                             .collect()
                     });
+
+                let mut extra = serde_json::Map::new();
+                if let Some(props) = properties {
+                    extra.insert("properties".to_string(), serde_json::Value::Object(
+                        props.into_iter().map(|(k, v)| (k, serde_json::Value::Object(v))).collect()
+                    ));
+                }
+                if !required.is_empty() {
+                    extra.insert("required".to_string(), serde_json::Value::Array(
+                        required.iter().map(|s| serde_json::Value::String(s.clone())).collect()
+                    ));
+                }
+                let extra = if extra.is_empty() { None } else { Some(extra) };
 
                 #tool_token
             }
@@ -254,7 +267,7 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
                         #message
                     }
 
-                    pub fn requested_schema() -> #base_crate::ElicitFormSchema {
+                    pub fn requested_schema() -> #base_crate::ElicitRequestFormParamsRequestedSchema {
                         #schema
                     }
 
@@ -266,8 +279,6 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
                             #base_crate::ElicitRequestFormParams::new(
                                 Self::message().to_string(),
                                 Self::requested_schema(),
-                                None,
-                                None,
                             )
                     }
 
@@ -306,11 +317,8 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     pub fn elicit_url_params(elicitation_id:String) -> #base_crate::ElicitRequestUrlParams {
                             #base_crate::ElicitRequestUrlParams::new(
-                                elicitation_id,
                                 Self::message().to_string(),
                                 Self::url().to_string(),
-                                None,
-                                None,
                             )
                     }
 
@@ -418,7 +426,9 @@ pub fn mcp_elicit(args: TokenStream, input: TokenStream) -> TokenStream {
 /// let params = rust_mcp_schema::GetPromptRequestParams {
 ///     name: "friendly-greeting".into(),
 ///     arguments: None,
-///     meta: None,
+///     meta: rust_mcp_schema::RequestMetaObject::default(),
+///     input_responses: None,
+///     request_state: None,
 /// };
 /// let result = FriendlyGreeting::from_arguments(params.arguments.as_ref())?.render();
 /// assert_eq!(result.messages.len(), 1);
@@ -575,6 +585,8 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     description: #description,
                     messages,
                     meta: #meta,
+                    // 2026-07-28: a fully rendered prompt is always a complete result.
+                    result_type: "complete".to_string(),
                 }
             }
         }
@@ -627,7 +639,9 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 #base_crate::GetPromptRequestParams {
                     name: Self::prompt_name().to_string(),
                     arguments: None,
-                    meta: None,
+                    meta: #base_crate::RequestMetaObject::default(),
+                    input_responses: None,
+                    request_state: None,
                 }
             }
 
@@ -702,11 +716,25 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
                     let field_type = &field.ty;
 
                     let schema = type_to_json_schema(field_type, field_attrs);
-                    quote! {
-                        properties.insert(
-                            #field_name.to_string(),
-                            serde_json::Value::Object(#schema)
-                        );
+                    let x_mcp_header = parse_x_mcp_header(field_attrs);
+                    if let Some(ref header_name) = x_mcp_header {
+                        quote! {
+                            {
+                                let mut map = #schema;
+                                map.insert("x-mcp-header".to_string(), serde_json::Value::String(#header_name.to_string()));
+                                properties.insert(
+                                    #field_name.to_string(),
+                                    serde_json::Value::Object(map)
+                                );
+                            }
+                        }
+                    } else {
+                        quote! {
+                            properties.insert(
+                                #field_name.to_string(),
+                                serde_json::Value::Object(#schema)
+                            );
+                        }
                     }
                 });
 

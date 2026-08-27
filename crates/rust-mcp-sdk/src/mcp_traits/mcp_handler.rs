@@ -1,17 +1,20 @@
 use async_trait::async_trait;
 
-use rust_mcp_schema::schema_utils::{
-    ClientJsonrpcNotification, ClientJsonrpcRequest, ServerJsonrpcRequest,
-};
+#[cfg(feature = "server")]
+use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
+
+#[cfg(feature = "client")]
+use rust_mcp_schema::schema_utils::ServerJsonrpcRequest;
 
 #[cfg(feature = "server")]
-use crate::schema::schema_utils::ResultFromServer;
+use crate::schema::ServerResult;
 
 #[cfg(feature = "client")]
 use crate::schema::schema_utils::{NotificationFromServer, ResultFromClient};
 
 use crate::error::SdkResult;
 use crate::schema::RpcError;
+#[cfg(feature = "server")]
 use std::sync::Arc;
 
 #[cfg(feature = "client")]
@@ -26,7 +29,7 @@ pub trait McpServerHandler: Send + Sync {
         &self,
         client_jsonrpc_request: ClientJsonrpcRequest,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ResultFromServer, RpcError>;
+    ) -> std::result::Result<ServerResult, RpcError>;
     async fn handle_error(
         &self,
         jsonrpc_error: &RpcError,
@@ -37,6 +40,20 @@ pub trait McpServerHandler: Send + Sync {
         client_jsonrpc_notification: ClientJsonrpcNotification,
         runtime: Arc<dyn McpServer>,
     ) -> SdkResult<()>;
+
+    /// SEP-2243 custom-header validation: returns the `x-mcp-header`
+    /// annotations of the given tool known to this handler, so the HTTP
+    /// layer can validate `Mcp-Param-*` headers against the request body.
+    ///
+    /// Defaults to empty (no annotated tools). Override this in the
+    /// user-facing `ServerHandler` trait; the internal implementation
+    /// delegates to it via `ServerRuntimeInternalHandler`.
+    fn tool_header_annotations(
+        &self,
+        _tool_name: &str,
+    ) -> Vec<crate::tool_param_headers::ToolParamHeader> {
+        Vec::new()
+    }
 }
 
 // Custom trait for converting ServerHandler

@@ -44,7 +44,7 @@ fn test_form_basic_conversion() {
             assert!(form.requested_schema.properties.contains_key("name"));
             assert!(form.requested_schema.properties.contains_key("age"));
             assert_eq!(form.requested_schema.required, vec!["name", "expertise"]); // age is optional
-            assert!(form.meta.is_none());
+                                                                                   // 2026-07-28: meta field removed from ElicitRequestFormParams
             assert_eq!(form.mode().as_ref().unwrap(), "form");
         }
         _ => panic!("Expected FormParams"),
@@ -91,8 +91,7 @@ fn test_url_basic_conversion() {
     match req {
         ElicitRequestParams::UrlParams(params) => {
             assert_eq!(params.message, "Please enter your name and age");
-            assert!(params.meta.is_none());
-            assert!(params.task.is_none());
+            // 2026-07-28: meta and task fields removed from ElicitRequestUrlParams
             assert_eq!(params.mode(), "url");
         }
         _ => panic!("Expected UrlParams"),
@@ -270,15 +269,15 @@ fn test_url_mode_with_elicitation_id() {
         pub token: String,
     }
 
+    // 2026-07-28: elicitation_id field removed from ElicitRequestUrlParams
     let params = ExternalForm::elicit_url_params("elicit-999".to_string());
-    assert_eq!(params.elicitation_id, "elicit-999");
     assert_eq!(params.message, "Go to this link");
     assert_eq!(params.url, "https://example.com/form/123");
 
     let req_params = ExternalForm::elicit_request_params("elicit-999".to_string());
     match req_params {
         ElicitRequestParams::UrlParams(p) => {
-            assert_eq!(p.elicitation_id, "elicit-999");
+            // 2026-07-28: elicitation_id field removed
         }
         _ => panic!("Wrong variant"),
     }
@@ -357,10 +356,27 @@ fn readme_example_elicitation() {
 
     // Simulate user input
     let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
-    content.insert("name".to_string(), "Alice".into());
-    content.insert("email".to_string(), "alice@Borderland.com".into());
-    content.insert("age".to_string(), 25.into());
-    content.insert("tags".to_string(), vec!["rust", "c++"].into());
+    // 2026-07-28: ElicitResultContent no longer implements From<&str>/From<integer>/From<Vec<&str>>
+    content.insert(
+        "name".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
+            "Alice".to_string(),
+        )),
+    );
+    content.insert(
+        "email".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
+            "alice@Borderland.com".to_string(),
+        )),
+    );
+    content.insert(
+        "age".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Integer(25)),
+    );
+    content.insert(
+        "tags".to_string(),
+        ElicitResultContent::StringArray(vec!["rust".to_string(), "c++".to_string()]),
+    );
 
     let user = UserInfo::from_elicit_result_content(Some(content)).unwrap();
     assert_eq!(user.name, "Alice");
@@ -390,10 +406,27 @@ fn readme_example_elicitation_url() {
 
     // Simulate user input
     let mut content: BTreeMap<String, ElicitResultContent> = BTreeMap::new();
-    content.insert("name".to_string(), "Alice".into());
-    content.insert("email".to_string(), "alice@Borderland.com".into());
-    content.insert("age".to_string(), 25.into());
-    content.insert("tags".to_string(), vec!["rust", "c++"].into());
+    // 2026-07-28: ElicitResultContent no longer implements From<&str>/From<integer>/From<Vec<&str>>
+    content.insert(
+        "name".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
+            "Alice".to_string(),
+        )),
+    );
+    content.insert(
+        "email".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::String(
+            "alice@Borderland.com".to_string(),
+        )),
+    );
+    content.insert(
+        "age".to_string(),
+        ElicitResultContent::Primitive(rust_mcp_schema::ElicitResultContentPrimitive::Integer(25)),
+    );
+    content.insert(
+        "tags".to_string(),
+        ElicitResultContent::StringArray(vec!["rust".to_string(), "c++".to_string()]),
+    );
 
     let user = UserInfo::from_elicit_result_content(Some(content)).unwrap();
     assert_eq!(user.name, "Alice");

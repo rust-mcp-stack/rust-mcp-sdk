@@ -60,6 +60,7 @@ impl MCPStream {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "streamable-http")]
     pub fn create_with_ack<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: tokio::sync::mpsc::Sender<(

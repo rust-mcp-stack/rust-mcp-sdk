@@ -1,3 +1,6 @@
+use crate::mcp_traits::McpServer;
+use crate::mcp_traits::RequestContext;
+use crate::mcp_traits::RequiredClientCapability;
 use crate::{
     mcp_server::server_runtime::ServerRuntimeInternalHandler,
     mcp_traits::{McpServerHandler, ToMcpServerHandler},
@@ -5,9 +8,7 @@ use crate::{
         schema_utils::{CallToolError, CustomNotification, CustomRequest},
         *,
     },
-    task_store::ServerTaskCreator,
 };
-use crate::{mcp_traits::McpServer, utils::enforce_compatible_protocol_version};
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -17,64 +18,38 @@ use std::sync::Arc;
 #[allow(unused)]
 #[async_trait]
 pub trait ServerHandler: Send + Sync + 'static {
-    /// Invoked when the server finishes initialization and receives an `initialized_notification` from the client.
-    ///
-    /// The `runtime` parameter provides access to the server's runtime environment, allowing
-    /// interaction with the server's capabilities.
-    /// The default implementation does nothing.
-    async fn on_initialized(&self, runtime: Arc<dyn McpServer>) {}
-
-    /// Handles the InitializeRequest from a client.
-    ///
-    /// # Arguments
-    /// * `initialize_request` - The initialization request containing client parameters
-    /// * `runtime` - Reference to the MCP server runtime
-    ///
-    /// # Returns
-    /// Returns the server info as InitializeResult on success or a JSON-RPC error on failure
-    /// Do not override this unless the standard initialization process doesn't work for you or you need to modify it.
-    async fn handle_initialize_request(
-        &self,
-        params: InitializeRequestParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<InitializeResult, RpcError> {
-        let mut server_info = runtime.server_info().to_owned();
-        // Provide compatibility for clients using older MCP protocol versions.
-
-        if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
-            &params.protocol_version,
-            &server_info.protocol_version,
-        )
-        .map_err(|err| {
-            tracing::error!(
-                "Incompatible protocol version : client: {} server: {}",
-                &params.protocol_version,
-                &server_info.protocol_version
-            );
-            RpcError::internal_error().with_message(err.to_string())
-        })? {
-            server_info.protocol_version = updated_protocol_version;
-        }
-
-        runtime
-            .set_client_details(params)
-            .await
-            .map_err(|err| RpcError::internal_error().with_message(format!("{err}")))?;
-
-        Ok(server_info)
+    /// Returns the set of client capabilities this handler requires for
+    /// the given method.  Before dispatching a request the runtime calls
+    /// this method and rejects the request with
+    /// [`MISSING_REQUIRED_CLIENT_CAPABILITY`] (-32021) when the client
+    /// did not declare every required capability.
+    fn required_capabilities_for_method(&self, _method: &str) -> Vec<RequiredClientCapability> {
+        Vec::new()
     }
 
-    /// Handles ping requests from clients.
-    ///
-    /// # Returns
-    /// By default, it returns an empty result structure
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_ping_request(
+    /// Returns the set of client capabilities required to call the given
+    /// tool. Before dispatching a `tools/call`, the runtime rejects the
+    /// request with [`MISSING_REQUIRED_CLIENT_CAPABILITY`] (-32021) when the
+    /// client did not declare every required capability — so a server never
+    /// relies on a capability the client has not advertised.
+    fn required_capabilities_for_tool_call(
         &self,
-        _params: Option<RequestParams>,
-        _runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<Result, RpcError> {
-        Ok(Result::default())
+        _tool_name: &str,
+    ) -> Vec<RequiredClientCapability> {
+        Vec::new()
+    }
+
+    /// SEP-2243 custom-header validation: returns the `x-mcp-header`
+    /// annotations of the given tool, so the HTTP layer can validate
+    /// `Mcp-Param-*` headers against the request body.
+    ///
+    /// Defaults to empty. Override with [`crate::tool_param_headers::annotations_for_tool`]
+    /// to parse annotations from your tool definitions.
+    fn tool_header_annotations(
+        &self,
+        _tool_name: &str,
+    ) -> Vec<crate::tool_param_headers::ToolParamHeader> {
+        Vec::new()
     }
 
     /// Handles requests to list available resources.
@@ -84,6 +59,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_list_resources_request(
         &self,
         params: Option<PaginatedRequestParams>,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourcesResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
@@ -99,6 +75,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_list_resource_templates_request(
         &self,
         params: Option<PaginatedRequestParams>,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListResourceTemplatesResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
@@ -114,41 +91,12 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_read_resource_request(
         &self,
         params: ReadResourceRequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ReadResourceResult, RpcError> {
+    ) -> std::result::Result<ServerResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ReadResourceRequest::method_value(),
-        )))
-    }
-
-    /// Handles subscription requests from clients.
-    ///
-    /// Default implementation returns method not found error.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_subscribe_request(
-        &self,
-        params: SubscribeRequestParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<Result, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            SubscribeRequest::method_value(),
-        )))
-    }
-
-    /// Handles unsubscribe requests from clients.
-    ///
-    /// Default implementation returns method not found error.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_unsubscribe_request(
-        &self,
-        params: UnsubscribeRequestParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<Result, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            UnsubscribeRequest::method_value(),
         )))
     }
 
@@ -159,6 +107,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_list_prompts_request(
         &self,
         params: Option<PaginatedRequestParams>,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListPromptsResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
@@ -174,8 +123,9 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_get_prompt_request(
         &self,
         params: GetPromptRequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<GetPromptResult, RpcError> {
+    ) -> std::result::Result<ServerResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             GetPromptRequest::method_value(),
@@ -189,30 +139,13 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_list_tools_request(
         &self,
         params: Option<PaginatedRequestParams>,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<ListToolsResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ListToolsRequest::method_value(),
         )))
-    }
-
-    /// Handles requests to call a task-augmented tool.
-    /// you need to returns a CreateTaskResult containing task data.
-    /// The actual operation result becomes available later
-    /// through tasks/result after the task completes.
-    async fn handle_task_augmented_tool_call(
-        &self,
-        params: CallToolRequestParams,
-        task_creator: ServerTaskCreator,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CreateTaskResult, CallToolError> {
-        if !runtime.capabilities().can_run_task_augmented_tools() {
-            return Err(CallToolError::unsupported_task_augmented_tool_call());
-        }
-        Err(CallToolError::from_message(
-            "No handler is implemented for 'task augmented tool call'.",
-        ))
     }
 
     /// Handles requests to call a specific tool.
@@ -222,24 +155,46 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_call_tool_request(
         &self,
         params: CallToolRequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CallToolResult, CallToolError> {
-        Ok(CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into())
+    ) -> std::result::Result<ServerResult, CallToolError> {
+        let result: CallToolResult =
+            CallToolError::unknown_tool(format!("Unknown tool: {}", params.name)).into();
+        Ok(result.into())
     }
 
-    /// Handles requests to enable or adjust logging level.
+    /// MRTR-aware variant of [`handle_call_tool_request`](Self::handle_call_tool_request)
+    /// (SEP-2322).
     ///
-    /// Default implementation returns method not found error.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_set_level_request(
+    /// Unlike the legacy method — whose `CallToolError` is always converted
+    /// into a `CallToolResult` with `isError: true` — this method returns a
+    /// protocol-level [`RpcError`], which becomes the JSON-RPC error response
+    /// of the request. Use it when a tool call must:
+    ///
+    /// - return an [`InputRequiredResult`] to drive a mid-request turn-around
+    ///   (resolved `inputResponses` arrive on the retry via `params`), or
+    /// - reject the call with a JSON-RPC error (e.g. `-32602` when an
+    ///   integrity-protected `requestState` fails verification).
+    ///
+    /// The default implementation preserves the legacy behavior exactly:
+    /// it delegates to [`handle_call_tool_request`](Self::handle_call_tool_request)
+    /// and converts a `CallToolError` into an `isError` result.
+    async fn handle_call_tool_request_mrtr(
         &self,
-        params: SetLevelRequestParams,
+        params: CallToolRequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<Result, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            SetLevelRequest::method_value(),
-        )))
+    ) -> std::result::Result<ServerResult, RpcError> {
+        match self
+            .handle_call_tool_request(params, context, runtime)
+            .await
+        {
+            Ok(result) => Ok(result),
+            Err(tool_error) => {
+                let result: CallToolResult = tool_error.into();
+                Ok(result.into())
+            }
+        }
     }
 
     /// Handles completion requests from clients.
@@ -249,59 +204,12 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_complete_request(
         &self,
         params: CompleteRequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<CompleteResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             CompleteRequest::method_value(),
-        )))
-    }
-
-    /// Handles a request to retrieve the state of a task.
-    async fn handle_get_task_request(
-        &self,
-        params: GetTaskParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<GetTaskResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            GetTaskRequest::method_value(),
-        )))
-    }
-
-    /// Handles a request to retrieve the result of a completed task.
-    async fn handle_get_task_payload_request(
-        &self,
-        params: GetTaskPayloadParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<GetTaskPayloadResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            GetTaskPayloadRequest::method_value(),
-        )))
-    }
-
-    /// Handles a request to cancel a task.
-    async fn handle_cancel_task_request(
-        &self,
-        params: CancelTaskParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<CancelTaskResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            CancelTaskRequest::method_value(),
-        )))
-    }
-
-    /// Handles a request to retrieve a list of tasks.
-    async fn handle_list_task_request(
-        &self,
-        params: Option<PaginatedRequestParams>,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ListTasksResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            ListTasksRequest::method_value(),
         )))
     }
 
@@ -312,58 +220,68 @@ pub trait ServerHandler: Send + Sync + 'static {
     async fn handle_custom_request(
         &self,
         request: CustomRequest,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<GenericResult, RpcError> {
         Err(RpcError::method_not_found()
             .with_message("No handler is implemented for custom requests.".to_string()))
     }
 
-    // Notification Handlers
-
-    /// Handles initialized notifications from clients.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_initialized_notification(
+    /// Handles `server/discover` — advertises the server's capabilities,
+    /// supported protocol versions, and instructions.
+    ///
+    /// The default implementation builds the response from the runtime's
+    /// `server_details()`. Servers that need dynamic version negotiation
+    /// or cache directives can override this.
+    async fn handle_discover_request(
         &self,
-        params: Option<NotificationParams>,
+        _params: RequestParams,
+        context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<(), RpcError> {
-        Ok(())
+    ) -> std::result::Result<DiscoverResult, RpcError> {
+        let details = runtime.server_details();
+        Ok(DiscoverResult {
+            capabilities: details.capabilities.clone(),
+            instructions: details.instructions.clone(),
+            meta: details.meta.clone(),
+            result_type: "complete".to_string(),
+            cache_scope: DiscoverResultCacheScope::Private,
+            ttl_ms: 0,
+            supported_versions: crate::utils::supported_protocol_versions(),
+        })
     }
+    /// Handles `subscriptions/listen` — a client requests notification
+    /// subscriptions on a persistent stream.
+    ///
+    /// The default implementation stores the requested subscription filter on the
+    /// runtime, sends a `notifications/subscriptions/acknowledged` (via the
+    /// dispatcher), and returns an immediate `SubscriptionsListenResult` signaling
+    /// teardown. Override this to implement long-lived subscription streams.
+    async fn handle_subscriptions_listen_request(
+        &self,
+        request_id: RequestId,
+        params: SubscriptionsListenRequestParams,
+        _context: &RequestContext,
+        runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<SubscriptionsListenResult, RpcError> {
+        runtime.store_subscription(params.notifications);
+        let details = runtime.server_details();
+        Ok(SubscriptionsListenResult {
+            meta: SubscriptionsListenResultMetaObject {
+                io_modelcontextprotocol_server_info: Some(details.server_info.clone()),
+                io_modelcontextprotocol_subscription_id: request_id,
+                extra: None,
+            },
+            result_type: "complete".to_string(),
+        })
+    }
+    // Notification Handlers
 
     /// Handles cancelled operation notifications.
     /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
     async fn handle_cancelled_notification(
         &self,
         params: CancelledNotificationParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<(), RpcError> {
-        Ok(())
-    }
-
-    /// Handles progress update notifications.
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_progress_notification(
-        &self,
-        params: ProgressNotificationParams,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<(), RpcError> {
-        Ok(())
-    }
-
-    /// Handles notifications received from the client indicating that the list of roots has changed
-    /// Customize this function in your specific handler to implement behavior tailored to your MCP server's capabilities and requirements.
-    async fn handle_roots_list_changed_notification(
-        &self,
-        params: Option<NotificationParams>,
-        runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<(), RpcError> {
-        Ok(())
-    }
-
-    ///handles a notification from the receiver to the requestor, informing them that a task's status has changed.
-    async fn handle_task_status_notification(
-        &self,
-        params: TaskStatusNotificationParams,
         runtime: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

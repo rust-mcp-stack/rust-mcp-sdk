@@ -22,10 +22,3 @@ impl Parse for ExprList {
         })
     }
 }
-
-#[derive(Debug)]
-pub(crate) enum ExecutionSupportDsl {
-    Forbidden,
-    Optional,
-    Required,
-}

@@ -10,11 +10,9 @@ use rust_mcp_sdk::{
     mcp_http::{McpAppState, McpHttpHandler},
     mcp_icon,
     mcp_server::ServerHandler,
-    schema::{
-        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
-        ServerCapabilitiesTools,
-    },
-    session_store::InMemorySessionStore,
+    schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools},
+    // 2026-07-28: InMemorySessionStore removed
+    ServerDetails,
     ToMcpServerHandler,
 };
 use std::sync::Arc;
@@ -30,10 +28,10 @@ async fn main() -> std::io::Result<()> {
 
     // STEP 1: Build the shared MCP application state
     let state = Arc::new(McpAppState {
-        session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-        server_details: Arc::new(InitializeResult {
+        // 2026-07-28: InitializeResult → ServerDetails
+        server_details: Arc::new(ServerDetails {
             server_info: Implementation {
                 name: "MCP Server Axum BYO".into(),
                 version: "0.1.0".into(),
@@ -53,16 +51,15 @@ async fn main() -> std::io::Result<()> {
             },
             meta: None,
             instructions: None,
-            protocol_version: ProtocolVersion::V2025_11_25.into(),
         }),
         handler: HelloHandler.to_mcp_server_handler(),
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
-        event_store: None,
-        task_store: None,
-        client_task_store: None,
         message_observer: None,
+        extensions: Arc::new(tokio::sync::RwLock::new(None)),
+        active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
     });
 
     // STEP 2: Create the HTTP handler (handles auth, middlewares, health)

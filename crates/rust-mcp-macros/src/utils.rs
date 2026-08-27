@@ -697,6 +697,27 @@ pub fn is_vec_string(ty: &Type) -> bool {
     }
 }
 
+/// Parses `#[json_schema(x_mcp_header = "HeaderName")]` from a field's
+/// attributes and returns the header name, or `None` when the annotation
+/// is absent.
+pub fn parse_x_mcp_header(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if attr.path().is_ident("json_schema") {
+            let mut result = None;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("x_mcp_header") {
+                    result = Some(meta.value()?.parse::<LitStr>()?.value());
+                }
+                Ok(())
+            });
+            if result.is_some() {
+                return result;
+            }
+        }
+    }
+    None
+}
+
 pub fn renamed_field(attrs: &[Attribute]) -> Option<String> {
     let mut renamed = None;
 
