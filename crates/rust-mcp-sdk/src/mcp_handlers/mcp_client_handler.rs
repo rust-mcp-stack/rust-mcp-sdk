@@ -2,18 +2,14 @@ use crate::mcp_client::client_runtime::ClientInternalHandler;
 use crate::mcp_traits::McpClient;
 use crate::schema::schema_utils::{CustomNotification, CustomRequest};
 use crate::schema::{
-    CancelTaskParams, CancelTaskRequest, CancelTaskResult, CancelledNotificationParams,
-    CreateMessageRequest, CreateMessageRequestParams, CreateMessageResult, ElicitCompleteParams,
-    ElicitRequest, ElicitRequestParams, ElicitResult, GenericResult, GetTaskParams,
-    GetTaskPayloadParams, GetTaskPayloadRequest, GetTaskRequest, GetTaskResult, ListRootsRequest,
-    ListRootsResult, ListTasksRequest, ListTasksResult, LoggingMessageNotificationParams,
-    NotificationParams, PaginatedRequestParams, ProgressNotificationParams, RequestParams,
-    ResourceUpdatedNotificationParams, Result, RpcError, TaskStatusNotificationParams,
+    CancelledNotificationParams, CreateMessageRequest, CreateMessageRequestParams,
+    CreateMessageResult, ElicitRequest, ElicitRequestParams, ElicitResult, ListRootsRequest,
+    ListRootsRequestParams, ListRootsResult, LoggingMessageNotificationParams, NotificationParams,
+    ProgressNotificationParams, ResourceUpdatedNotificationParams, RpcError,
+    SubscriptionsAcknowledgedNotificationParams,
 };
-use crate::task_store::ClientTaskCreator;
 use crate::{McpClientHandler, ToMcpClientHandler};
 use async_trait::async_trait;
-use rust_mcp_schema::CreateTaskResult;
 
 /// The `ClientHandler` trait defines how a client handles Model Context Protocol (MCP) operations.
 /// It includes default implementations for handling requests , notifications and errors and must be
@@ -24,16 +20,6 @@ pub trait ClientHandler: Send + Sync + 'static {
     //**********************//
     //** Request Handlers **//
     //**********************//
-
-    /// Handles a ping, to check that the other party is still alive.
-    /// The receiver must promptly respond, or else may be disconnected.
-    async fn handle_ping_request(
-        &self,
-        params: Option<RequestParams>,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<Result, RpcError> {
-        Ok(Result::default())
-    }
 
     /// Handles a request from the server to sample an LLM via the client.
     /// The client has full discretion over which model to select.
@@ -50,33 +36,13 @@ pub trait ClientHandler: Send + Sync + 'static {
         )))
     }
 
-    /// Handles requests to call a task-augmented sampling (sampling/createMessage).
-    /// you need to returns a CreateTaskResult containing task data.
-    /// The actual operation result becomes available later
-    /// through tasks/result after the task completes.
-    async fn handle_task_augmented_create_message(
-        &self,
-        params: CreateMessageRequestParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<CreateTaskResult, RpcError> {
-        if !runtime.capabilities().can_accept_sampling_task() {
-            return Err(RpcError::invalid_request()
-                .with_message("Task-augmented sampling is not supported.".to_string()));
-        }
-
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for task-augmented '{}'.",
-            CreateMessageRequest::method_value()
-        )))
-    }
-
     /// Handles a request from the server to request a list of root URIs from the client. Roots allow
     /// servers to ask for specific directories or files to operate on.
     /// This request is typically used when the server needs to understand the file system
     /// structure or access specific locations that the client has permission to read from.
     async fn handle_list_roots_request(
         &self,
-        params: Option<RequestParams>,
+        params: Option<ListRootsRequestParams>,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ListRootsResult, RpcError> {
         Err(RpcError::method_not_found().with_message(format!(
@@ -94,70 +60,6 @@ pub trait ClientHandler: Send + Sync + 'static {
         Err(RpcError::method_not_found().with_message(format!(
             "No handler is implemented for '{}'.",
             ElicitRequest::method_value()
-        )))
-    }
-
-    /// Handles task-augmented elicitation, to elicit additional information from the user via the client.
-    /// you need to returns a CreateTaskResult containing task data.
-    /// The actual operation result becomes available later
-    /// through tasks/result after the task completes.
-    async fn handle_task_augmented_elicit_request(
-        &self,
-        task_creator: ClientTaskCreator,
-        params: ElicitRequestParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<CreateTaskResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            ElicitRequest::method_value()
-        )))
-    }
-
-    /// Handles a request to retrieve the state of a task.
-    async fn handle_get_task_request(
-        &self,
-        params: GetTaskParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<GetTaskResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            GetTaskRequest::method_value()
-        )))
-    }
-
-    /// Handles a request to retrieve the result of a completed task.
-    async fn handle_get_task_payload_request(
-        &self,
-        params: GetTaskPayloadParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<GenericResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            GetTaskPayloadRequest::method_value()
-        )))
-    }
-
-    /// Handles a request to cancel a task.
-    async fn handle_cancel_task_request(
-        &self,
-        params: CancelTaskParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<CancelTaskResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            CancelTaskRequest::method_value()
-        )))
-    }
-
-    /// Handles a request to retrieve a list of tasks.
-    async fn handle_list_tasks_request(
-        &self,
-        params: Option<PaginatedRequestParams>,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<ListTasksResult, RpcError> {
-        Err(RpcError::method_not_found().with_message(format!(
-            "No handler is implemented for '{}'.",
-            ListTasksRequest::method_value()
         )))
     }
 
@@ -243,20 +145,12 @@ pub trait ClientHandler: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Handles a notification from the receiver to the requestor, informing them that a task's status has changed.
-    /// Receivers are not required to send these notifications.
-    async fn handle_task_status_notification(
+    /// Handles a `notifications/subscriptions/acknowledged` notification, confirming the
+    /// subscriptions a server honors for a prior `subscriptions/listen` request.
+    /// The default implementation does nothing.
+    async fn handle_subscriptions_acknowledged_notification(
         &self,
-        params: TaskStatusNotificationParams,
-        runtime: &dyn McpClient,
-    ) -> std::result::Result<(), RpcError> {
-        Ok(())
-    }
-
-    /// Handles a notification from the server to the client, informing it of a completion of a out-of-band elicitation request.
-    async fn handle_elicitation_complete_notification(
-        &self,
-        params: ElicitCompleteParams,
+        params: SubscriptionsAcknowledgedNotificationParams,
         runtime: &dyn McpClient,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

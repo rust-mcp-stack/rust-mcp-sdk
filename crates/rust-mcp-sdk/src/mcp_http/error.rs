@@ -4,12 +4,6 @@ pub type McpHttpResult<T> = core::result::Result<T, McpHttpError>;
 
 #[derive(Debug, Clone, Error)]
 pub enum McpHttpError {
-    #[error("'sessionId' query string is missing!")]
-    SessionIdMissing,
-
-    #[error("No session found for the given ID: {0}.")]
-    SessionIdInvalid(String),
-
     #[error("Stream IO Error: {0}.")]
     StreamIoError(String),
 
@@ -23,21 +17,6 @@ pub enum McpHttpError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn display_session_id_missing() {
-        let err = McpHttpError::SessionIdMissing;
-        assert_eq!(format!("{}", err), "'sessionId' query string is missing!");
-    }
-
-    #[test]
-    fn display_session_id_invalid() {
-        let err = McpHttpError::SessionIdInvalid("abc-123".into());
-        assert_eq!(
-            format!("{}", err),
-            "No session found for the given ID: abc-123."
-        );
-    }
 
     #[test]
     fn display_stream_io_error() {
@@ -59,21 +38,21 @@ mod tests {
 
     #[test]
     fn clone_preserves_value() {
-        let err = McpHttpError::SessionIdInvalid("xyz".into());
+        let err = McpHttpError::StreamIoError("xyz".into());
         let cloned = err.clone();
         assert_eq!(format!("{}", err), format!("{}", cloned));
     }
 
     #[test]
     fn debug_format_includes_variant() {
-        let err = McpHttpError::SessionIdMissing;
+        let err = McpHttpError::StreamIoError("test".into());
         let debug = format!("{:?}", err);
-        assert!(debug.contains("SessionIdMissing"));
+        assert!(debug.contains("StreamIoError"));
     }
 
     #[test]
     fn clone_unit_variant() {
-        let err = McpHttpError::SessionIdMissing;
+        let err = McpHttpError::HttpError("oops".into());
         let cloned = err.clone();
         assert_eq!(format!("{:?}", err), format!("{:?}", cloned));
     }

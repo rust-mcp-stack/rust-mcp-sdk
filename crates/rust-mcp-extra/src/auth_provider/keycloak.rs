@@ -159,14 +159,17 @@ impl KeycloakAuthProvider {
                 extra_params: Some(vec![("token_type_hint", "access_token")]),
             });
         } else if has_openid_scope {
-            let userinfo_uri = join_url(
-                &auth_server_meta.issuer,
-                "/protocol/openid-connect/userinfo",
-            )
-            .map_err(|err| McpSdkError::Internal {
-                description: format!("invalid userinfo url :{err}"),
-            })?
-            .to_string();
+            let issuer_url =
+                auth_server_meta
+                    .issuer_url()
+                    .map_err(|err| McpSdkError::Internal {
+                        description: format!("invalid issuer url :{err}"),
+                    })?;
+            let userinfo_uri = join_url(&issuer_url, "/protocol/openid-connect/userinfo")
+                .map_err(|err| McpSdkError::Internal {
+                    description: format!("invalid userinfo url :{err}"),
+                })?
+                .to_string();
 
             strategies.push(VerificationStrategies::UserInfo { userinfo_uri })
         } else {

@@ -1,34 +1,48 @@
 pub mod mcp_client_runtime;
 pub mod mcp_client_runtime_core;
+pub(crate) mod response_cache;
 use crate::error::{McpSdkError, SdkResult};
+#[cfg(feature = "streamable-http")]
 use crate::id_generator::FastIdGenerator;
+use crate::mcp_traits::ClientDetails;
 use crate::mcp_traits::{McpClient, McpClientHandler};
-use crate::task_store::{ClientTaskStore, ServerTaskStore, TaskStatusPoller, TaskStatusUpdate};
-use crate::utils::ensure_server_protocol_compatibility;
 use crate::McpObserver;
 use crate::{
     mcp_traits::{RequestIdGen, RequestIdGenNumeric},
     schema::{
         schema_utils::{
-            ClientMessage, ClientMessages, FromMessage, MessageFromClient, NotificationFromClient,
-            RequestFromClient, ServerMessage, ServerMessages,
+            ClientMessage, ClientMessages, FromMessage, MessageFromClient, RequestFromClient,
+            ResultFromClient, ServerJsonrpcRequest, ServerMessage, ServerMessages,
         },
-        InitializeRequestParams, InitializeResult, RequestId, RpcError,
+        CallToolRequestParams, CallToolResult, GetPromptRequestParams, GetPromptResult,
+        InputRequests, InputResponses, PaginatedRequestParams, Prompt, ReadResourceRequestParams,
+        ReadResourceResult, RequestId, Resource, ResourceTemplate, RpcError, ServerResult, Tool,
     },
 };
 use async_trait::async_trait;
-use futures::future::try_join_all;
 use futures::StreamExt;
-use rust_mcp_schema::schema_utils::ResultFromServer;
-use rust_mcp_schema::{GetTaskParams, GetTaskPayloadParams};
+#[cfg(feature = "streamable-http")]
+use rust_mcp_transport::StreamId;
 #[cfg(feature = "streamable-http")]
 use rust_mcp_transport::{ClientStreamableTransport, StreamableTransportOptions};
-use rust_mcp_transport::{IoStream, SessionId, StreamId, TaskId, TransportDispatcher};
+use rust_mcp_transport::{IoStream, SessionId, TransportDispatcher};
+use std::collections::HashSet;
 use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, Lines};
-use tokio::sync::{watch, Mutex};
+use tokio::sync::Mutex;
 
+use response_cache::ResponseCache;
+
+#[cfg(feature = "streamable-http")]
 pub const DEFAULT_STREAM_ID: &str = "STANDALONE-STREAM";
+
+/// Per-round timeout for MRTR (mid-request turn-around) retries.
+///
+/// Each `tools/call` / `prompts/get` / `resources/read` auto-driver round is
+/// bounded so a server that repeatedly returns `InputRequiredResult` without
+/// completing cannot pin the client forever. Rounds are also capped
+/// (10 by default).
+pub(crate) const MRTR_ROUND_TIMEOUT: Duration = Duration::from_secs(30);
 
 // Define a type alias for the TransportDispatcher trait object
 type TransportDispatcherType = dyn TransportDispatcher<
@@ -57,12 +71,49 @@ where
         ClientMessage,
     >,
 {
-    pub client_details: InitializeRequestParams,
+    pub client_details: ClientDetails,
     pub transport: T,
     pub handler: Box<dyn McpClientHandler>,
-    pub task_store: Option<Arc<ClientTaskStore>>,
-    pub server_task_store: Option<Arc<ServerTaskStore>>,
     pub message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
+    pub response_cache_config: Option<response_cache::ResponseCacheConfig>,
+}
+
+impl<T> McpClientOptions<T>
+where
+    T: TransportDispatcher<
+        ServerMessages,
+        MessageFromClient,
+        ServerMessage,
+        ClientMessages,
+        ClientMessage,
+    >,
+{
+    pub fn new(
+        client_details: ClientDetails,
+        transport: T,
+        handler: Box<dyn McpClientHandler>,
+    ) -> Self {
+        Self {
+            client_details,
+            transport,
+            handler,
+            message_observer: None,
+            response_cache_config: None,
+        }
+    }
+
+    pub fn with_message_observer(
+        mut self,
+        observer: Arc<dyn McpObserver<ServerMessage, ClientMessage>>,
+    ) -> Self {
+        self.message_observer = Some(observer);
+        self
+    }
+
+    pub fn with_response_cache(mut self, config: response_cache::ResponseCacheConfig) -> Self {
+        self.response_cache_config = Some(config);
+        self
+    }
 }
 
 pub struct ClientRuntime {
@@ -70,39 +121,34 @@ pub struct ClientRuntime {
     transport_map: tokio::sync::RwLock<Option<TransportType>>,
     // The handler for processing MCP messages
     handler: Box<dyn McpClientHandler>,
-    // Information about the server
-    client_details: InitializeRequestParams,
+    // Information about the client (identity + capabilities, stamped per request)
+    client_details: ClientDetails,
     handlers: Mutex<Vec<tokio::task::JoinHandle<Result<(), McpSdkError>>>>,
     // Generator for unique request IDs
     request_id_gen: Box<dyn RequestIdGen>,
     // Generator for stream IDs
+    #[cfg(feature = "streamable-http")]
     stream_id_gen: FastIdGenerator,
     #[cfg(feature = "streamable-http")]
     // Optional configuration for streamable transport
     transport_options: Option<StreamableTransportOptions>,
     // Flag indicating whether the client has been shut down
     is_shut_down: Mutex<bool>,
-    // Session ID
-    session_id: tokio::sync::RwLock<Option<SessionId>>,
-    // Details about the connected server
-    server_details_tx: watch::Sender<Option<InitializeResult>>,
-    server_details_rx: watch::Receiver<Option<InitializeResult>>,
-    task_store: Option<Arc<ClientTaskStore>>,
-    server_task_store: Option<Arc<ServerTaskStore>>,
     message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
+    // SEP-2243: validated `x-mcp-header` annotations per tool, used to mirror
+    // tool arguments into `Mcp-Param-*` headers on `tools/call` requests.
+    tool_header_registry: crate::tool_param_headers::ToolHeaderRegistry,
+    // SEP-2549: response cache for list/read/discover results
+    response_cache: Mutex<Option<ResponseCache>>,
 }
 
 impl ClientRuntime {
     pub(crate) fn new(
-        client_details: InitializeRequestParams,
+        client_details: ClientDetails,
         transport: TransportType,
         handler: Box<dyn McpClientHandler>,
-        task_store: Option<Arc<ClientTaskStore>>,
-        server_task_store: Option<Arc<ServerTaskStore>>,
         message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
     ) -> Self {
-        let (server_details_tx, server_details_rx) =
-            watch::channel::<Option<InitializeResult>>(None);
         Self {
             transport_map: tokio::sync::RwLock::new(Some(transport)),
             handler,
@@ -112,27 +158,71 @@ impl ClientRuntime {
             #[cfg(feature = "streamable-http")]
             transport_options: None,
             is_shut_down: Mutex::new(false),
-            session_id: tokio::sync::RwLock::new(None),
+            #[cfg(feature = "streamable-http")]
             stream_id_gen: FastIdGenerator::new(Some("s_")),
-            server_details_tx,
-            server_details_rx,
-            task_store,
-            server_task_store,
             message_observer,
+            tool_header_registry: crate::tool_param_headers::new_tool_header_registry(),
+            response_cache: Mutex::new(None),
         }
     }
 
     #[cfg(feature = "streamable-http")]
     pub(crate) fn new_instance(
-        client_details: InitializeRequestParams,
-        transport_options: StreamableTransportOptions,
+        client_details: ClientDetails,
+        mut transport_options: StreamableTransportOptions,
         handler: Box<dyn McpClientHandler>,
-        task_store: Option<Arc<ClientTaskStore>>,
-        server_task_store: Option<Arc<ServerTaskStore>>,
         message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
     ) -> Self {
-        let (server_details_tx, server_details_rx) =
-            watch::channel::<Option<InitializeResult>>(None);
+        // 2026-07-28 stateless protocol: every request must declare the
+        // negotiated protocol version via the `mcp-protocol-version` header
+        // (mirrored in `_meta`). Inject it here so transports built from
+        // `StreamableTransportOptions` always send it, unless the caller
+        // explicitly overrides it.
+        {
+            use crate::schema::ProtocolVersion;
+            use rust_mcp_transport::MCP_PROTOCOL_VERSION_HEADER;
+            let version = ProtocolVersion::latest().to_string();
+            let headers = transport_options
+                .request_options
+                .custom_headers
+                .get_or_insert_with(std::collections::HashMap::new);
+            headers
+                .entry(MCP_PROTOCOL_VERSION_HEADER.to_string())
+                .or_insert(version);
+        }
+
+        // SEP-2243: install a per-request header provider that (a) emits the
+        // standard `Mcp-Method` / `Mcp-Name` headers and (b) mirrors
+        // `x-mcp-header`-annotated tool arguments into `Mcp-Param-*` headers
+        // on `tools/call` POSTs. A caller-provided provider (if any) is chained
+        // afterwards and takes precedence on header-name conflicts.
+        let tool_header_registry = crate::tool_param_headers::new_tool_header_registry();
+        {
+            let registry = tool_header_registry.clone();
+            let user_provider = transport_options
+                .request_options
+                .request_header_provider
+                .take();
+            transport_options.request_options.request_header_provider =
+                Some(Arc::new(move |payload: &str| {
+                    let mut headers = crate::tool_param_headers::standard_header_provider(payload);
+                    if let Some(mcp_param_headers) =
+                        crate::tool_param_headers::request_header_provider(payload, &registry)
+                    {
+                        headers
+                            .get_or_insert_with(reqwest::header::HeaderMap::new)
+                            .extend(mcp_param_headers);
+                    }
+                    if let Some(user_provider) = &user_provider {
+                        if let Some(user_headers) = user_provider(payload) {
+                            headers
+                                .get_or_insert_with(reqwest::header::HeaderMap::new)
+                                .extend(user_headers);
+                        }
+                    }
+                    headers
+                }));
+        }
         Self {
             transport_map: tokio::sync::RwLock::new(None),
             handler,
@@ -140,52 +230,13 @@ impl ClientRuntime {
             handlers: Mutex::new(vec![]),
             transport_options: Some(transport_options),
             is_shut_down: Mutex::new(false),
-            session_id: tokio::sync::RwLock::new(None),
             request_id_gen: Box::new(RequestIdGenNumeric::new(None)),
-            stream_id_gen: FastIdGenerator::new(Some("s_")),
-            server_details_tx,
-            server_details_rx,
-            task_store,
-            server_task_store,
-            message_observer,
-        }
-    }
-
-    async fn initialize_request(self: Arc<Self>) -> SdkResult<()> {
-        let result: ResultFromServer = self
-            .request(
-                RequestFromClient::InitializeRequest(self.client_details.clone()),
-                None,
-            )
-            .await?;
-
-        if let ResultFromServer::InitializeResult(initialize_result) = result {
-            ensure_server_protocol_compatibility(
-                &self.client_details.protocol_version,
-                &initialize_result.protocol_version,
-            )?;
-            // store server details
-            self.set_server_details(initialize_result)?;
-
             #[cfg(feature = "streamable-http")]
-            // try to create a sse stream for server initiated messages , if supported by the server
-            // only applicable to clients connected over streamable http transport
-            if self.transport_options.is_some() {
-                if let Err(error) = self.clone().create_sse_stream().await {
-                    tracing::warn!("{error}");
-                }
-            }
-
-            // send a InitializedNotification to the server
-            self.send_notification(NotificationFromClient::InitializedNotification(None))
-                .await?;
-        } else {
-            return Err(RpcError::invalid_params()
-                .with_message("Incorrect response to InitializeRequest!")
-                .into());
+            stream_id_gen: FastIdGenerator::new(Some("s_")),
+            message_observer,
+            tool_header_registry,
+            response_cache: Mutex::new(None),
         }
-
-        Ok(())
     }
 
     pub(crate) async fn handle_message(
@@ -213,9 +264,37 @@ impl ClientRuntime {
                 Some(mcp_message)
             }
             ServerMessage::Notification(jsonrpc_notification) => {
-                self.handler
-                    .handle_notification(jsonrpc_notification.into(), self)
-                    .await?;
+                // SEP-2549: invalidate cache on relevant notifications
+                let notification: crate::schema::schema_utils::NotificationFromServer =
+                    jsonrpc_notification.into();
+                match &notification {
+                    crate::schema::schema_utils::NotificationFromServer::ResourceListChangedNotification(_) => {
+                        let mut lock = self.response_cache.lock().await;
+                        if let Some(cache) = lock.as_mut() {
+                            cache.invalidate_method("resources/list");
+                        }
+                    }
+                    crate::schema::schema_utils::NotificationFromServer::ResourceUpdatedNotification(params) => {
+                        let mut lock = self.response_cache.lock().await;
+                        if let Some(cache) = lock.as_mut() {
+                            cache.invalidate_method_key("resources/read", &params.uri);
+                        }
+                    }
+                    crate::schema::schema_utils::NotificationFromServer::PromptListChangedNotification(_) => {
+                        let mut lock = self.response_cache.lock().await;
+                        if let Some(cache) = lock.as_mut() {
+                            cache.invalidate_method("prompts/list");
+                        }
+                    }
+                    crate::schema::schema_utils::NotificationFromServer::ToolListChangedNotification(_) => {
+                        let mut lock = self.response_cache.lock().await;
+                        if let Some(cache) = lock.as_mut() {
+                            cache.invalidate_method("tools/list");
+                        }
+                    }
+                    _ => {}
+                }
+                self.handler.handle_notification(notification, self).await?;
                 None
             }
             ServerMessage::Error(jsonrpc_error) => {
@@ -261,7 +340,6 @@ impl ClientRuntime {
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
 
-        //TODO: improve the flow
         let mut stream = transport.start().await?;
 
         let mut error_io_stream = transport.error_stream().write().await;
@@ -323,29 +401,11 @@ impl ClientRuntime {
                             }
                         }
                     }
-                    ServerMessages::Batch(server_messages) => {
-                        let handling_tasks: Vec<_> = server_messages
-                            .into_iter()
-                            .map(|server_message| {
-                                self_ref.handle_message(server_message, &transport)
-                            })
-                            .collect();
-                        let results: Vec<_> = try_join_all(handling_tasks).await?;
-                        let results: Vec<_> = results.into_iter().flatten().collect();
-
-                        if !results.is_empty() {
-                            transport
-                                .send_message(ClientMessages::Batch(results), None)
-                                .await?;
-                        }
-                    }
+                    ServerMessages::Batch(_) => {}
                 }
             }
             Ok::<(), McpSdkError>(())
         });
-
-        // send initialize request to the MCP server
-        self.clone().initialize_request().await?;
 
         let mut lock = self.handlers.lock().await;
         lock.push(main_task);
@@ -353,6 +413,7 @@ impl ClientRuntime {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn store_transport(
         &self,
         stream_id: &str,
@@ -367,8 +428,6 @@ impl ClientRuntime {
     #[cfg(feature = "streamable-http")]
     pub(crate) async fn new_transport(
         &self,
-        session_id: Option<SessionId>,
-        standalone: bool,
     ) -> SdkResult<
         impl TransportDispatcher<
             ServerMessages,
@@ -384,154 +443,416 @@ impl ClientRuntime {
             .transport_options
             .as_ref()
             .ok_or(SdkError::connection_closed())?;
-        let transport = ClientStreamableTransport::new(options, session_id, standalone)?;
+        let transport = ClientStreamableTransport::new(options)?;
 
         Ok(transport)
     }
 
-    #[cfg(feature = "streamable-http")]
-    pub(crate) async fn create_sse_stream(self: Arc<Self>) -> SdkResult<()> {
-        let stream_id: StreamId = DEFAULT_STREAM_ID.into();
-        let retry_delay = self
-            .transport_options
-            .as_ref()
-            .and_then(|o| o.request_options.retry_delay)
-            .unwrap_or(Duration::from_secs(1));
-        let max_retries = self
-            .transport_options
-            .as_ref()
-            .and_then(|o| o.request_options.max_retries);
-
-        let self_ref = Arc::clone(&self);
-        let main_task = tokio::spawn(async move {
-            sse_reconnect_loop(self_ref, stream_id, retry_delay, max_retries).await
-        });
-
-        let mut lock = self.handlers.lock().await;
-        lock.push(main_task);
-        Ok(())
-    }
-}
-
-#[cfg(feature = "streamable-http")]
-async fn sse_reconnect_loop(
-    runtime: Arc<ClientRuntime>,
-    stream_id: StreamId,
-    retry_delay: Duration,
-    max_retries: Option<usize>,
-) -> Result<(), McpSdkError> {
-    let mut reconnect_attempt: usize = 0;
-
-    loop {
-        if *runtime.is_shut_down.lock().await {
-            return Ok(());
-        }
-
-        let session_id = runtime.session_id.read().await.clone();
-        let transport = match runtime.new_transport(session_id, true).await {
-            Ok(t) => t,
-            Err(e) => {
-                tracing::warn!("SSE transport creation failed: {e}");
-                if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await
-                {
-                    return Ok(());
-                }
-                continue;
-            }
-        };
-        let transport: Arc<
-            dyn TransportDispatcher<
-                ServerMessages,
-                MessageFromClient,
-                ServerMessage,
-                ClientMessages,
-                ClientMessage,
-            >,
-        > = Arc::new(transport);
-        let mut stream = match transport.start().await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!("SSE stream start failed: {e}");
-                if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await
-                {
-                    return Ok(());
-                }
-                continue;
-            }
-        };
-        runtime
-            .store_transport(&stream_id, transport.clone())
-            .await?;
-
-        loop {
-            if *runtime.is_shut_down.lock().await {
-                return Ok(());
-            }
-            match stream.next().await {
-                Some(ServerMessages::Single(server_message)) => {
-                    reconnect_attempt = 0;
-                    let result = runtime.handle_message(server_message, &transport).await?;
-                    if let Some(response) = result {
-                        transport
-                            .send_message(ClientMessages::Single(response), None)
-                            .await?;
+    // --- MRTR (mid-request turn-around) ---
+    async fn process_input_requests(&self, requests: InputRequests) -> SdkResult<InputResponses> {
+        let mut map = std::collections::BTreeMap::new();
+        for (key, input_request) in requests.0.iter() {
+            let server_req = match input_request {
+                rust_mcp_schema::InputRequest::CreateMessageRequest(req) => {
+                    ServerJsonrpcRequest::CreateMessageRequest {
+                        id: RequestId::String(key.clone()),
+                        jsonrpc: rust_mcp_schema::JSONRPC_VERSION.to_string(),
+                        request: req.clone(),
                     }
                 }
-                Some(ServerMessages::Batch(server_messages)) => {
-                    reconnect_attempt = 0;
-                    let handling_tasks: Vec<_> = server_messages
-                        .into_iter()
-                        .map(|msg| runtime.handle_message(msg, &transport))
-                        .collect();
-                    let results = try_join_all(handling_tasks).await?;
-                    let responses: Vec<_> = results.into_iter().flatten().collect();
-                    if !responses.is_empty() {
-                        transport
-                            .send_message(ClientMessages::Batch(responses), None)
-                            .await?;
+                rust_mcp_schema::InputRequest::ListRootsRequest(req) => {
+                    ServerJsonrpcRequest::ListRootsRequest {
+                        id: RequestId::String(key.clone()),
+                        jsonrpc: rust_mcp_schema::JSONRPC_VERSION.to_string(),
+                        request: req.clone(),
                     }
                 }
-                None => {
-                    break;
+                rust_mcp_schema::InputRequest::ElicitRequest(req) => {
+                    ServerJsonrpcRequest::ElicitRequest {
+                        id: RequestId::String(key.clone()),
+                        jsonrpc: rust_mcp_schema::JSONRPC_VERSION.to_string(),
+                        request: req.clone(),
+                    }
                 }
+            };
+            let result = self.handler.handle_request(server_req, self).await?;
+            let response = match result {
+                ResultFromClient::CreateMessageResult(r) => {
+                    rust_mcp_schema::InputResponse::CreateMessageResult(r)
+                }
+                ResultFromClient::ListRootsResult(r) => {
+                    rust_mcp_schema::InputResponse::ListRootsResult(r)
+                }
+                ResultFromClient::ElicitResult(r) => {
+                    rust_mcp_schema::InputResponse::ElicitResult(r)
+                }
+                _ => {
+                    let e: McpSdkError = RpcError::internal_error()
+                        .with_message("Unexpected MRTR input result")
+                        .into();
+                    return Err(e);
+                }
+            };
+            map.insert(key.clone(), response);
+        }
+        Ok(InputResponses(map))
+    }
+    // --- Response cache (SEP-2549) ---
+
+    pub(crate) fn init_response_cache(&self, config: response_cache::ResponseCacheConfig) {
+        let mut cache = self.response_cache.blocking_lock();
+        *cache = Some(ResponseCache::new(config));
+    }
+
+    /// Returns the auth principal from the current session, if available.
+    async fn auth_principal(&self) -> Option<String> {
+        self.session_id().await.map(|sid| sid.to_string())
+    }
+
+    // --- Auto-pagination helpers ---
+
+    const DEFAULT_MAX_PAGES: usize = 64;
+
+    pub async fn list_all_tools(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        max_pages: Option<usize>,
+    ) -> SdkResult<Vec<Tool>> {
+        let max_pages = max_pages.unwrap_or(Self::DEFAULT_MAX_PAGES);
+        let mut all: Vec<Tool> = Vec::new();
+        let mut current_params = params.unwrap_or_default();
+        let mut visited: HashSet<String> = HashSet::new();
+
+        for page in 0..max_pages {
+            let result = self.request_tool_list(Some(current_params.clone())).await?;
+            all.extend(result.tools);
+
+            match result.next_cursor {
+                Some(ref cursor) => {
+                    if !cursor.is_empty() && !visited.insert(cursor.clone()) {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Auto-pagination: cycle detected".to_string())
+                            .into();
+                        return Err(e);
+                    }
+                    current_params.cursor = Some(cursor.clone());
+                }
+                None => break,
+            }
+
+            if page + 1 >= max_pages {
+                let e: McpSdkError = RpcError::internal_error()
+                    .with_message(format!("Auto-pagination exceeded max pages ({max_pages})"))
+                    .into();
+                return Err(e);
             }
         }
 
-        if !try_reconnect(&mut reconnect_attempt, max_retries, retry_delay, &runtime).await {
-            return Ok(());
-        }
+        Ok(all)
     }
-}
 
-/// Handles reconnect backoff and shutdown check.
-/// Returns true if the caller should continue retrying, false if it should stop.
-async fn try_reconnect(
-    reconnect_attempt: &mut usize,
-    max_retries: Option<usize>,
-    retry_delay: Duration,
-    runtime: &Arc<ClientRuntime>,
-) -> bool {
-    if *runtime.is_shut_down.lock().await {
-        return false;
-    }
-    *reconnect_attempt += 1;
-    if let Some(max) = max_retries {
-        if *reconnect_attempt > max {
-            tracing::warn!(
-                "SSE reconnect retries exhausted ({}/{})",
-                reconnect_attempt.saturating_sub(1),
-                max
-            );
-            return false;
+    pub async fn list_all_prompts(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        max_pages: Option<usize>,
+    ) -> SdkResult<Vec<Prompt>> {
+        let max_pages = max_pages.unwrap_or(Self::DEFAULT_MAX_PAGES);
+        let mut all: Vec<Prompt> = Vec::new();
+        let mut current_params = params.unwrap_or_default();
+        let mut visited: HashSet<String> = HashSet::new();
+
+        for page in 0..max_pages {
+            let result = self
+                .request_prompt_list(Some(current_params.clone()))
+                .await?;
+            all.extend(result.prompts);
+
+            match result.next_cursor {
+                Some(ref cursor) => {
+                    if !cursor.is_empty() && !visited.insert(cursor.clone()) {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Auto-pagination: cycle detected".to_string())
+                            .into();
+                        return Err(e);
+                    }
+                    current_params.cursor = Some(cursor.clone());
+                }
+                None => break,
+            }
+
+            if page + 1 >= max_pages {
+                let e: McpSdkError = RpcError::internal_error()
+                    .with_message(format!("Auto-pagination exceeded max pages ({max_pages})"))
+                    .into();
+                return Err(e);
+            }
         }
+
+        Ok(all)
     }
-    tracing::debug!(
-        "SSE stream ended, reconnecting in {:?} (attempt {})",
-        retry_delay,
-        reconnect_attempt
-    );
-    tokio::time::sleep(retry_delay).await;
-    true
+
+    pub async fn list_all_resources(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        max_pages: Option<usize>,
+    ) -> SdkResult<Vec<Resource>> {
+        let max_pages = max_pages.unwrap_or(Self::DEFAULT_MAX_PAGES);
+        let mut all: Vec<Resource> = Vec::new();
+        let mut current_params = params.unwrap_or_default();
+        let mut visited: HashSet<String> = HashSet::new();
+
+        for page in 0..max_pages {
+            let result = self
+                .request_resource_list(Some(current_params.clone()))
+                .await?;
+            all.extend(result.resources);
+
+            match result.next_cursor {
+                Some(ref cursor) => {
+                    if !cursor.is_empty() && !visited.insert(cursor.clone()) {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Auto-pagination: cycle detected".to_string())
+                            .into();
+                        return Err(e);
+                    }
+                    current_params.cursor = Some(cursor.clone());
+                }
+                None => break,
+            }
+
+            if page + 1 >= max_pages {
+                let e: McpSdkError = RpcError::internal_error()
+                    .with_message(format!("Auto-pagination exceeded max pages ({max_pages})"))
+                    .into();
+                return Err(e);
+            }
+        }
+
+        Ok(all)
+    }
+
+    pub async fn list_all_resource_templates(
+        &self,
+        params: Option<PaginatedRequestParams>,
+        max_pages: Option<usize>,
+    ) -> SdkResult<Vec<ResourceTemplate>> {
+        let max_pages = max_pages.unwrap_or(Self::DEFAULT_MAX_PAGES);
+        let mut all: Vec<ResourceTemplate> = Vec::new();
+        let mut current_params = params.unwrap_or_default();
+        let mut visited: HashSet<String> = HashSet::new();
+
+        for page in 0..max_pages {
+            let result = self
+                .request_resource_template_list(Some(current_params.clone()))
+                .await?;
+            all.extend(result.resource_templates);
+
+            match result.next_cursor {
+                Some(ref cursor) => {
+                    if !cursor.is_empty() && !visited.insert(cursor.clone()) {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Auto-pagination: cycle detected".to_string())
+                            .into();
+                        return Err(e);
+                    }
+                    current_params.cursor = Some(cursor.clone());
+                }
+                None => break,
+            }
+
+            if page + 1 >= max_pages {
+                let e: McpSdkError = RpcError::internal_error()
+                    .with_message(format!("Auto-pagination exceeded max pages ({max_pages})"))
+                    .into();
+                return Err(e);
+            }
+        }
+
+        Ok(all)
+    }
+
+    /// MRTR-aware `tools/call`. Retries up to 10 rounds.
+    pub async fn call_tool(&self, params: CallToolRequestParams) -> SdkResult<CallToolResult> {
+        const MAX_ROUNDS: usize = 10;
+        let span = tracing::info_span!("mcp.mrtr", method = "tools/call", tool = %params.name);
+        let _enter = span.enter();
+        let mut current_params = params;
+        for _round in 0..MAX_ROUNDS {
+            let response = self
+                .request(
+                    crate::schema::schema_utils::RequestFromClient::CallToolRequest(
+                        current_params.clone(),
+                    ),
+                    Some(MRTR_ROUND_TIMEOUT),
+                )
+                .await?;
+            match response {
+                ServerResult::CallToolResult(r) => {
+                    if r.result_type != "complete" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for CallToolResult")
+                            .into();
+                        return Err(e);
+                    }
+                    return Ok(r);
+                }
+                ServerResult::InputRequiredResult(iro) => {
+                    if iro.result_type != "input_required" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for InputRequiredResult")
+                            .into();
+                        return Err(e);
+                    }
+                    let ir_reqs = match iro.input_requests.clone() {
+                        Some(r) => r,
+                        None => {
+                            let e: McpSdkError = RpcError::invalid_params()
+                                .with_message("InputRequiredResult with no inputRequests")
+                                .into();
+                            return Err(e);
+                        }
+                    };
+                    let input_responses = self.process_input_requests(ir_reqs).await?;
+                    current_params = current_params.with_input_responses(input_responses);
+                    if let Some(state) = iro.request_state.clone() {
+                        current_params = current_params.with_request_state(state);
+                    }
+                }
+                _ => {
+                    let e: McpSdkError = RpcError::internal_error()
+                        .with_message("Unexpected MRTR result")
+                        .into();
+                    return Err(e);
+                }
+            }
+        }
+        let e: McpSdkError = RpcError::internal_error()
+            .with_message("MRTR: exceeded maximum rounds (10)")
+            .into();
+        Err(e)
+    }
+    /// MRTR-aware `prompts/get`. Retries up to 10 rounds.
+    pub async fn get_prompt(&self, params: GetPromptRequestParams) -> SdkResult<GetPromptResult> {
+        const MAX_ROUNDS: usize = 10;
+        let span = tracing::info_span!("mcp.mrtr", method = "prompts/get");
+        let _enter = span.enter();
+        let mut current_params = params;
+        for _round in 0..MAX_ROUNDS {
+            let response = self
+                .request(
+                    crate::schema::schema_utils::RequestFromClient::GetPromptRequest(
+                        current_params.clone(),
+                    ),
+                    Some(MRTR_ROUND_TIMEOUT),
+                )
+                .await?;
+            match response {
+                ServerResult::GetPromptResult(r) => {
+                    if r.result_type != "complete" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for GetPromptResult")
+                            .into();
+                        return Err(e);
+                    }
+                    return Ok(r);
+                }
+                ServerResult::InputRequiredResult(iro) => {
+                    if iro.result_type != "input_required" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for InputRequiredResult")
+                            .into();
+                        return Err(e);
+                    }
+                    let ir_reqs = match iro.input_requests.clone() {
+                        Some(r) => r,
+                        None => {
+                            let e: McpSdkError = RpcError::invalid_params()
+                                .with_message("InputRequiredResult with no inputRequests")
+                                .into();
+                            return Err(e);
+                        }
+                    };
+                    let input_responses = self.process_input_requests(ir_reqs).await?;
+                    current_params = current_params.with_input_responses(input_responses);
+                    if let Some(state) = iro.request_state.clone() {
+                        current_params = current_params.with_request_state(state);
+                    }
+                }
+                _ => {
+                    let e: McpSdkError = RpcError::internal_error()
+                        .with_message("Unexpected MRTR result")
+                        .into();
+                    return Err(e);
+                }
+            }
+        }
+        let e: McpSdkError = RpcError::internal_error()
+            .with_message("MRTR: exceeded maximum rounds (10)")
+            .into();
+        Err(e)
+    }
+    /// MRTR-aware `resources/read`. Retries up to 10 rounds.
+    pub async fn read_resource(
+        &self,
+        params: ReadResourceRequestParams,
+    ) -> SdkResult<ReadResourceResult> {
+        const MAX_ROUNDS: usize = 10;
+        let span = tracing::info_span!("mcp.mrtr", method = "resources/read");
+        let _enter = span.enter();
+        let mut current_params = params;
+        for _round in 0..MAX_ROUNDS {
+            let response = self
+                .request(
+                    crate::schema::schema_utils::RequestFromClient::ReadResourceRequest(
+                        current_params.clone(),
+                    ),
+                    Some(MRTR_ROUND_TIMEOUT),
+                )
+                .await?;
+            match response {
+                ServerResult::ReadResourceResult(r) => {
+                    if r.result_type != "complete" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for ReadResourceResult")
+                            .into();
+                        return Err(e);
+                    }
+                    return Ok(r);
+                }
+                ServerResult::InputRequiredResult(iro) => {
+                    if iro.result_type != "input_required" {
+                        let e: McpSdkError = RpcError::internal_error()
+                            .with_message("Invalid resultType for InputRequiredResult")
+                            .into();
+                        return Err(e);
+                    }
+                    let ir_reqs = match iro.input_requests.clone() {
+                        Some(r) => r,
+                        None => {
+                            let e: McpSdkError = RpcError::invalid_params()
+                                .with_message("InputRequiredResult with no inputRequests")
+                                .into();
+                            return Err(e);
+                        }
+                    };
+                    let input_responses = self.process_input_requests(ir_reqs).await?;
+                    current_params = current_params
+                        .with_input_responses(input_responses)
+                        .with_request_state(iro.request_state.unwrap_or_default());
+                }
+                _ => {
+                    let e: McpSdkError = RpcError::internal_error()
+                        .with_message("Unexpected MRTR result")
+                        .into();
+                    return Err(e);
+                }
+            }
+        }
+        let e: McpSdkError = RpcError::internal_error()
+            .with_message("MRTR: exceeded maximum rounds (10)")
+            .into();
+        Err(e)
+    }
 }
 
 impl ClientRuntime {
@@ -546,16 +867,10 @@ impl ClientRuntime {
 
         use crate::IdGenerator;
         let stream_id: StreamId = self.stream_id_gen.generate();
-        let session_id = self.session_id.read().await.clone();
-        let no_session_id = session_id.is_none();
 
         let has_request = match &messages {
             ClientMessages::Single(client_message) => client_message.is_request(),
-            ClientMessages::Batch(client_messages) => {
-                use rust_mcp_schema::schema_utils::McpMessage;
-
-                client_messages.iter().any(|m| m.is_request())
-            }
+            ClientMessages::Batch(_) => unreachable!(),
         };
 
         let transport: Arc<
@@ -566,19 +881,12 @@ impl ClientRuntime {
                 ClientMessages,
                 ClientMessage,
             >,
-        > = Arc::new(self.new_transport(session_id, false).await?);
+        > = Arc::new(self.new_transport().await?);
 
         let mut stream = transport.start().await?;
 
         let send_task = async {
             let result = transport.send_message(messages, timeout).await?;
-
-            if no_session_id {
-                if let Some(request_id) = transport.session_id().await.clone() {
-                    let mut guard = self.session_id.write().await;
-                    *guard = Some(request_id)
-                }
-            }
 
             Ok::<_, McpSdkError>(result)
         };
@@ -601,21 +909,7 @@ impl ClientRuntime {
                                     transport.send_message(ClientMessages::Single(result), None).await?;
                                 }
                             }
-                            ServerMessages::Batch(server_messages) => {
-
-                                let handling_tasks: Vec<_> = server_messages
-                                    .into_iter()
-                                    .map(|server_message| self.handle_message(server_message, &transport))
-                                    .collect();
-
-                                let results: Vec<_> = try_join_all(handling_tasks).await?;
-
-                                let results: Vec<_> = results.into_iter().flatten().collect();
-
-                                if !results.is_empty() {
-                                    transport.send_message(ClientMessages::Batch(results), None).await?;
-                                }
-                            }
+                            ServerMessages::Batch(_) => {}
                         }
                         // close the stream after all messages are sent, unless it is a standalone stream
                         if !stream_id.eq(DEFAULT_STREAM_ID){
@@ -645,41 +939,309 @@ impl ClientRuntime {
         };
         send_res
     }
-
-    pub(crate) async fn poll_task_status(
-        self: Arc<ClientRuntime>,
-        task_id: TaskId,
-        session_id: Option<SessionId>,
-        task_store: Arc<ServerTaskStore>,
-    ) -> SdkResult<TaskStatusUpdate> {
-        let result = self
-            .request_get_task(GetTaskParams {
-                task_id: task_id.to_string(),
-            })
-            .await?;
-
-        if result.is_terminal() {
-            let task_payload = self
-                .request_get_task_payload(GetTaskPayloadParams {
-                    task_id: task_id.clone(),
-                })
-                .await?;
-
-            task_store
-                .store_task_result(
-                    task_id.as_str(),
-                    result.status,
-                    task_payload.into(),
-                    session_id.as_ref(),
-                )
-                .await;
-        }
-        Ok((result.status, result.poll_interval))
-    }
 }
 
 #[async_trait]
 impl McpClient for ClientRuntime {
+    fn client_details(&self) -> &ClientDetails {
+        &self.client_details
+    }
+
+    /// `tools/list`, with SEP-2243 enforcement and SEP-2549 caching.
+    async fn request_tool_list(
+        &self,
+        params: Option<crate::schema::PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListToolsResult> {
+        let cur_params = params.unwrap_or_default();
+        let cursor_key = cur_params.cursor.clone().unwrap_or_default();
+        let params_val = serde_json::to_value(&cur_params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("tools/list", &cursor_key, auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::ListToolsResult =
+                    serde_json::from_value(data).map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(
+                crate::schema::schema_utils::RequestFromClient::ListToolsRequest(cur_params),
+                None,
+            )
+            .await?;
+        let mut result: crate::schema::ListToolsResult = response.try_into()?;
+        crate::tool_param_headers::filter_and_register(
+            &mut result.tools,
+            &self.tool_header_registry,
+        );
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put("tools/list", &cursor_key, val, ttl, private, auth);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// `prompts/list` with SEP-2549 caching.
+    async fn request_prompt_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListPromptsResult> {
+        let cur_params = params.unwrap_or_default();
+        let cursor_key = cur_params.cursor.clone().unwrap_or_default();
+        let params_val = serde_json::to_value(&cur_params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("prompts/list", &cursor_key, auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::ListPromptsResult = serde_json::from_value(data)
+                    .map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(RequestFromClient::ListPromptsRequest(cur_params), None)
+            .await?;
+        let result: crate::schema::ListPromptsResult = response.try_into()?;
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put("prompts/list", &cursor_key, val, ttl, private, auth);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// `resources/list` with SEP-2549 caching.
+    async fn request_resource_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListResourcesResult> {
+        let cur_params = params.unwrap_or_default();
+        let cursor_key = cur_params.cursor.clone().unwrap_or_default();
+        let params_val = serde_json::to_value(&cur_params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("resources/list", &cursor_key, auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::ListResourcesResult = serde_json::from_value(data)
+                    .map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(RequestFromClient::ListResourcesRequest(cur_params), None)
+            .await?;
+        let result: crate::schema::ListResourcesResult = response.try_into()?;
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put("resources/list", &cursor_key, val, ttl, private, auth);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// `resources/templates/list` with SEP-2549 caching.
+    async fn request_resource_template_list(
+        &self,
+        params: Option<PaginatedRequestParams>,
+    ) -> SdkResult<crate::schema::ListResourceTemplatesResult> {
+        let cur_params = params.unwrap_or_default();
+        let cursor_key = cur_params.cursor.clone().unwrap_or_default();
+        let params_val = serde_json::to_value(&cur_params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("resources/templates/list", &cursor_key, auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::ListResourceTemplatesResult =
+                    serde_json::from_value(data).map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(
+                RequestFromClient::ListResourceTemplatesRequest(cur_params),
+                None,
+            )
+            .await?;
+        let result: crate::schema::ListResourceTemplatesResult = response.try_into()?;
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put(
+                        "resources/templates/list",
+                        &cursor_key,
+                        val,
+                        ttl,
+                        private,
+                        auth,
+                    );
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// `resources/read` with SEP-2549 caching.
+    async fn request_resource_read(
+        &self,
+        params: ReadResourceRequestParams,
+    ) -> SdkResult<crate::schema::ReadResourceResult> {
+        let params_val = serde_json::to_value(&params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("resources/read", &params.uri, auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::ReadResourceResult = serde_json::from_value(data)
+                    .map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(RequestFromClient::ReadResourceRequest(params.clone()), None)
+            .await?;
+        let result: crate::schema::ReadResourceResult = response.try_into()?;
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put("resources/read", &params.uri, val, ttl, private, auth);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// `server/discover` with SEP-2549 caching.
+    async fn request_discover(
+        &self,
+        params: crate::schema::RequestParams,
+    ) -> SdkResult<crate::schema::DiscoverResult> {
+        let params_val = serde_json::to_value(&params).unwrap_or_default();
+
+        if !response_cache::check_mrtr(&params_val) {
+            let auth = self.auth_principal().await;
+            let cached = {
+                let mut lock = self.response_cache.lock().await;
+                lock.as_mut().and_then(|c| {
+                    c.get("server/discover", "", auth.as_deref())
+                        .map(|e| e.data.clone())
+                })
+            };
+            if let Some(data) = cached {
+                let result: crate::schema::DiscoverResult =
+                    serde_json::from_value(data).map_err(|e| {
+                        RpcError::internal_error()
+                            .with_message(format!("Cache deserialization error: {e}"))
+                    })?;
+                return Ok(result);
+            }
+        }
+
+        let response = self
+            .request(RequestFromClient::DiscoverRequest(params.clone()), None)
+            .await?;
+        let result: crate::schema::DiscoverResult = response.try_into()?;
+
+        if !response_cache::check_mrtr(&params_val) {
+            if let Ok(val) = serde_json::to_value(&result) {
+                let (ttl, private) = response_cache::extract_cache_attrs(&val);
+                let auth = self.auth_principal().await;
+                let mut lock = self.response_cache.lock().await;
+                if let Some(cache) = lock.as_mut() {
+                    cache.put("server/discover", "", val, ttl, private, auth);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
     async fn send(
         &self,
         message: MessageFromClient,
@@ -736,121 +1298,18 @@ impl McpClient for ClientRuntime {
             .map_err(|err| err.into())
     }
 
-    fn task_store(&self) -> Option<Arc<ClientTaskStore>> {
-        self.task_store.clone()
-    }
-
-    fn server_task_store(&self) -> Option<Arc<ServerTaskStore>> {
-        self.server_task_store.clone()
-    }
-
     async fn session_id(&self) -> Option<SessionId> {
-        self.session_id.read().await.clone()
+        None
     }
-    async fn send_batch(
-        &self,
-        messages: Vec<ClientMessage>,
-        timeout: Option<Duration>,
-    ) -> SdkResult<Option<Vec<ServerMessage>>> {
-        #[cfg(feature = "streamable-http")]
-        {
-            if self.transport_options.is_some() {
-                // telemetry
-                if let Some(observer) = self.message_observer.as_ref() {
-                    messages.iter().for_each(|msg| observer.on_send(msg));
-                }
-
-                let result = self
-                    .start_stream(ClientMessages::Batch(messages), timeout)
-                    .await?;
-                // let response = self.start_stream(&stream_id, request_id, message).await?;
-                return result
-                    .map(|r| r.as_batch())
-                    .transpose()
-                    .map_err(|err| err.into());
-            }
-        }
-
-        let transport_map = self.transport_map.read().await;
-        let transport = transport_map.as_ref().ok_or(
-            RpcError::internal_error()
-                .with_message("transport stream does not exists or is closed!".to_string()),
-        )?;
-
-        // telemetry
-        if let Some(observer) = self.message_observer.as_ref() {
-            messages.iter().for_each(|msg| observer.on_send(msg));
-        }
-
-        transport
-            .send_batch(messages, timeout)
-            .await
-            .map_err(|err| err.into())
-    }
-
     async fn start(self: Arc<Self>) -> SdkResult<()> {
-        let runtime = self.clone();
-
-        if let Some(task_store) = runtime.task_store() {
-            // send TaskStatusNotification  if task_store is present and supports subscribe()
-            if let Some(mut stream) = task_store.subscribe() {
-                tokio::spawn(async move {
-                    while let Some((params, _)) = stream.next().await {
-                        let _ = runtime.notify_task_status(params).await;
-                    }
-                });
-            }
-        }
-
-        let runtime = self.clone();
-        // Task polling for client initiated tasks
-        if let Some(server_task_store) = runtime.server_task_store.clone() {
-            let task_store_clone = server_task_store.clone();
-            let runtime_clone = runtime.clone();
-
-            let callback: TaskStatusPoller = Box::new(move |task_id, session_id| {
-                let task_store_clone = server_task_store.clone();
-                let runtime_clone = runtime_clone.clone();
-
-                Box::pin(async move {
-                    runtime_clone
-                        .poll_task_status(task_id, session_id, task_store_clone)
-                        .await
-                })
-            });
-
-            if let Err(error) = task_store_clone.start_task_polling(callback) {
-                tracing::error!("Failed to start task polling: {error}");
-            }
-        }
-
         #[cfg(feature = "streamable-http")]
         {
             if self.transport_options.is_some() {
-                self.initialize_request().await?;
                 return Ok(());
             }
         }
 
         self.start_standalone().await
-    }
-
-    fn set_server_details(&self, server_details: InitializeResult) -> SdkResult<()> {
-        self.server_details_tx
-            .send(Some(server_details))
-            .map_err(|_| {
-                RpcError::internal_error()
-                    .with_message("Failed to set server details".to_string())
-                    .into()
-            })
-    }
-
-    fn client_info(&self) -> &InitializeRequestParams {
-        &self.client_details
-    }
-
-    fn server_info(&self) -> Option<InitializeResult> {
-        self.server_details_rx.borrow().clone()
     }
 
     async fn is_shut_down(&self) -> bool {
@@ -881,16 +1340,6 @@ impl McpClient for ClientRuntime {
     }
 
     async fn terminate_session(&self) {
-        #[cfg(feature = "streamable-http")]
-        {
-            if let Some(transport_options) = self.transport_options.as_ref() {
-                let session_id = self.session_id.read().await.clone();
-                transport_options
-                    .terminate_session(session_id.as_ref())
-                    .await;
-                let _ = self.shut_down().await;
-            }
-        }
         let _ = self.shut_down().await;
     }
 }

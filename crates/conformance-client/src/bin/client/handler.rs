@@ -38,13 +38,11 @@ impl ClientHandler for ConformanceClientHandler {
                 Ok(ElicitResult {
                     action: ElicitResultAction::Accept,
                     content: Some(content),
-                    meta: None,
                 })
             }
             _ => Ok(ElicitResult {
                 action: ElicitResultAction::Accept,
                 content: None,
-                meta: None,
             }),
         }
     }

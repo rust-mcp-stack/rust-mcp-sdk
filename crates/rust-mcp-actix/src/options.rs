@@ -1,5 +1,4 @@
 use rust_mcp_sdk::auth::AuthProvider;
-use rust_mcp_sdk::event_store::EventStore;
 use rust_mcp_sdk::id_generator::IdGenerator;
 use rust_mcp_sdk::mcp_http::DnsRebindingOptions;
 use rust_mcp_sdk::mcp_http::HealthHandler;
@@ -9,8 +8,6 @@ use rust_mcp_sdk::mcp_http::{
     DEFAULT_STREAMABLE_HTTP_ENDPOINT,
 };
 use rust_mcp_sdk::schema::schema_utils::{ClientMessage, ServerMessage};
-use rust_mcp_sdk::session_store::SessionStore;
-use rust_mcp_sdk::task_store::{ClientTaskStore, ServerTaskStore};
 use rust_mcp_sdk::McpObserver;
 use rust_mcp_sdk::SessionId;
 use rust_mcp_sdk::TransportOptions;
@@ -35,12 +32,6 @@ pub struct ActixServerOptions {
     pub custom_streamable_http_endpoint: Option<String>,
     /// Shared transport configuration
     pub transport_options: Arc<TransportOptions>,
-    /// Event store for resumability support
-    pub event_store: Option<Arc<dyn EventStore>>,
-    /// Task store for server-side tasks
-    pub task_store: Option<Arc<ServerTaskStore>>,
-    /// Task store for client-side tasks
-    pub client_task_store: Option<Arc<ClientTaskStore>>,
     /// If true, return JSON instead of SSE stream
     pub enable_json_response: Option<bool>,
     /// Interval between keep-alive pings
@@ -67,17 +58,16 @@ pub struct ActixServerOptions {
     /// `allowed_origins` are configured, `allowed_hosts` is auto-derived from
     /// `host:port` unless the bind address is a wildcard.
     pub dns_rebinding: DnsRebindingOptions,
-    /// Optional session store implementation. Defaults to a bounded
-    /// `InMemorySessionStore` (10k max sessions, no idle TTL) when `None`.
-    /// Pass your own [`SessionStore`] implementation to use Redis, custom
-    /// limits, or any other session backend.
-    pub session_store: Option<Arc<dyn SessionStore>>,
     /// Enable TLS/SSL (requires `ssl` feature, default: false)
     pub enable_ssl: bool,
     /// Path to TLS certificate PEM file
     pub ssl_cert_path: Option<String>,
     /// Path to TLS private key PEM file
     pub ssl_key_path: Option<String>,
+    /// Maximum number of concurrently-open `subscriptions/listen` streams.
+    /// New listen requests beyond this are rejected with `429 Too Many Requests`.
+    /// Defaults to [`rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS`] (1024).
+    pub max_listen_streams: usize,
 }
 
 impl ActixServerOptions {
@@ -180,9 +170,6 @@ impl Default for ActixServerOptions {
             session_id_generator: None,
             custom_streamable_http_endpoint: None,
             transport_options: Default::default(),
-            event_store: None,
-            task_store: None,
-            client_task_store: None,
             enable_json_response: None,
             ping_interval: DEFAULT_CLIENT_PING_INTERVAL,
             sse_support: true,
@@ -194,10 +181,10 @@ impl Default for ActixServerOptions {
             message_observer: None,
             max_request_body_size: None,
             dns_rebinding: DnsRebindingOptions::default(),
-            session_store: None,
             enable_ssl: false,
             ssl_cert_path: None,
             ssl_key_path: None,
+            max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
         }
     }
 }

@@ -52,7 +52,6 @@ impl StreamableHttpStream {
             ));
         }
 
-        //TODO: simplify
         let response = match http_post(
             &self.client,
             &self.mcp_url,
@@ -299,6 +298,7 @@ impl StreamableHttpStream {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn run_standalone(
         &mut self,
         cancellation_token: &CancellationToken,

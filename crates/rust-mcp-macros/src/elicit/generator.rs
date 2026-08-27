@@ -226,7 +226,7 @@ pub fn generate_form_schema(
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect();
 
-            #base::ElicitFormSchema::new(properties, required, None)
+            #base::ElicitRequestFormParamsRequestedSchema::new(properties, required, None)
         }
     }
 }

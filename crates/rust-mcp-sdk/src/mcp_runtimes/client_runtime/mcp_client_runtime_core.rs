@@ -1,16 +1,14 @@
 use super::ClientRuntime;
 use super::McpClientOptions;
+#[cfg(feature = "streamable-http")]
+use crate::mcp_traits::ClientDetails;
 use crate::schema::{
     schema_utils::{
         ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer, ResultFromClient,
         ServerMessage, ServerMessages,
     },
-    InitializeRequestParams, RpcError,
+    RpcError,
 };
-#[cfg(feature = "streamable-http")]
-use crate::task_store::ClientTaskStore;
-#[cfg(feature = "streamable-http")]
-use crate::task_store::ServerTaskStore;
 #[cfg(feature = "streamable-http")]
 use crate::McpObserver;
 use crate::{
@@ -40,7 +38,6 @@ use std::sync::Arc;
 ///   - `transport`: An implementation of the `TransportDispatcher` trait for communication with the MCP server.
 ///   - `handler`: The client's core handler (typically a boxed `dyn ClientHandlerCore` or similar)
 ///     that defines the client's behavior and response logic.
-///   - `task_store`: Optional task storage for managing asynchronous operations (if applicable).
 ///
 /// # Returns
 ///
@@ -66,27 +63,21 @@ where
         options.client_details,
         Arc::new(options.transport),
         options.handler,
-        options.task_store,
-        options.server_task_store,
         options.message_observer,
     ))
 }
 
 #[cfg(feature = "streamable-http")]
 pub fn with_transport_options(
-    client_details: InitializeRequestParams,
+    client_details: ClientDetails,
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandlerCore,
-    task_store: Option<Arc<ClientTaskStore>>,
-    server_task_store: Option<Arc<ServerTaskStore>>,
     message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientCoreInternalHandler::new(Box::new(handler))),
-        task_store,
-        server_task_store,
         message_observer,
     ))
 }

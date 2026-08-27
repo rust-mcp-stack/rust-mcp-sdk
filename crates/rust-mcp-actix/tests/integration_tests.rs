@@ -3,13 +3,12 @@ use rust_mcp_actix::{mcp_scope, McpMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities};
-use rust_mcp_sdk::session_store::InMemorySessionStore;
-use rust_mcp_sdk::ToMcpServerHandler;
+use rust_mcp_sdk::schema::{Implementation, ServerCapabilities};
+use rust_mcp_sdk::{ServerDetails, ToMcpServerHandler};
 use std::sync::Arc;
 
-fn test_server_details() -> InitializeResult {
-    InitializeResult {
+fn test_server_details() -> ServerDetails {
+    ServerDetails {
         server_info: Implementation {
             name: "test-server".into(),
             version: "0.1.0".into(),
@@ -21,7 +20,6 @@ fn test_server_details() -> InitializeResult {
         capabilities: ServerCapabilities::default(),
         meta: None,
         instructions: None,
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     }
 }
 
@@ -31,7 +29,6 @@ impl ServerHandler for DummyHandler {}
 
 fn make_state() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
     let state = Arc::new(McpAppState {
-        session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
         server_details: Arc::new(test_server_details()),
@@ -39,22 +36,13 @@ fn make_state() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
-        event_store: None,
-        task_store: None,
-        client_task_store: None,
         message_observer: None,
+        extensions: Arc::new(tokio::sync::RwLock::new(None)),
+        active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
     });
     let handler = Arc::new(McpHttpHandler::new(None, vec![], None));
     (state, handler)
-}
-
-fn make_state_json_mode() -> (Arc<McpAppState>, Arc<McpHttpHandler>) {
-    let (state, handler) = make_state();
-    let state = McpAppState {
-        enable_json_response: true,
-        ..Arc::unwrap_or_clone(state)
-    };
-    (Arc::new(state), handler)
 }
 
 fn default_mount() -> McpMountOptions {
@@ -242,38 +230,6 @@ async fn test_sse_endpoint_returns_event_stream() {
     );
 }
 
-#[actix_web::test]
-async fn test_streamable_http_init_returns_session_id() {
-    let (state, handler) = make_state_json_mode();
-    let opts = default_mount();
-    let scope = mcp_scope(state, handler, &opts);
-    let app = test::init_service(App::new().service(scope)).await;
-
-    let req = test::TestRequest::post()
-        .uri("/mcp")
-        .set_payload(serde_json::json!({
-            "jsonrpc":"2.0","id":1,"method":"initialize",
-            "params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}
-        }).to_string())
-        .insert_header(("Content-Type", "application/json"))
-        .insert_header(("Accept", "application/json, text/event-stream"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert!(
-        resp.status().is_success(),
-        "Expected 2xx, got {}",
-        resp.status()
-    );
-    let session_id = resp
-        .headers()
-        .get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .expect("Expected mcp-session-id header");
-    assert!(!session_id.is_empty());
-}
-
 // =====================================================================
 // Messages endpoint
 // =====================================================================
@@ -293,42 +249,4 @@ async fn test_messages_endpoint_rejects_invalid_session() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(!resp.status().is_success());
-}
-
-// =====================================================================
-// Error status code mapping
-// =====================================================================
-
-#[actix_web::test]
-async fn test_error_mapping_session_missing_returns_400() {
-    let (state, handler) = make_state();
-    let opts = default_mount();
-    let scope = mcp_scope(state, handler, &opts);
-    let app = test::init_service(App::new().service(scope)).await;
-
-    let req = test::TestRequest::post()
-        .uri("/messages")
-        .set_payload("{}")
-        .insert_header(("Content-Type", "application/json"))
-        .insert_header(("Accept", "application/json, text/event-stream"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400);
-}
-
-#[actix_web::test]
-async fn test_error_mapping_invalid_session_returns_404() {
-    let (state, handler) = make_state();
-    let opts = default_mount();
-    let scope = mcp_scope(state, handler, &opts);
-    let app = test::init_service(App::new().service(scope)).await;
-
-    let req = test::TestRequest::post()
-        .uri("/messages?sessionId=nonexistent")
-        .set_payload("{}")
-        .insert_header(("Content-Type", "application/json"))
-        .insert_header(("Accept", "application/json, text/event-stream"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 404);
 }

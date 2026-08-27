@@ -4,6 +4,7 @@ use crate::{SessionId, MCP_SESSION_ID_HEADER};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::{Client, Response};
 
+#[cfg(feature = "streamable-http")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponseType {
     EventStream,
@@ -11,6 +12,7 @@ pub enum ResponseType {
 }
 
 /// Determines the response type based on the `Content-Type` header.
+#[cfg(feature = "streamable-http")]
 pub async fn validate_response_type(response: &Response) -> TransportResult<ResponseType> {
     match response.headers().get(reqwest::header::CONTENT_TYPE) {
         Some(content_type) => {
@@ -20,8 +22,14 @@ pub async fn validate_response_type(response: &Response) -> TransportResult<Resp
 
             // Normalize to lowercase for case-insensitive comparison
             let content_type_normalized = content_type_str.to_ascii_lowercase();
+            // Content-Type may carry parameters (e.g. `application/json; charset=utf-8`).
+            let media_type = content_type_normalized
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim();
 
-            match content_type_normalized.as_str() {
+            match media_type {
                 "text/event-stream" => Ok(ResponseType::EventStream),
                 "application/json" => Ok(ResponseType::Json),
                 other => Err(TransportError::UnexpectedContentType(other.to_string())),
@@ -67,11 +75,25 @@ pub async fn http_post(
 
     let response = request.send().await?;
     if !response.status().is_success() {
-        return Err(TransportError::Http(response.status()));
+        let status = response.status();
+        // On the stateless wire (2026-07-28), protocol errors (e.g. version
+        // negotiation via `UNSUPPORTED_PROTOCOL_VERSION` -32022) are returned
+        // as a JSON-RPC error body with a non-2xx HTTP status. Surface the
+        // JSON-RPC error (code + data) so callers can react — e.g. retry with
+        // one of the server's advertised `supported` versions.
+        if let Ok(body) = response.bytes().await {
+            if let Ok(error_response) =
+                serde_json::from_slice::<crate::schema::JsonrpcErrorResponse>(&body)
+            {
+                return Err(TransportError::JsonrpcError(error_response.error));
+            }
+        }
+        return Err(TransportError::Http(status));
     }
     Ok(response)
 }
 
+#[cfg(feature = "streamable-http")]
 pub async fn http_get(
     client: &Client,
     url: &str,
@@ -101,36 +123,7 @@ pub async fn http_get(
     Ok(response)
 }
 
-pub async fn http_delete(
-    client: &Client,
-    post_url: &str,
-    session_id: Option<&SessionId>,
-    headers: Option<&HeaderMap>,
-) -> TransportResult<Response> {
-    let mut request = client
-        .delete(post_url)
-        .header(CONTENT_TYPE, "application/json")
-        .header(ACCEPT, "application/json, text/event-stream");
-
-    if let Some(map) = headers {
-        request = request.headers(map.clone());
-    }
-
-    if let Some(session_id) = session_id {
-        request = request.header(
-            MCP_SESSION_ID_HEADER,
-            HeaderValue::from_str(session_id).unwrap(),
-        );
-    }
-
-    let response = request.send().await?;
-    if !response.status().is_success() {
-        let status_code = response.status();
-        return Err(TransportError::Http(status_code));
-    }
-    Ok(response)
-}
-
+#[cfg(feature = "sse")]
 pub fn extract_origin(url: &str) -> Option<String> {
     // Remove the fragment first (everything after '#')
     let url = url.split('#').next()?; // Keep only part before `#`
@@ -146,7 +139,7 @@ pub fn extract_origin(url: &str) -> Option<String> {
     Some(format!("{scheme}://{host_port}"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sse"))]
 mod tests {
     use super::*;
     use reqwest::header::{HeaderMap, HeaderName, HeaderValue};

@@ -1,18 +1,13 @@
 use crate::error::{TransportError, TransportResult};
-use crate::schema::{RequestId, RpcError};
-use crate::utils::{await_timeout, current_timestamp};
-use crate::McpDispatch;
-use crate::{
-    event_store::EventStore,
-    schema::{
-        schema_utils::{
-            self, ClientMessage, ClientMessages, McpMessage, RpcMessage, ServerMessage,
-            ServerMessages,
-        },
-        JsonrpcErrorResponse,
+use crate::schema::{
+    schema_utils::{
+        self, ClientMessage, ClientMessages, McpMessage, RpcMessage, ServerMessage, ServerMessages,
     },
-    SessionId, StreamId,
+    JsonrpcErrorResponse,
 };
+use crate::schema::{RequestId, RpcError};
+use crate::utils::await_timeout;
+use crate::McpDispatch;
 use async_trait::async_trait;
 use futures::future::join_all;
 use std::collections::HashMap;
@@ -22,8 +17,6 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot::{self};
 use tokio::sync::Mutex;
-
-pub const ID_SEPARATOR: u8 = b'|';
 
 /// Provides a dispatcher for sending MCP messages and handling responses.
 ///
@@ -42,10 +35,6 @@ pub struct MessageDispatcher<R> {
         )>,
     >,
     request_timeout: Duration,
-    // resumability support
-    session_id: Option<SessionId>,
-    stream_id: Option<StreamId>,
-    event_store: Option<Arc<dyn EventStore>>,
 }
 
 impl<R> MessageDispatcher<R> {
@@ -69,9 +58,6 @@ impl<R> MessageDispatcher<R> {
             writable_std: Some(writable_std),
             writable_tx: None,
             request_timeout,
-            session_id: None,
-            stream_id: None,
-            event_store: None,
         }
     }
 
@@ -88,23 +74,7 @@ impl<R> MessageDispatcher<R> {
             writable_tx: Some(writable_tx),
             writable_std: None,
             request_timeout,
-            session_id: None,
-            stream_id: None,
-            event_store: None,
         }
-    }
-
-    /// Supports resumability for streamable HTTP transports by setting the session ID,
-    /// stream ID, and event store.
-    pub fn make_resumable(
-        &mut self,
-        session_id: SessionId,
-        stream_id: StreamId,
-        event_store: Arc<dyn EventStore>,
-    ) {
-        self.session_id = Some(session_id);
-        self.stream_id = Some(stream_id);
-        self.event_store = Some(event_store);
     }
 
     async fn store_pending_request(
@@ -246,18 +216,6 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
         }
     }
 
-    async fn send_batch(
-        &self,
-        message: Vec<ClientMessage>,
-        request_timeout: Option<Duration>,
-    ) -> TransportResult<Option<Vec<ServerMessage>>> {
-        let response = self.send_message(message.into(), request_timeout).await?;
-        match response {
-            Some(r) => Ok(Some(r.as_batch()?)),
-            None => Ok(None),
-        }
-    }
-
     /// Writes a string payload to the underlying asynchronous writable stream,
     /// appending a newline character and flushing the stream afterward.
     ///
@@ -388,52 +346,9 @@ impl McpDispatch<ClientMessages, ServerMessages, ClientMessage, ServerMessage>
         }
     }
 
-    async fn send_batch(
-        &self,
-        message: Vec<ServerMessage>,
-        request_timeout: Option<Duration>,
-    ) -> TransportResult<Option<Vec<ClientMessage>>> {
-        let response = self.send_message(message.into(), request_timeout).await?;
-        match response {
-            Some(r) => Ok(Some(r.as_batch()?)),
-            None => Ok(None),
-        }
-    }
-
-    /// Writes a string payload to the underlying asynchronous writable stream,
-    /// appending a newline character and flushing the stream afterward.
-    ///
-    async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()> {
-        let mut event_id = None;
-
-        if !skip_store && !payload.trim().is_empty() {
-            if let (Some(session_id), Some(stream_id), Some(event_store)) = (
-                self.session_id.as_ref(),
-                self.stream_id.as_ref(),
-                self.event_store.as_ref(),
-            ) {
-                event_id = event_store
-                    .store_event(
-                        session_id.clone(),
-                        stream_id.clone(),
-                        current_timestamp(),
-                        payload.to_owned(),
-                    )
-                    .await
-                    .map(Some)
-                    .unwrap_or_else(|err| {
-                        tracing::error!("{err}");
-                        None
-                    });
-            };
-        }
-
+    async fn write_str(&self, payload: &str, _skip_store: bool) -> TransportResult<()> {
         if let Some(writable_std) = self.writable_std.as_ref() {
             let mut writable_std = writable_std.lock().await;
-            if let Some(id) = event_id {
-                writable_std.write_all(id.as_bytes()).await?;
-                writable_std.write_all(&[ID_SEPARATOR]).await?; // separate id from message
-            }
             writable_std.write_all(payload.as_bytes()).await?;
             writable_std.write_all(b"\n").await?; // new line
             writable_std.flush().await?;

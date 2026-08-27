@@ -1,6 +1,7 @@
 #![allow(clippy::enum_variant_names)]
 
 mod handler;
+mod mrtr_tools;
 mod prompts;
 mod resources;
 mod tools;
@@ -9,15 +10,13 @@ use axum::{routing::get, Router};
 use handler::ConformanceHandler;
 use rust_mcp_axum::{mcp_routes, McpMountOptions};
 use rust_mcp_sdk::{
-    event_store::InMemoryEventStore,
     id_generator::{FastIdGenerator, UuidGenerator},
     mcp_http::{resolve_dns_middleware, DnsRebindingOptions, McpAppState, McpHttpHandler},
     schema::{
-        Implementation, InitializeResult, ProtocolVersion, ServerCapabilities,
-        ServerCapabilitiesPrompts, ServerCapabilitiesResources, ServerCapabilitiesTools,
+        Implementation, ServerCapabilities, ServerCapabilitiesPrompts, ServerCapabilitiesResources,
+        ServerCapabilitiesTools,
     },
-    session_store::InMemorySessionStore,
-    ToMcpServerHandler,
+    ServerDetails, ToMcpServerHandler,
 };
 use std::sync::Arc;
 
@@ -26,19 +25,21 @@ async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt::init();
 
     let host = "0.0.0.0";
-    let port = 3000u16;
+    let port: u16 = std::env::var("MCP_CONFORMANCE_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3000);
 
     let state = Arc::new(McpAppState {
-        session_store: Arc::new(InMemorySessionStore::new()),
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-        server_details: Arc::new(InitializeResult {
+        server_details: Arc::new(ServerDetails {
             server_info: Implementation {
                 name: "conformance-server".into(),
                 version: "0.1.0".into(),
                 title: Some("MCP Conformance Test Server".into()),
                 description: Some(
-                    "Implements all MCP conformance test scenarios for the 2025-11-25 spec.".into(),
+                    "Implements all MCP conformance test scenarios for the 2026-07-28 spec.".into(),
                 ),
                 icons: vec![],
                 website_url: None,
@@ -54,23 +55,19 @@ async fn main() -> std::io::Result<()> {
                 prompts: Some(ServerCapabilitiesPrompts {
                     list_changed: Some(true),
                 }),
-                logging: Some(serde_json::Map::new()),
-                completions: Some(serde_json::Map::new()),
-                experimental: None,
-                tasks: None,
+                ..ServerCapabilities::default()
             },
             meta: None,
             instructions: None,
-            protocol_version: ProtocolVersion::V2025_11_25.into(),
         }),
         handler: ConformanceHandler.to_mcp_server_handler(),
         ping_interval: std::time::Duration::from_secs(12),
         transport_options: Default::default(),
         enable_json_response: false,
-        event_store: Some(Arc::new(InMemoryEventStore::default())),
-        task_store: None,
-        client_task_store: None,
         message_observer: None,
+        extensions: Arc::new(tokio::sync::RwLock::new(None)),
+        active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        max_listen_streams: rust_mcp_sdk::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
     });
 
     let mut dns_rebinding = DnsRebindingOptions {

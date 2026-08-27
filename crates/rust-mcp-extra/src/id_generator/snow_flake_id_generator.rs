@@ -4,7 +4,7 @@
 
 use once_cell::sync::Lazy;
 use rust_mcp_sdk::id_generator::IdGenerator;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Epoch (customizable to reduce total bits needed)
@@ -33,8 +33,13 @@ static SHORTER_EPOCH: Lazy<u64> = Lazy::new(|| {
 /// - Thread safety with internal locking.
 pub struct SnowflakeIdGenerator {
     machine_id: u16, // 10 bits max
-    last_timestamp: AtomicU64,
-    sequence: AtomicU64,
+    state: Mutex<GeneratorState>,
+}
+
+#[derive(Default)]
+struct GeneratorState {
+    last_timestamp: u64,
+    sequence: u64,
 }
 
 impl SnowflakeIdGenerator {
@@ -45,8 +50,7 @@ impl SnowflakeIdGenerator {
         );
         SnowflakeIdGenerator {
             machine_id,
-            last_timestamp: AtomicU64::new(0),
-            sequence: AtomicU64::new(0),
+            state: Mutex::new(GeneratorState::default()),
         }
     }
 
@@ -60,28 +64,41 @@ impl SnowflakeIdGenerator {
     }
 
     fn next_id(&self) -> u64 {
+        // Recover from a poisoned lock rather than panicking: the guarded state
+        // is only two counters, so even if a thread panicked mid-update the worst
+        // outcome is a non-monotonic ID — far less harmful than
+        // aborting the whole process on every subsequent `generate()` call.
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
         let mut timestamp = self.current_timestamp();
 
-        let last_ts = self.last_timestamp.load(Ordering::Relaxed);
+        // Monotonicity guard: the wall clock is not guaranteed to be monotonic
+        // (e.g. NTP adjustments), so never emit a timestamp lower than the last
+        // one. The sequence disambiguates IDs that share a millisecond.
+        if timestamp < state.last_timestamp {
+            timestamp = state.last_timestamp;
+        }
 
-        let sequence = if timestamp == last_ts {
-            // same millisecond - increment sequence
-            let seq = self.sequence.fetch_add(1, Ordering::Relaxed) & 0xFFF; // 12 bits
-            if seq == 0 {
-                // Sequence overflow - wait for next ms
-                while timestamp <= last_ts {
+        let sequence = if timestamp == state.last_timestamp {
+            // Same millisecond — advance the 12-bit sequence.
+            state.sequence = (state.sequence + 1) & 0xFFF;
+            if state.sequence == 0 {
+                // Sequence exhausted (4096 IDs in this ms): wait for the next ms.
+                while timestamp <= state.last_timestamp {
                     timestamp = self.current_timestamp();
                 }
-                self.sequence.store(0, Ordering::Relaxed);
-                self.last_timestamp.store(timestamp, Ordering::Relaxed);
+                state.last_timestamp = timestamp;
                 0
             } else {
-                seq
+                state.sequence
             }
         } else {
-            // new timestamp
-            self.sequence.store(0, Ordering::Relaxed);
-            self.last_timestamp.store(timestamp, Ordering::Relaxed);
+            // New millisecond — reset the sequence.
+            state.last_timestamp = timestamp;
+            state.sequence = 0;
             0
         };
 

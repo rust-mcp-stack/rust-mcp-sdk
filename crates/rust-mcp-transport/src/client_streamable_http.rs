@@ -8,12 +8,9 @@ use crate::schema::{
     },
     RequestId,
 };
-use crate::utils::{
-    http_delete, http_post, CancellationTokenSource, ReadableChannel, StreamableHttpStream,
-    WritableChannel,
-};
+use crate::utils::{CancellationTokenSource, ReadableChannel, StreamableHttpStream};
 use crate::{error::TransportResult, IoStream, McpDispatch, MessageDispatcher, Transport};
-use crate::{SessionId, TransportDispatcher, TransportOptions};
+use crate::{TransportDispatcher, TransportOptions};
 use async_trait::async_trait;
 use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -21,7 +18,7 @@ use reqwest::Client;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::{sync::Arc, time::Duration};
-use tokio::io::{BufReader, BufWriter};
+use tokio::io::BufReader;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
@@ -36,21 +33,6 @@ pub struct StreamableTransportOptions {
     pub request_options: RequestOptions,
 }
 
-impl StreamableTransportOptions {
-    pub async fn terminate_session(&self, session_id: Option<&SessionId>) {
-        let client = Client::new();
-        match http_delete(&client, &self.mcp_url, session_id, None).await {
-            Ok(_) => {}
-            Err(TransportError::Http(status_code)) => {
-                tracing::info!("Session termination failed with status code {status_code}",);
-            }
-            Err(error) => {
-                tracing::info!("Session termination failed with error :{error}");
-            }
-        };
-    }
-}
-
 pub struct RequestOptions {
     pub request_timeout: Duration,
     pub max_line_length: usize,
@@ -58,7 +40,19 @@ pub struct RequestOptions {
     pub retry_delay: Option<Duration>,
     pub max_retries: Option<usize>,
     pub custom_headers: Option<HashMap<String, String>>,
+    /// Optional hook invoked with the raw JSON-RPC payload of each outgoing
+    /// POST, returning extra HTTP headers to attach to that single request.
+    ///
+    /// Unlike [`custom_headers`](Self::custom_headers) (static, applied to
+    /// every request), this enables per-request headers computed from the
+    /// message being sent — e.g. SEP-2243 `Mcp-Param-*` tool-parameter
+    /// mirroring, rotating bearer tokens, or distributed-tracing headers.
+    pub request_header_provider: Option<RequestHeaderProvider>,
 }
+
+/// Hook computing extra HTTP headers for a given outgoing POST payload
+/// (e.g. SEP-2243 `Mcp-Param-*` mirroring, rotating bearer tokens).
+pub type RequestHeaderProvider = std::sync::Arc<dyn Fn(&str) -> Option<HeaderMap> + Send + Sync>;
 
 impl Default for RequestOptions {
     fn default() -> Self {
@@ -69,6 +63,7 @@ impl Default for RequestOptions {
             retry_delay: None,
             max_retries: None,
             custom_headers: None,
+            request_header_provider: None,
         }
     }
 }
@@ -97,24 +92,36 @@ where
     max_retries: usize,
     /// Optional custom HTTP headers
     custom_headers: Option<HeaderMap>,
-    sse_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
+    /// Optional hook computing extra headers for each outgoing POST payload
+    request_header_provider: Option<RequestHeaderProvider>,
     post_task: tokio::sync::RwLock<Option<tokio::task::JoinHandle<()>>>,
     message_sender: Arc<tokio::sync::RwLock<Option<MessageDispatcher<R>>>>,
     error_stream: tokio::sync::RwLock<Option<IoStream>>,
     pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<R>>>>,
-    session_id: Arc<tokio::sync::RwLock<Option<SessionId>>>,
-    standalone: bool,
+}
+
+/// Merge the static `custom_headers` with any headers computed by the
+/// `request_header_provider` for the given outgoing payload. Provider
+/// headers are applied last, so they take precedence on name conflicts.
+fn merge_request_headers(
+    custom_headers: &Option<HeaderMap>,
+    provider: &Option<RequestHeaderProvider>,
+    payload: &str,
+) -> Option<HeaderMap> {
+    let mut headers = custom_headers.clone();
+    if let Some(provider) = provider {
+        if let Some(extra) = provider(payload) {
+            headers.get_or_insert_with(HeaderMap::new).extend(extra);
+        }
+    }
+    headers
 }
 
 impl<R> ClientStreamableTransport<R>
 where
     R: Clone + Send + Sync + serde::de::DeserializeOwned + 'static,
 {
-    pub fn new(
-        options: &StreamableTransportOptions,
-        session_id: Option<SessionId>,
-        standalone: bool,
-    ) -> TransportResult<Self> {
+    pub fn new(options: &StreamableTransportOptions) -> TransportResult<Self> {
         let client = Client::new();
 
         let headers = match &options.request_options.custom_headers {
@@ -139,14 +146,12 @@ where
                 .request_options
                 .max_retries
                 .unwrap_or(DEFAULT_MAX_RETRY),
-            sse_task: tokio::sync::RwLock::new(None),
             post_task: tokio::sync::RwLock::new(None),
             custom_headers: headers,
+            request_header_provider: options.request_options.request_header_provider.clone(),
             message_sender: Arc::new(tokio::sync::RwLock::new(None)),
             error_stream: tokio::sync::RwLock::new(None),
             pending_requests: Arc::new(Mutex::new(HashMap::new())),
-            session_id: Arc::new(tokio::sync::RwLock::new(session_id)),
-            standalone,
         })
     }
 
@@ -194,209 +199,92 @@ where
     where
         MessageDispatcher<M>: McpDispatch<R, OR, M, OM>,
     {
-        if self.standalone {
-            // Create CancellationTokenSource and token
-            let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
-            let mut lock = self.shutdown_source.write().await;
-            *lock = Some(cancellation_source);
+        // Create CancellationTokenSource and token
+        let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
+        let mut lock = self.shutdown_source.write().await;
+        *lock = Some(cancellation_source);
 
-            let (write_tx, mut write_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
-            let (read_tx, read_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
+        let (write_tx, mut write_rx): (
+            tokio::sync::mpsc::Sender<(
+                String,
+                tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
+            )>,
+            tokio::sync::mpsc::Receiver<(
+                String,
+                tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
+            )>,
+        ) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_CAPACITY);
+        let (read_tx, read_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
 
-            let max_retries = self.max_retries;
-            let retry_delay = self.retry_delay;
+        let max_retries = self.max_retries;
+        let retry_delay = self.retry_delay;
 
-            let post_url = self.mcp_server_url.clone();
-            let custom_headers = self.custom_headers.clone();
-            let cancellation_token_post = cancellation_token.clone();
-            let cancellation_token_sse = cancellation_token.clone();
+        let post_url = self.mcp_server_url.clone();
+        let custom_headers = self.custom_headers.clone();
+        let request_header_provider = self.request_header_provider.clone();
+        let cancellation_token_post = cancellation_token.clone();
+        let cancellation_token_sse = cancellation_token.clone();
 
-            let session_id_clone = self.session_id.clone();
+        let mut streamable_http = StreamableHttpStream {
+            client: self.client.clone(),
+            mcp_url: post_url,
+            max_retries,
+            retry_delay,
+            read_tx,
+            session_id: Arc::new(tokio::sync::RwLock::new(None)),
+        };
 
-            let mut streamable_http = StreamableHttpStream {
-                client: self.client.clone(),
-                mcp_url: post_url,
-                max_retries,
-                retry_delay,
-                read_tx,
-                session_id: session_id_clone, //Arc<RwLock<Option<String>>>
-            };
-
-            let session_id = self.session_id.read().await.to_owned();
-
-            let sse_response = streamable_http
-                .make_standalone_stream_connection(&cancellation_token_sse, &custom_headers, None)
-                .await?;
-
-            let sse_task_handle = tokio::spawn(async move {
-                if let Err(error) = streamable_http
-                    .run_standalone(&cancellation_token_sse, &custom_headers, sse_response)
-                    .await
+        // Initiate a task to process POST requests from messages received via the writable stream.
+        let post_task_handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                _ = cancellation_token_post.cancelled() =>
                 {
-                    if !matches!(error, TransportError::Cancelled(_)) {
-                        tracing::warn!("{error}");
-                    }
-                }
-            });
-
-            let mut sse_task_lock = self.sse_task.write().await;
-            *sse_task_lock = Some(sse_task_handle);
-
-            let post_url = self.mcp_server_url.clone();
-            let client = self.client.clone();
-            let custom_headers = self.custom_headers.clone();
-
-            // Initiate a task to process POST requests from messages received via the writable stream.
-            let post_task_handle = tokio::spawn(async move {
-                loop {
-                    tokio::select! {
-                    _ = cancellation_token_post.cancelled() =>
-                    {
-                            break;
+                        break;
+                },
+                data = write_rx.recv() => {
+                    match data{
+                      Some((data, ack_tx)) => {
+                        // trim the trailing \n before making a request
+                        let payload = data.trim().to_string();
+                        let headers = merge_request_headers(&custom_headers, &request_header_provider, &payload);
+                        let result = streamable_http.run(payload, &cancellation_token_sse, &headers).await;
+                        let _ = ack_tx.send(result);// Ignore error if receiver dropped
                     },
-                    data = write_rx.recv() => {
-                        match data{
-                          Some(data) => {
-                              // trim the trailing \n before making a request
-                              let payload = String::from_utf8_lossy(&data).trim().to_string();
-
-                             if let Err(e) = http_post(
-                                  &client,
-                                  &post_url,
-                                  payload.to_string(),
-                                  session_id.as_ref(),
-                                  custom_headers.as_ref(),
-                              )
-                              .await{
-                                tracing::error!("Failed to POST message: {e}")
-                          }
-                        },
-                        None => break, // Exit if channel is closed
-                        }
-                       }
+                    None => break, // Exit if channel is closed
                     }
+                   }
                 }
-            });
-            let mut post_task_lock = self.post_task.write().await;
-            *post_task_lock = Some(post_task_handle);
-
-            // Create writable stream
-            let writable: Mutex<Pin<Box<dyn tokio::io::AsyncWrite + Send + Sync>>> =
-                Mutex::new(Box::pin(BufWriter::new(WritableChannel { write_tx })));
-
-            // Create readable stream
-            let readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>> =
-                Box::pin(BufReader::new(ReadableChannel {
-                    read_rx,
-                    buffer: Bytes::new(),
-                }));
-
-            let (stream, sender, error_stream) = MCPStream::create(
-                readable,
-                writable,
-                IoStream::Writable(Box::pin(tokio::io::stderr())),
-                self.pending_requests.clone(),
-                self.request_timeout,
-                self.max_line_length,
-                cancellation_token,
-                self.channel_capacity,
-            );
-
-            self.set_message_sender(sender).await;
-
-            if let IoStream::Readable(error_stream) = error_stream {
-                self.set_error_stream(error_stream).await;
             }
-            Ok(stream)
-        } else {
-            // Create CancellationTokenSource and token
-            let (cancellation_source, cancellation_token) = CancellationTokenSource::new();
-            let mut lock = self.shutdown_source.write().await;
-            *lock = Some(cancellation_source);
+        });
+        let mut post_task_lock = self.post_task.write().await;
+        *post_task_lock = Some(post_task_handle);
 
-            // let (write_tx, mut write_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
-            let (write_tx, mut write_rx): (
-                tokio::sync::mpsc::Sender<(
-                    String,
-                    tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
-                )>,
-                tokio::sync::mpsc::Receiver<(
-                    String,
-                    tokio::sync::oneshot::Sender<crate::error::TransportResult<()>>,
-                )>,
-            ) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_CAPACITY); // Buffer size as needed
-            let (read_tx, read_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_CAPACITY);
+        // Create readable stream
+        let readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>> =
+            Box::pin(BufReader::new(ReadableChannel {
+                read_rx,
+                buffer: Bytes::new(),
+            }));
 
-            let max_retries = self.max_retries;
-            let retry_delay = self.retry_delay;
+        let (stream, sender, error_stream) = MCPStream::create_with_ack(
+            readable,
+            write_tx,
+            IoStream::Writable(Box::pin(tokio::io::stderr())),
+            self.pending_requests.clone(),
+            self.request_timeout,
+            self.max_line_length,
+            cancellation_token,
+            self.channel_capacity,
+        );
 
-            let post_url = self.mcp_server_url.clone();
-            let custom_headers = self.custom_headers.clone();
-            let cancellation_token_post = cancellation_token.clone();
-            let cancellation_token_sse = cancellation_token.clone();
+        self.set_message_sender(sender).await;
 
-            let session_id_clone = self.session_id.clone();
-
-            let mut streamable_http = StreamableHttpStream {
-                client: self.client.clone(),
-                mcp_url: post_url,
-                max_retries,
-                retry_delay,
-                read_tx,
-                session_id: session_id_clone, //Arc<RwLock<Option<String>>>
-            };
-
-            // Initiate a task to process POST requests from messages received via the writable stream.
-            let post_task_handle = tokio::spawn(async move {
-                loop {
-                    tokio::select! {
-                    _ = cancellation_token_post.cancelled() =>
-                    {
-                            break;
-                    },
-                    data = write_rx.recv() => {
-                        match data{
-                          Some((data, ack_tx)) => {
-                            // trim the trailing \n before making a request
-                            let payload = data.trim().to_string();
-                            let result = streamable_http.run(payload, &cancellation_token_sse, &custom_headers).await;
-                            let _ = ack_tx.send(result);// Ignore error if receiver dropped
-                        },
-                        None => break, // Exit if channel is closed
-                        }
-                       }
-                    }
-                }
-            });
-            let mut post_task_lock = self.post_task.write().await;
-            *post_task_lock = Some(post_task_handle);
-
-            // Create readable stream
-            let readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>> =
-                Box::pin(BufReader::new(ReadableChannel {
-                    read_rx,
-                    buffer: Bytes::new(),
-                }));
-
-            let (stream, sender, error_stream) = MCPStream::create_with_ack(
-                readable,
-                write_tx,
-                IoStream::Writable(Box::pin(tokio::io::stderr())),
-                self.pending_requests.clone(),
-                self.request_timeout,
-                self.max_line_length,
-                cancellation_token,
-                self.channel_capacity,
-            );
-
-            self.set_message_sender(sender).await;
-
-            if let IoStream::Readable(error_stream) = error_stream {
-                self.set_error_stream(error_stream).await;
-            }
-
-            Ok(stream)
+        if let IoStream::Readable(error_stream) = error_stream {
+            self.set_error_stream(error_stream).await;
         }
+
+        Ok(stream)
     }
 
     fn message_sender(&self) -> Arc<tokio::sync::RwLock<Option<MessageDispatcher<M>>>> {
@@ -465,11 +353,6 @@ where
             "Invalid invocation of keep_alive() function for ClientStreamableTransport".to_string(),
         ))
     }
-
-    async fn session_id(&self) -> Option<SessionId> {
-        let guard = self.session_id.read().await;
-        guard.clone()
-    }
 }
 
 #[async_trait]
@@ -498,16 +381,6 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
         let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
 
         sender.send(message, request_timeout).await
-    }
-
-    async fn send_batch(
-        &self,
-        message: Vec<ClientMessage>,
-        request_timeout: Option<Duration>,
-    ) -> TransportResult<Option<Vec<ServerMessage>>> {
-        let sender = self.message_sender.read().await;
-        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
-        sender.send_batch(message, request_timeout).await
     }
 
     async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()> {

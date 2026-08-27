@@ -22,7 +22,6 @@ use http::{
     },
     Method, Request, Response, StatusCode,
 };
-use rust_mcp_transport::MCP_SESSION_ID_HEADER;
 use std::{collections::HashSet, sync::Arc};
 
 /// Configuration for CORS behavior.
@@ -56,11 +55,7 @@ impl Default for CorsConfig {
         Self {
             allow_origins: AllowOrigins::Any,
             allow_methods: vec![Method::GET, Method::POST, Method::OPTIONS],
-            allow_headers: vec![
-                header::CONTENT_TYPE,
-                header::AUTHORIZATION,
-                HeaderName::from_static(MCP_SESSION_ID_HEADER),
-            ],
+            allow_headers: vec![header::CONTENT_TYPE, header::AUTHORIZATION],
             allow_credentials: false,
             max_age: Some(86_400), // 24 hours
             expose_headers: vec![],
@@ -368,8 +363,8 @@ mod tests {
         mcp_http::{types::GenericBodyExt, MiddlewareNext},
         mcp_icon,
         mcp_server::{ServerHandler, ToMcpServerHandler},
-        schema::{Implementation, InitializeResult, ProtocolVersion, ServerCapabilities},
-        session_store::InMemorySessionStore,
+        mcp_traits::ServerDetails,
+        schema::{Implementation, ServerCapabilities},
     };
     use http::{header, Request, Response, StatusCode};
     use std::time::Duration;
@@ -382,16 +377,14 @@ mod tests {
         let handler = TestHandler {};
 
         Arc::new(McpAppState {
-            session_store: Arc::new(InMemorySessionStore::new()),
             id_generator: Arc::new(UuidGenerator {}),
             stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-            server_details: Arc::new(InitializeResult {
+            server_details: Arc::new(ServerDetails {
                 capabilities: ServerCapabilities {
                     ..Default::default()
                 },
                 instructions: None,
                 meta: None,
-                protocol_version: ProtocolVersion::V2025_06_18.to_string(),
                 server_info: Implementation {
                     name: "server".to_string(),
                     title: None,
@@ -410,10 +403,10 @@ mod tests {
             ping_interval: Duration::from_secs(15),
             transport_options: Arc::new(rust_mcp_transport::TransportOptions::default()),
             enable_json_response: false,
-            event_store: None,
-            task_store:None,
-            client_task_store:None,
-            message_observer:None
+            message_observer:None,
+            extensions: Arc::new(tokio::sync::RwLock::new(None)),
+            active_listen_streams: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            max_listen_streams: crate::mcp_http::DEFAULT_MAX_LISTEN_STREAMS,
         })
     }
 

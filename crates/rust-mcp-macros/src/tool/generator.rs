@@ -1,4 +1,4 @@
-use crate::common::{ExecutionSupportDsl, IconThemeDsl};
+use crate::common::IconThemeDsl;
 use crate::utils::base_crate;
 use crate::McpToolMacroAttributes;
 use proc_macro2::TokenStream;
@@ -12,7 +12,6 @@ pub struct ToolTokens {
     pub title: TokenStream,
     pub output_schema: TokenStream,
     pub annotations: TokenStream,
-    pub execution: TokenStream,
     pub icons: TokenStream,
 }
 
@@ -34,11 +33,9 @@ pub fn generate_tool_tokens(macro_attributes: McpToolMacroAttributes) -> ToolTok
             quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
         });
 
-    //TODO: add support for output_schema
     let output_schema = quote! { output_schema: None,};
 
     let annotations = generate_annotations(&base_crate, &macro_attributes);
-    let execution = generate_executions(&base_crate, &macro_attributes);
     let icons = generate_icons(&base_crate, &macro_attributes);
 
     ToolTokens {
@@ -49,7 +46,6 @@ pub fn generate_tool_tokens(macro_attributes: McpToolMacroAttributes) -> ToolTok
         title,
         output_schema,
         annotations,
-        execution,
         icons,
     }
 }
@@ -105,33 +101,6 @@ fn generate_icons(
         quote! { icons: ::std::vec::Vec::new(), }
     } else {
         quote! { icons: vec![ #(#icon_exprs),* ], }
-    }
-}
-
-fn generate_executions(
-    base_crate: &TokenStream,
-    macro_attributes: &McpToolMacroAttributes,
-) -> TokenStream {
-    if let Some(exec) = macro_attributes.execution.as_ref() {
-        let task_support = match exec {
-            ExecutionSupportDsl::Forbidden => {
-                quote! { Some(#base_crate::ToolExecutionTaskSupport::Forbidden) }
-            }
-            ExecutionSupportDsl::Optional => {
-                quote! { Some(#base_crate::ToolExecutionTaskSupport::Optional)  }
-            }
-            ExecutionSupportDsl::Required => {
-                quote! { Some(#base_crate::ToolExecutionTaskSupport::Required)  }
-            }
-        };
-
-        quote! {
-            execution: Some(#base_crate::ToolExecution {
-                task_support: #task_support,
-            }),
-        }
-    } else {
-        quote! { execution: None, }
     }
 }
 

@@ -34,7 +34,6 @@ impl Parse for McpResourceMacroAttributes {
             idempotent_hint: _,
             open_world_hint: _,
             read_only_hint: _,
-            execution: _,
         } = GenericMcpMacroAttributes::parse(attributes)?;
 
         let instance = Self {
@@ -121,7 +120,6 @@ impl Parse for McpResourceTemplateMacroAttributes {
             idempotent_hint: _,
             open_world_hint: _,
             read_only_hint: _,
-            execution: _,
         } = GenericMcpMacroAttributes::parse(attributes)?;
 
         let instance = Self {

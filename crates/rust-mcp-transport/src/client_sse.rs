@@ -459,16 +459,6 @@ impl McpDispatch<ServerMessages, ClientMessages, ServerMessage, ClientMessage>
         sender.send(message, request_timeout).await
     }
 
-    async fn send_batch(
-        &self,
-        message: Vec<ClientMessage>,
-        request_timeout: Option<Duration>,
-    ) -> TransportResult<Option<Vec<ServerMessage>>> {
-        let sender = self.message_sender.read().await;
-        let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;
-        sender.send_batch(message, request_timeout).await
-    }
-
     async fn write_str(&self, payload: &str, skip_store: bool) -> TransportResult<()> {
         let sender = self.message_sender.read().await;
         let sender = sender.as_ref().ok_or(SdkError::connection_closed())?;

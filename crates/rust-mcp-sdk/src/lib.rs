@@ -1,14 +1,12 @@
 pub mod error;
 mod mcp_handlers;
+pub mod tool_param_headers;
 
 #[cfg(any(feature = "sse", feature = "streamable-http", feature = "auth"))]
 pub mod mcp_http;
 mod mcp_macros;
 mod mcp_runtimes;
 mod mcp_traits;
-#[cfg(feature = "server")]
-pub mod session_store;
-pub mod task_store;
 mod utils;
 
 #[cfg(feature = "client")]
@@ -39,6 +37,7 @@ pub mod mcp_client {
     pub use super::mcp_handlers::mcp_client_handler_core::ClientHandlerCore;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime as client_runtime;
     pub use super::mcp_runtimes::client_runtime::mcp_client_runtime_core as client_runtime_core;
+    pub use super::mcp_runtimes::client_runtime::response_cache::ResponseCacheConfig;
     pub use super::mcp_runtimes::client_runtime::{ClientRuntime, McpClientOptions};
     pub use super::mcp_traits::{McpClientHandler, ToMcpClientHandler, ToMcpClientHandlerCore};
     pub use super::utils::ensure_server_protocol_compatibility;
@@ -79,6 +78,7 @@ pub mod mcp_server {
     #[cfg(feature = "auth")]
     pub use super::utils::join_url;
 
+    pub use super::mcp_handlers::request_state_codec::RequestStateCodec;
     pub use super::mcp_traits::{McpServerHandler, ToMcpServerHandler, ToMcpServerHandlerCore};
 }
 

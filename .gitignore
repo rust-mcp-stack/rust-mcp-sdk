@@ -10,4 +10,8 @@ settings.json
 # *.profraw
 target/**
 
-# /docs-site
+# docs-site is tracked (Docusaurus site merged from main); ignore only build artifacts
+docs-site/node_modules
+docs-site/build
+docs-site/.docusaurus
+docs-site/.cache-loader

@@ -94,11 +94,6 @@ where
     ) -> TransportResult<Option<R>>;
 
     async fn send(&self, message: OM, timeout: Option<Duration>) -> TransportResult<Option<M>>;
-    async fn send_batch(
-        &self,
-        message: Vec<OM>,
-        timeout: Option<Duration>,
-    ) -> TransportResult<Option<Vec<M>>>;
 
     /// Writes a string payload to the underlying asynchronous writable stream,
     /// appending a newline character and flushing the stream afterward.

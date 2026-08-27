@@ -32,7 +32,7 @@ fn full_annotated_prompt() {
         prompt.description.as_deref(),
         Some("Generate a warm, personalized greeting")
     );
-    assert_eq!(prompt.meta.unwrap().get("key").unwrap(), "value");
+    assert_eq!(prompt.meta.unwrap().0.get("key").unwrap(), "value");
     assert_eq!(prompt.icons.len(), 1);
 
     let args = FriendlyGreeting::prompt_arguments();

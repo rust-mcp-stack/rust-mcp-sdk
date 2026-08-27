@@ -44,8 +44,6 @@ impl IntoResponse for TransportServerError {
 impl From<McpHttpError> for TransportServerError {
     fn from(err: McpHttpError) -> Self {
         match err {
-            McpHttpError::SessionIdMissing => TransportServerError::SessionIdMissing,
-            McpHttpError::SessionIdInvalid(s) => TransportServerError::SessionIdInvalid(s),
             McpHttpError::StreamIoError(s) => TransportServerError::StreamIoError(s),
             McpHttpError::HttpError(s) => TransportServerError::HttpError(s),
             McpHttpError::TransportError(s) => TransportServerError::TransportError(s),
@@ -56,8 +54,12 @@ impl From<McpHttpError> for TransportServerError {
 impl From<TransportServerError> for McpHttpError {
     fn from(err: TransportServerError) -> Self {
         match err {
-            TransportServerError::SessionIdMissing => McpHttpError::SessionIdMissing,
-            TransportServerError::SessionIdInvalid(s) => McpHttpError::SessionIdInvalid(s),
+            TransportServerError::SessionIdMissing => {
+                McpHttpError::HttpError("'sessionId' query string is missing!".into())
+            }
+            TransportServerError::SessionIdInvalid(s) => {
+                McpHttpError::HttpError(format!("No session found for the given ID: {}.", s))
+            }
             TransportServerError::StreamIoError(s) => McpHttpError::StreamIoError(s),
             TransportServerError::HttpError(s) => McpHttpError::HttpError(s),
             TransportServerError::TransportError(s) => McpHttpError::TransportError(s),
@@ -88,22 +90,6 @@ mod tests {
     // McpHttpError to TransportServerError
 
     #[test]
-    fn mcp_to_transport_session_id_missing() {
-        let m = McpHttpError::SessionIdMissing;
-        let t: TransportServerError = m.into();
-        assert!(matches!(t, TransportServerError::SessionIdMissing));
-        assert_eq!(format!("{}", t), "'sessionId' query string is missing!");
-    }
-
-    #[test]
-    fn mcp_to_transport_session_id_invalid() {
-        let m = McpHttpError::SessionIdInvalid("s1".into());
-        let t: TransportServerError = m.into();
-        assert!(matches!(t, TransportServerError::SessionIdInvalid(ref s) if s == "s1"));
-        assert_eq!(format!("{}", t), "No session found for the given ID: s1.");
-    }
-
-    #[test]
     fn mcp_to_transport_stream_io_error() {
         let m = McpHttpError::StreamIoError("io".into());
         let t: TransportServerError = m.into();
@@ -130,14 +116,16 @@ mod tests {
     fn transport_to_mcp_session_id_missing() {
         let t = TransportServerError::SessionIdMissing;
         let m: McpHttpError = t.into();
-        assert!(matches!(m, McpHttpError::SessionIdMissing));
+        assert!(matches!(m, McpHttpError::HttpError(_)));
     }
 
     #[test]
     fn transport_to_mcp_session_id_invalid() {
         let t = TransportServerError::SessionIdInvalid("s2".into());
         let m: McpHttpError = t.into();
-        assert!(matches!(m, McpHttpError::SessionIdInvalid(ref s) if s == "s2"));
+        assert!(
+            matches!(m, McpHttpError::HttpError(ref s) if s == "No session found for the given ID: s2.")
+        );
     }
 
     #[test]
@@ -202,22 +190,6 @@ mod tests {
     }
 
     // Round-trip
-
-    #[test]
-    fn round_trip_session_id_missing() {
-        let m = McpHttpError::SessionIdMissing;
-        let t: TransportServerError = m.clone().into();
-        let back: McpHttpError = t.into();
-        assert_eq!(format!("{}", m), format!("{}", back));
-    }
-
-    #[test]
-    fn round_trip_session_id_invalid() {
-        let m = McpHttpError::SessionIdInvalid("round".into());
-        let t: TransportServerError = m.clone().into();
-        let back: McpHttpError = t.into();
-        assert_eq!(format!("{}", m), format!("{}", back));
-    }
 
     #[test]
     fn round_trip_stream_io_error() {
@@ -286,19 +258,9 @@ mod tests {
     }
 
     #[test]
-    fn transport_result_from_mcp_http_error() {
-        let r: McpHttpResult<()> = Err(McpHttpError::SessionIdMissing);
-        let t: TransportServerResult<()> = r.map_err(Into::into);
-        assert!(matches!(
-            t.unwrap_err(),
-            TransportServerError::SessionIdMissing
-        ));
-    }
-
-    #[test]
     fn mcp_http_result_from_transport_error() {
         let r: TransportServerResult<()> = Err(TransportServerError::SessionIdInvalid("x".into()));
         let m: McpHttpResult<()> = r.map_err(Into::into);
-        assert!(matches!(m.unwrap_err(), McpHttpError::SessionIdInvalid(ref s) if s == "x"));
+        assert!(matches!(m.unwrap_err(), McpHttpError::HttpError(_)));
     }
 }

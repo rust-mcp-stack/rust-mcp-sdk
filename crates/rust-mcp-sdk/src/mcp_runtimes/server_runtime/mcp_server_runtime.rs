@@ -1,31 +1,50 @@
 use super::ServerRuntime;
-use crate::{
-    auth::AuthInfo,
-    task_store::{ClientTaskStore, ServerTaskStore},
-};
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use crate::auth::AuthInfo;
+use crate::mcp_traits::RequestContext;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use crate::mcp_traits::ServerDetails;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use crate::McpObserver;
 use crate::{
     error::SdkResult,
     mcp_handlers::mcp_server_handler::ServerHandler,
     mcp_traits::{McpServer, McpServerHandler},
-    task_store::TaskCreator,
-    McpObserver,
 };
 use crate::{
     mcp_runtimes::server_runtime::McpServerOptions,
     schema::{
         schema_utils::{
-            CallToolError, ClientMessage, ClientMessages, MessageFromServer, ResultFromServer,
-            ServerMessage, ServerMessages,
+            ClientMessage, ClientMessages, MessageFromServer, ServerMessage, ServerMessages,
         },
-        CallToolResult, InitializeResult, RpcError,
+        NotificationMetaObject, RequestMetaObject, RpcError, ServerResult,
+        SubscriptionsAcknowledgedNotificationParams,
     },
 };
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::{ClientJsonrpcNotification, ClientJsonrpcRequest};
-use rust_mcp_transport::{SessionId, TransportDispatcher};
+use rust_mcp_schema::ClientRequest;
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use rust_mcp_transport::SessionId;
+use rust_mcp_transport::TransportDispatcher;
 use std::sync::Arc;
 
-/// Creates a new MCP server runtime with the specified configuration.
+/// Returns a reference to the `RequestMetaObject` for any standard 2026-07-28
+/// `ClientRequest`. All request-param structs carry a required `meta` field.
+fn request_meta(request: &ClientRequest) -> &RequestMetaObject {
+    match request {
+        ClientRequest::DiscoverRequest(r) => &r.params.meta,
+        ClientRequest::ListResourcesRequest(r) => &r.params.meta,
+        ClientRequest::ListResourceTemplatesRequest(r) => &r.params.meta,
+        ClientRequest::ReadResourceRequest(r) => &r.params.meta,
+        ClientRequest::SubscriptionsListenRequest(r) => &r.params.meta,
+        ClientRequest::ListPromptsRequest(r) => &r.params.meta,
+        ClientRequest::GetPromptRequest(r) => &r.params.meta,
+        ClientRequest::ListToolsRequest(r) => &r.params.meta,
+        ClientRequest::CallToolRequest(r) => &r.params.meta,
+        ClientRequest::CompleteRequest(r) => &r.params.meta,
+    }
+}
 ///
 /// This function initializes a server for (MCP) by accepting server details, transport ,
 /// and a handler for server-side logic.
@@ -56,13 +75,12 @@ where
     ServerRuntime::new(options)
 }
 
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
 pub(crate) fn create_server_instance(
-    server_details: Arc<InitializeResult>,
+    server_details: Arc<ServerDetails>,
     handler: Arc<dyn McpServerHandler>,
     session_id: SessionId,
     auth_info: Option<AuthInfo>,
-    task_store: Option<Arc<ServerTaskStore>>,
-    client_task_store: Option<Arc<ClientTaskStore>>,
     message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>,
 ) -> Arc<ServerRuntime> {
     ServerRuntime::new_instance(
@@ -70,10 +88,52 @@ pub(crate) fn create_server_instance(
         handler,
         session_id,
         auth_info,
-        task_store,
-        client_task_store,
         message_observer,
     )
+}
+
+/// Maps a 2026-07-28 `ClientRequest` to its JSON-RPC method name.
+pub(crate) fn method_name_for_request(request: &ClientRequest) -> &'static str {
+    match request {
+        ClientRequest::DiscoverRequest(_) => "server/discover",
+        ClientRequest::ListResourcesRequest(_) => "resources/list",
+        ClientRequest::ListResourceTemplatesRequest(_) => "resources/templates/list",
+        ClientRequest::ReadResourceRequest(_) => "resources/read",
+        ClientRequest::SubscriptionsListenRequest(_) => "subscriptions/listen",
+        ClientRequest::ListPromptsRequest(_) => "prompts/list",
+        ClientRequest::GetPromptRequest(_) => "prompts/get",
+        ClientRequest::ListToolsRequest(_) => "tools/list",
+        ClientRequest::CallToolRequest(_) => "tools/call",
+        ClientRequest::CompleteRequest(_) => "completion/complete",
+    }
+}
+
+/// Stamps the server's identity onto a `ServerResult`'s `_meta`
+/// (`io.modelcontextprotocol/serverInfo`) when the result already carries
+/// a `meta` field.  This is a SHOULD in the 2026-07-28 spec.
+fn stamp_server_info(result: &mut ServerResult, server_info: &rust_mcp_schema::Implementation) {
+    use crate::schema::ResultMetaObject;
+    let meta: &mut ResultMetaObject = match result {
+        ServerResult::DiscoverResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::ListResourcesResult(r) => {
+            r.meta.get_or_insert_with(ResultMetaObject::default)
+        }
+        ServerResult::ListResourceTemplatesResult(r) => {
+            r.meta.get_or_insert_with(ResultMetaObject::default)
+        }
+        ServerResult::ReadResourceResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::ListPromptsResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::GetPromptResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::ListToolsResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::CallToolResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::CompleteResult(r) => r.meta.get_or_insert_with(ResultMetaObject::default),
+        ServerResult::SubscriptionsListenResult(r) => {
+            r.meta.io_modelcontextprotocol_server_info = Some(server_info.clone());
+            return;
+        }
+        _ => return,
+    };
+    meta.io_modelcontextprotocol_server_info = Some(server_info.clone());
 }
 
 pub(crate) struct ServerRuntimeInternalHandler<H> {
@@ -91,161 +151,158 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
         &self,
         client_jsonrpc_request: ClientJsonrpcRequest,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ResultFromServer, RpcError> {
-        // prepare a TaskCreator in case request is task augmented and server is configured with a task_store
-        let task_creator = if client_jsonrpc_request.is_task_augmented() {
-            if !runtime.capabilities().can_run_task_augmented_tools() {
-                return Err(RpcError::invalid_request()
-                    .with_message("This MCP server does not support \"tasks\".".to_string()));
-            }
-
-            let Some(task_store) = runtime.task_store() else {
-                return Err(RpcError::invalid_request()
-                    .with_message("The server is not configured with a task store.".to_string()));
-            };
-
-            let session_id = runtime.session_id();
-
-            Some(TaskCreator {
-                request_id: client_jsonrpc_request.request_id().to_owned(),
-                request: client_jsonrpc_request.clone(),
-                session_id,
-                task_store,
-            })
-        } else {
-            None
-        };
-
-        runtime
-            .capabilities()
-            .can_handle_request(&client_jsonrpc_request)?;
-
-        match client_jsonrpc_request {
-            ClientJsonrpcRequest::InitializeRequest(initialize_request) => self
-                .handler
-                .handle_initialize_request(initialize_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::PingRequest(ping_request) => self
-                .handler
-                .handle_ping_request(ping_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::ListResourcesRequest(list_resources_request) => self
-                .handler
-                .handle_list_resources_request(list_resources_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::ListResourceTemplatesRequest(list_resource_templates_request) => {
-                self.handler
-                    .handle_list_resource_templates_request(
-                        list_resource_templates_request.params,
-                        runtime,
-                    )
-                    .await
-                    .map(|value| value.into())
-            }
-            ClientJsonrpcRequest::ReadResourceRequest(read_resource_request) => self
-                .handler
-                .handle_read_resource_request(read_resource_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::SubscribeRequest(subscribe_request) => self
-                .handler
-                .handle_subscribe_request(subscribe_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::UnsubscribeRequest(unsubscribe_request) => self
-                .handler
-                .handle_unsubscribe_request(unsubscribe_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::ListPromptsRequest(list_prompts_request) => self
-                .handler
-                .handle_list_prompts_request(list_prompts_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-
-            ClientJsonrpcRequest::GetPromptRequest(prompt_request) => self
-                .handler
-                .handle_get_prompt_request(prompt_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::ListToolsRequest(list_tools_request) => self
-                .handler
-                .handle_list_tools_request(list_tools_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::CallToolRequest(call_tool_request) => {
-                let result = if call_tool_request.is_task_augmented() {
-                    let Some(task_creator) = task_creator else {
-                        return Err(CallToolError::from_message("Error creating a task!").into());
-                    };
-
-                    self.handler
-                        .handle_task_augmented_tool_call(
-                            call_tool_request.params,
-                            task_creator,
+    ) -> std::result::Result<ServerResult, RpcError> {
+        let server_info = runtime.server_details().server_info.clone();
+        let mut result = match client_jsonrpc_request {
+            ClientJsonrpcRequest::Standard(standard_request) => {
+                let meta = request_meta(&standard_request);
+                let context = RequestContext::from_request_meta(meta)?;
+                runtime.set_active_log_level(context.log_level.clone());
+                let method = method_name_for_request(&standard_request);
+                context.ensure_capabilities(
+                    method,
+                    &self.handler.required_capabilities_for_method(method),
+                )?;
+                let output: std::result::Result<ServerResult, RpcError> = match standard_request {
+                    ClientRequest::ListResourcesRequest(list_resources_request) => self
+                        .handler
+                        .handle_list_resources_request(
+                            Some(list_resources_request.params),
+                            &context,
                             runtime,
                         )
                         .await
-                        .map_or_else(
-                            |err| {
-                                let result: CallToolResult = CallToolError::new(err).into();
-                                result.into()
-                            },
-                            Into::into,
+                        .map(Into::into),
+                    ClientRequest::ListResourceTemplatesRequest(
+                        list_resource_templates_request,
+                    ) => self
+                        .handler
+                        .handle_list_resource_templates_request(
+                            Some(list_resource_templates_request.params),
+                            &context,
+                            runtime,
                         )
-                } else {
-                    self.handler
-                        .handle_call_tool_request(call_tool_request.params, runtime)
                         .await
-                        .map_or_else(
-                            |err| {
-                                let result: CallToolResult = CallToolError::new(err).into();
-                                result.into()
-                            },
-                            Into::into,
+                        .map(Into::into),
+                    ClientRequest::ReadResourceRequest(read_resource_request) => {
+                        self.handler
+                            .handle_read_resource_request(
+                                read_resource_request.params,
+                                &context,
+                                runtime,
+                            )
+                            .await
+                    }
+                    ClientRequest::ListPromptsRequest(list_prompts_request) => self
+                        .handler
+                        .handle_list_prompts_request(
+                            Some(list_prompts_request.params),
+                            &context,
+                            runtime,
                         )
+                        .await
+                        .map(Into::into),
+                    ClientRequest::GetPromptRequest(prompt_request) => {
+                        self.handler
+                            .handle_get_prompt_request(prompt_request.params, &context, runtime)
+                            .await
+                    }
+                    ClientRequest::ListToolsRequest(list_tools_request) => self
+                        .handler
+                        .handle_list_tools_request(
+                            Some(list_tools_request.params),
+                            &context,
+                            runtime,
+                        )
+                        .await
+                        .map(Into::into),
+                    ClientRequest::CallToolRequest(call_tool_request) => {
+                        // Per-tool capability gate (SEP-2575): a server MUST NOT
+                        // rely on a capability the client has not declared.
+                        context.ensure_capabilities(
+                            "tools/call",
+                            &self.handler.required_capabilities_for_tool_call(
+                                &call_tool_request.params.name,
+                            ),
+                        )?;
+                        // MRTR-aware dispatch (SEP-2322): the handler may return
+                        // an InputRequiredResult or a protocol-level RpcError.
+                        self.handler
+                            .handle_call_tool_request_mrtr(
+                                call_tool_request.params,
+                                &context,
+                                runtime,
+                            )
+                            .await
+                    }
+                    ClientRequest::CompleteRequest(complete_request) => self
+                        .handler
+                        .handle_complete_request(complete_request.params, &context, runtime)
+                        .await
+                        .map(Into::into),
+                    ClientRequest::DiscoverRequest(discover_request) => self
+                        .handler
+                        .handle_discover_request(discover_request.params, &context, runtime)
+                        .await
+                        .map(Into::into),
+                    ClientRequest::SubscriptionsListenRequest(req) => {
+                        let resource_count = req.params.notifications.resource_subscriptions.len();
+                        if !runtime.is_within_subscription_limit(resource_count) {
+                            return Err(RpcError::new(
+                                rust_mcp_schema::schema_utils::RpcErrorCodes::MISSING_REQUIRED_CLIENT_CAPABILITY,
+                                format!("Subscription limit exceeded: {resource_count} resources requested"),
+                                None,
+                            ));
+                        }
+                        let result = self
+                            .handler
+                            .handle_subscriptions_listen_request(
+                                req.id.clone(),
+                                req.params,
+                                &context,
+                                runtime.clone(),
+                            )
+                            .await;
+                        // Send acknowledgment with the listen request's id as
+                        // `subscriptionId`, per TS SDK semantics.
+                        if result.is_ok() {
+                            runtime.stream_started();
+                            // Register this request's transport as the session's
+                            // notification channel so subscription-scoped
+                            // notifications find the right listen stream.
+                            runtime.register_notification_transport();
+                            if let Some(filter) = runtime.subscription_filter() {
+                                let ack = SubscriptionsAcknowledgedNotificationParams {
+                                    notifications: filter,
+                                    meta: Some(NotificationMetaObject {
+                                        io_modelcontextprotocol_subscription_id: Some(req.id),
+                                        ..Default::default()
+                                    }),
+                                };
+                                let _ = runtime.notify_subscriptions_acknowledged(ack).await;
+                            }
+                        }
+                        result.map(Into::into)
+                    }
                 };
-                Ok(result)
+                if matches!(output, Ok(ServerResult::InputRequiredResult(_)))
+                    && !matches!(method, "tools/call" | "prompts/get" | "resources/read")
+                {
+                    return Err(RpcError::internal_error()
+                        .with_message("InputRequiredResult not allowed for this method"));
+                }
+                output
             }
-            ClientJsonrpcRequest::SetLevelRequest(set_level_request) => self
-                .handler
-                .handle_set_level_request(set_level_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::CompleteRequest(complete_request) => self
-                .handler
-                .handle_complete_request(complete_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::GetTaskRequest(get_task_request) => self
-                .handler
-                .handle_get_task_request(get_task_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::GetTaskPayloadRequest(get_task_payload_request) => self
-                .handler
-                .handle_get_task_payload_request(get_task_payload_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::CancelTaskRequest(cancel_task_request) => self
-                .handler
-                .handle_cancel_task_request(cancel_task_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::ListTasksRequest(list_tasks_request) => self
-                .handler
-                .handle_list_task_request(list_tasks_request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ClientJsonrpcRequest::CustomRequest(custom_request) => self
-                .handler
-                .handle_custom_request(custom_request.into(), runtime)
-                .await
-                .map(|value| value.into()),
-        }
+            ClientJsonrpcRequest::Custom(custom_request) => {
+                let context = RequestContext::empty();
+                self.handler
+                    .handle_custom_request(custom_request.into(), &context, runtime)
+                    .await
+                    .map(Into::into)
+            }
+        }?;
+        stamp_server_info(&mut result, &server_info);
+        Ok(result)
     }
 
     async fn handle_error(
@@ -268,36 +325,6 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                     .handle_cancelled_notification(cancelled_notification.params, runtime)
                     .await?;
             }
-            ClientJsonrpcNotification::InitializedNotification(initialized_notification) => {
-                self.handler
-                    .handle_initialized_notification(
-                        initialized_notification.params,
-                        runtime.clone(),
-                    )
-                    .await?;
-                self.handler.on_initialized(runtime).await;
-            }
-            ClientJsonrpcNotification::ProgressNotification(progress_notification) => {
-                self.handler
-                    .handle_progress_notification(progress_notification.params, runtime)
-                    .await?;
-            }
-            ClientJsonrpcNotification::RootsListChangedNotification(
-                roots_list_changed_notification,
-            ) => {
-                self.handler
-                    .handle_roots_list_changed_notification(
-                        roots_list_changed_notification.params,
-                        runtime,
-                    )
-                    .await?;
-            }
-            ClientJsonrpcNotification::TaskStatusNotification(task_status_notification) => {
-                self.handler
-                    .handle_task_status_notification(task_status_notification.params, runtime)
-                    .await?;
-            }
-
             ClientJsonrpcNotification::CustomNotification(value) => {
                 self.handler
                     .handle_custom_notification(value.into())
@@ -305,5 +332,12 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
             }
         }
         Ok(())
+    }
+
+    fn tool_header_annotations(
+        &self,
+        tool_name: &str,
+    ) -> Vec<crate::tool_param_headers::ToolParamHeader> {
+        self.handler.tool_header_annotations(tool_name)
     }
 }

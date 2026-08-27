@@ -1,6 +1,8 @@
+use crate::auth::Audience;
 #[cfg(feature = "auth")]
 use crate::auth::{AuthClaims, AuthenticationError, IntrospectionResponse};
-use crate::{auth::Audience, utils::unix_timestamp_to_systemtime};
+#[cfg(feature = "auth")]
+use crate::utils::unix_timestamp_to_systemtime;
 #[cfg(feature = "auth")]
 use jsonwebtoken::TokenData;
 use serde::{Deserialize, Serialize};

@@ -74,6 +74,7 @@ impl CancellationToken {
     ///
     /// # Returns
     /// * `bool` - True if cancellation is requested, false otherwise
+    #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub fn is_cancelled(&self) -> bool {
         *self.receiver.borrow()
     }

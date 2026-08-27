@@ -1,6 +1,6 @@
 use syn::{parse::Parse, Error};
 
-use crate::common::{ExecutionSupportDsl, GenericMcpMacroAttributes, IconDsl};
+use crate::common::{GenericMcpMacroAttributes, IconDsl};
 
 /// Represents the attributes for the `mcp_tool` procedural macro.
 ///
@@ -27,7 +27,6 @@ pub(crate) struct McpToolMacroAttributes {
     pub idempotent_hint: Option<bool>,
     pub open_world_hint: Option<bool>,
     pub read_only_hint: Option<bool>,
-    pub execution: Option<ExecutionSupportDsl>,
     pub icons: Option<Vec<IconDsl>>,
 }
 
@@ -61,7 +60,6 @@ impl Parse for McpToolMacroAttributes {
             idempotent_hint,
             open_world_hint,
             read_only_hint,
-            execution,
         } = GenericMcpMacroAttributes::parse(attributes)?;
 
         let instance = Self {
@@ -73,7 +71,6 @@ impl Parse for McpToolMacroAttributes {
             idempotent_hint,
             open_world_hint,
             read_only_hint,
-            execution,
             icons,
         };
 

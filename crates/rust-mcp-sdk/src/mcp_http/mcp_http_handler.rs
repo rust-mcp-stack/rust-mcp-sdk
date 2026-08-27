@@ -1,32 +1,32 @@
+use super::http_utils::error_response;
 #[cfg(all(feature = "sse", feature = "server"))]
 use super::http_utils::handle_sse_connection;
+#[cfg(feature = "server")]
+use super::http_utils::validate_custom_headers;
+#[cfg(feature = "server")]
 use super::http_utils::{
-    accepts_event_stream, error_response, query_param, validate_mcp_protocol_version_header,
+    jsonrpc_error_response, validate_mcp_protocol_version_header, validate_standard_headers,
+    validate_stateless_request,
 };
 use super::types::GenericBody;
 use crate::auth::AuthInfo;
 #[cfg(feature = "auth")]
 use crate::auth::AuthProvider;
 #[cfg(all(feature = "server", any(feature = "sse", feature = "streamable-http")))]
-use crate::mcp_http::http_utils::{
-    create_standalone_stream, delete_session, process_incoming_message,
-    process_incoming_message_return, start_new_session,
-};
+use crate::mcp_http::http_utils::{process_incoming_message, process_incoming_message_return};
+#[cfg(any(feature = "auth", feature = "sse"))]
+use crate::mcp_http::middleware::compose;
+#[cfg(feature = "auth")]
 use crate::mcp_http::McpHttpError;
-use crate::mcp_http::{middleware::compose, BoxFutureResponse, Middleware, RequestHandler};
+#[cfg(any(feature = "sse", feature = "streamable-http"))]
+use crate::mcp_http::{
+    http_utils::{acceptable_content_type, valid_streaming_http_accept_header},
+    McpAppState, McpHttpResult,
+};
+use crate::mcp_http::{BoxFutureResponse, Middleware, RequestHandler};
 use crate::mcp_http::{GenericBodyExt, HealthHandler, RequestExt};
 use crate::schema::schema_utils::SdkError;
-#[cfg(any(feature = "sse", feature = "streamable-http"))]
-use crate::{
-    error::McpSdkError,
-    mcp_http::{
-        http_utils::{acceptable_content_type, valid_streaming_http_accept_header},
-        McpAppState, McpHttpResult,
-    },
-    utils::valid_initialize_method,
-};
 use http::{self, HeaderMap, Method, StatusCode, Uri};
-use rust_mcp_transport::{SessionId, MCP_LAST_EVENT_ID_HEADER, MCP_SESSION_ID_HEADER};
 use std::sync::Arc;
 
 /// A helper macro to wrap an async handler method into a `RequestHandler`
@@ -181,7 +181,7 @@ impl McpHttpHandler {
     ///
     /// # Features
     /// This function is only available when the `sse` feature is enabled.
-    #[cfg(feature = "sse")]
+    #[cfg(all(feature = "server", feature = "sse"))]
     pub async fn handle_sse_connection(
         &self,
         request: http::Request<&str>,
@@ -223,7 +223,7 @@ impl McpHttpHandler {
     /// - `SessionIdInvalid`: if the session ID does not map to a valid session in the session store.
     /// - `StreamIoError`: if an error occurs while writing to the stream.
     /// - `HttpError`: if constructing the HTTP response fails.
-    #[cfg(feature = "sse")]
+    #[cfg(all(feature = "server", feature = "sse"))]
     pub async fn handle_sse_message(
         &self,
         request: http::Request<&str>,
@@ -280,37 +280,18 @@ impl McpHttpHandler {
         handle(request, state).await
     }
 
-    #[cfg(feature = "server")]
+    #[cfg(all(feature = "server", feature = "sse"))]
     async fn internal_handle_sse_message(
-        request: http::Request<&str>,
-        state: Arc<McpAppState>,
+        _request: http::Request<&str>,
+        _state: Arc<McpAppState>,
     ) -> McpHttpResult<http::Response<GenericBody>> {
-        let session_id =
-            query_param(&request, "sessionId").ok_or(McpHttpError::SessionIdMissing)?;
-
-        // transmit to the readable stream, that transport is reading from
-        let transmit = state
-            .session_store
-            .get(&session_id)
-            .await
-            .ok_or(McpHttpError::SessionIdInvalid(session_id.to_string()))?;
-
-        let message = request.body();
-
-        transmit
-            .consume_payload_string(message.as_ref())
-            .await
-            .map_err(|err| {
-                tracing::trace!("{}", err);
-                McpHttpError::StreamIoError(err.to_string())
-            })?;
-
-        http::Response::builder()
-            .status(StatusCode::ACCEPTED)
-            .body(GenericBody::empty())
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        error_response(
+            StatusCode::GONE,
+            SdkError::internal_error().with_message("SSE transport is no longer supported"),
+        )
     }
 
+    #[allow(unused_variables)]
     async fn internal_handle_streamable_http(
         request: http::Request<&str>,
         state: Arc<McpAppState>,
@@ -321,17 +302,9 @@ impl McpHttpHandler {
 
         let response = match method {
             &http::Method::GET => {
-                #[cfg(feature = "server")]
-                {
-                    return Self::handle_http_get(request, state, auth_info).await;
-                }
-                #[cfg(not(feature = "server"))]
-                {
-                    return error_response(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        SdkError::internal_error(),
-                    );
-                }
+                let error = SdkError::bad_request()
+                    .with_message("GET is not supported in this protocol version");
+                error_response(StatusCode::METHOD_NOT_ALLOWED, error)
             }
             &http::Method::POST => {
                 #[cfg(feature = "server")]
@@ -347,17 +320,9 @@ impl McpHttpHandler {
                 }
             }
             &http::Method::DELETE => {
-                #[cfg(feature = "server")]
-                {
-                    return Self::handle_http_delete(request, state).await;
-                }
-                #[cfg(not(feature = "server"))]
-                {
-                    return error_response(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        SdkError::internal_error(),
-                    );
-                }
+                let error = SdkError::bad_request()
+                    .with_message("DELETE is not supported in this protocol version");
+                error_response(StatusCode::METHOD_NOT_ALLOWED, error)
             }
             other => {
                 let error = SdkError::bad_request().with_message(&format!(
@@ -397,275 +362,34 @@ impl McpHttpHandler {
             return error_response(StatusCode::BAD_REQUEST, error);
         }
 
-        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
-            Ok(id) => id,
-            Err(msg) => {
-                let error = SdkError::bad_request()
-                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
-                return error_response(StatusCode::BAD_REQUEST, error);
-            }
-        };
-
         let payload = request.body();
 
-        let response = match session_id {
-            // has session-id => write to the existing stream
-            Some(id) => {
-                if state.enable_json_response {
-                    process_incoming_message_return(id, state, payload, auth_info).await
-                } else {
-                    process_incoming_message(id, state, payload, auth_info).await
-                }
-            }
-            None => match valid_initialize_method(payload) {
-                Ok(_) => {
-                    return start_new_session(state, payload, auth_info).await;
-                }
-                Err(McpSdkError::SdkError(error)) => error_response(StatusCode::BAD_REQUEST, error),
-                Err(error) => {
-                    let error = SdkError::bad_request().with_message(&error.to_string());
-                    error_response(StatusCode::BAD_REQUEST, error)
-                }
-            },
+        // SEP-2575 stateless-request gate: validate per-request `_meta`,
+        // header/`_meta` version agreement, and version support before any
+        // dispatching.
+        if let Some((status, error, request_id)) = validate_stateless_request(headers, payload) {
+            return jsonrpc_error_response(status, error, request_id);
+        }
+
+        // SEP-2243 standard-header gate: `Mcp-Method` must match the request
+        // method and `Mcp-Name` must match the target name/uri.
+        if let Some((status, error, request_id)) = validate_standard_headers(headers, payload) {
+            return jsonrpc_error_response(status, error, request_id);
+        }
+
+        // SEP-2243 custom-header gate: for tools with `x-mcp-header`
+        // annotations, validate `Mcp-Param-*` headers against the body.
+        if let Some((status, error, request_id)) = validate_custom_headers(headers, payload, &state)
+        {
+            return jsonrpc_error_response(status, error, request_id);
+        }
+
+        let response = if state.enable_json_response {
+            process_incoming_message_return(state, payload, auth_info).await
+        } else {
+            process_incoming_message(state, payload, auth_info).await
         };
 
         response
-    }
-
-    /// Processes GET requests for the Streamable HTTP Protocol
-    #[cfg(feature = "server")]
-    async fn handle_http_get(
-        request: http::Request<&str>,
-        state: Arc<McpAppState>,
-        auth_info: Option<AuthInfo>,
-    ) -> McpHttpResult<http::Response<GenericBody>> {
-        let headers = request.headers();
-
-        if !accepts_event_stream(headers) {
-            let error =
-                SdkError::bad_request().with_message(r#"Client must accept text/event-stream"#);
-            return error_response(StatusCode::NOT_ACCEPTABLE, error);
-        }
-
-        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
-            let error = SdkError::bad_request()
-                .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
-            return error_response(StatusCode::BAD_REQUEST, error);
-        }
-
-        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
-            Ok(id) => id,
-            Err(msg) => {
-                let error = SdkError::bad_request()
-                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
-                return error_response(StatusCode::BAD_REQUEST, error);
-            }
-        };
-
-        let last_event_id = match parse_session_id_header(headers, MCP_LAST_EVENT_ID_HEADER) {
-            Ok(id) => id,
-            Err(msg) => {
-                let error = SdkError::bad_request()
-                    .with_message(format!("Invalid Mcp-Last-Event-Id header: {msg}").as_str());
-                return error_response(StatusCode::BAD_REQUEST, error);
-            }
-        };
-
-        let response = match session_id {
-            Some(session_id) => {
-                let res =
-                    create_standalone_stream(session_id, last_event_id, state, auth_info).await;
-                res
-            }
-            None => {
-                let error = SdkError::bad_request().with_message("Bad request: session not found");
-                error_response(StatusCode::BAD_REQUEST, error)
-            }
-        };
-
-        response
-    }
-
-    /// Processes DELETE requests for the Streamable HTTP Protocol
-    #[cfg(feature = "server")]
-    async fn handle_http_delete(
-        request: http::Request<&str>,
-        state: Arc<McpAppState>,
-    ) -> McpHttpResult<http::Response<GenericBody>> {
-        let headers = request.headers();
-
-        if let Err(parse_error) = validate_mcp_protocol_version_header(headers) {
-            let error = SdkError::bad_request()
-                .with_message(format!(r#"Bad Request: {parse_error}"#).as_str());
-            return error_response(StatusCode::BAD_REQUEST, error);
-        }
-
-        let session_id = match parse_session_id_header(headers, MCP_SESSION_ID_HEADER) {
-            Ok(id) => id,
-            Err(msg) => {
-                let error = SdkError::bad_request()
-                    .with_message(format!("Invalid Mcp-Session-Id header: {msg}").as_str());
-                return error_response(StatusCode::BAD_REQUEST, error);
-            }
-        };
-
-        let response = match session_id {
-            Some(id) => delete_session(id, state).await,
-            None => {
-                let error = SdkError::bad_request().with_message("Bad Request: Session not found");
-                error_response(StatusCode::BAD_REQUEST, error)
-            }
-        };
-
-        response
-    }
-}
-
-/// Maximum accepted length (in bytes) of the `Mcp-Session-Id`
-/// and `Mcp-Last-Event-Id` headers.
-const MAX_SESSION_ID_LEN: usize = 128;
-
-/// Returns `Ok(())` if the session ID is non-empty, within the length cap,
-/// and contains only printable ASCII non-whitespace characters.
-fn is_valid_session_id(value: &str) -> Result<(), &'static str> {
-    if value.is_empty() {
-        return Err("session ID must not be empty");
-    }
-    if value.len() > MAX_SESSION_ID_LEN {
-        return Err("session ID exceeds maximum length of 128 bytes");
-    }
-    if !value.bytes().all(|b| b.is_ascii_graphic() && b != b' ') {
-        return Err("session ID contains invalid characters");
-    }
-    Ok(())
-}
-
-/// Extracts and validates a session-id-like header.
-///
-/// Returns `Ok(None)` when the header is absent, `Ok(Some(id))` when present
-/// and valid, and `Err(msg)` when present but invalid. Validating up front
-/// avoids unbounded allocations and map lookups from a hostile value.
-fn parse_session_id_header(
-    headers: &HeaderMap,
-    header_name: &str,
-) -> Result<Option<SessionId>, &'static str> {
-    match headers.get(header_name) {
-        None => Ok(None),
-        Some(value) => {
-            let s = value
-                .to_str()
-                .map_err(|_| "session ID is not valid UTF-8")?;
-            is_valid_session_id(s)?;
-            Ok(Some(s.to_string()))
-        }
-    }
-}
-
-#[cfg(test)]
-mod session_id_tests {
-    use super::*;
-    use http::HeaderValue;
-
-    // ── valid IDs ──
-
-    #[test]
-    fn accepts_uuid() {
-        assert!(is_valid_session_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
-    }
-
-    #[test]
-    fn accepts_prefixed_ids() {
-        assert!(is_valid_session_id("tsk_abcDEF123").is_ok());
-        assert!(is_valid_session_id("s_0001").is_ok());
-    }
-
-    #[test]
-    fn accepts_dot_and_tilde() {
-        assert!(is_valid_session_id("session.id").is_ok());
-        assert!(is_valid_session_id("session~id").is_ok());
-    }
-
-    #[test]
-    fn accepts_base64url() {
-        assert!(is_valid_session_id("aGVsbG8td29ybGQ").is_ok());
-    }
-
-    #[test]
-    fn accepts_exact_max_length() {
-        let id = "a".repeat(MAX_SESSION_ID_LEN);
-        assert!(is_valid_session_id(&id).is_ok());
-    }
-
-    // ── invalid IDs ──
-
-    #[test]
-    fn rejects_empty() {
-        let err = is_valid_session_id("").unwrap_err();
-        assert!(err.contains("must not be empty"));
-    }
-
-    #[test]
-    fn rejects_oversized() {
-        let id = "a".repeat(MAX_SESSION_ID_LEN + 1);
-        let err = is_valid_session_id(&id).unwrap_err();
-        assert!(err.contains("exceeds maximum length"));
-    }
-
-    #[test]
-    fn rejects_whitespace() {
-        let err = is_valid_session_id("has space").unwrap_err();
-        assert!(err.contains("invalid characters"));
-    }
-
-    #[test]
-    fn rejects_control_chars() {
-        let err = is_valid_session_id("tab\there").unwrap_err();
-        assert!(err.contains("invalid characters"));
-    }
-
-    #[test]
-    fn rejects_newline() {
-        let err = is_valid_session_id("line\nbreak").unwrap_err();
-        assert!(err.contains("invalid characters"));
-    }
-
-    #[test]
-    fn rejects_non_ascii() {
-        let err = is_valid_session_id("naïve").unwrap_err();
-        assert!(err.contains("invalid characters"));
-    }
-
-    #[test]
-    fn rejects_null_byte() {
-        let err = is_valid_session_id("bad\0id").unwrap_err();
-        assert!(err.contains("invalid characters"));
-    }
-
-    // ── header-level parsing ──
-
-    #[test]
-    fn parse_session_id_absent_returns_none() {
-        let headers = HeaderMap::new();
-        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn parse_session_id_valid_returns_some() {
-        let mut headers = HeaderMap::new();
-        headers.insert("mcp-session-id", "test-session".parse().unwrap());
-        let result = parse_session_id_header(&headers, "mcp-session-id").unwrap();
-        assert_eq!(result, Some("test-session".to_string()));
-    }
-
-    #[test]
-    fn parse_session_id_invalid_returns_err() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "mcp-session-id",
-            HeaderValue::from_bytes(b"\xFF\xFE").unwrap(),
-        );
-        let err = parse_session_id_header(&headers, "mcp-session-id").unwrap_err();
-        assert!(err.contains("not valid UTF-8"));
     }
 }

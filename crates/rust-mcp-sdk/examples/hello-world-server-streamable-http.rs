@@ -4,20 +4,17 @@ use crate::common::{initialize_tracing, ExampleServerHandler};
 use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_schema::ServerCapabilitiesResources;
 use rust_mcp_sdk::schema::{
-    Implementation, InitializeResult, ProtocolVersion, ServerCapabilities, ServerCapabilitiesTools,
+    Implementation, JsonObject, ServerCapabilities, ServerCapabilitiesTools,
 };
 use rust_mcp_sdk::{
     error::SdkResult,
-    event_store::InMemoryEventStore,
     mcp_icon,
     mcp_server::{ServerHandler, ToMcpServerHandler},
-    task_store::InMemoryTaskStore,
+    ServerDetails,
 };
-use serde_json::Map;
-use std::sync::Arc;
 
 pub struct AppState<H: ServerHandler> {
-    pub server_details: InitializeResult,
+    pub server_details: ServerDetails,
     pub handler: H,
 }
 
@@ -26,9 +23,7 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // STEP 1: Define server details and capabilities
-    let server_details = InitializeResult {
-        // server name and version
+    let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server Streamable Http/SSE".into(),
             version: "0.1.0".into(),
@@ -43,29 +38,23 @@ async fn main() -> SdkResult<()> {
             website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".into()),
         },
         capabilities: ServerCapabilities {
-            // indicates that server support mcp tools
             tools: Some(ServerCapabilitiesTools { list_changed: None }),
             resources: Some(ServerCapabilitiesResources{ list_changed: None, subscribe: None }),
-            completions:Some(Map::new()),
-            ..Default::default() // Using default values for other fields
+            completions: Some(JsonObject(std::collections::BTreeMap::new())),
+            ..Default::default()
         },
         meta: None,
         instructions: Some("server instructions...".into()),
-        protocol_version: ProtocolVersion::V2025_11_25.into(),
     };
 
     // STEP 2: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandler {};
 
-    // STEP 3: instantiate AxumServer, providing `server_details` , `handler` and AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),
         AxumServerOptions {
             host: "127.0.0.1".into(),
-            event_store: Some(Arc::new(InMemoryEventStore::default())), // enable resumability
-            task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
-            client_task_store: Some(Arc::new(InMemoryTaskStore::new(None))),
             ..Default::default()
         },
     );

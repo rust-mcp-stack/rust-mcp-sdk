@@ -1,14 +1,12 @@
 use rust_mcp_sdk::{
     mcp_icon,
-    schema::{
-        Implementation, InitializeResult, ServerCapabilities, ServerCapabilitiesTools,
-        LATEST_PROTOCOL_VERSION,
-    },
+    schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools},
+    ServerDetails,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-pub fn create_server_info(server_name: &str) -> InitializeResult {
-    InitializeResult {
+pub fn create_server_info(server_name: &str) -> ServerDetails {
+    ServerDetails {
         server_info: Implementation {
             name: server_name.to_string(),
             version: "0.1.0".to_string(),
@@ -19,18 +17,17 @@ pub fn create_server_info(server_name: &str) -> InitializeResult {
                     src = "https://raw.githubusercontent.com/rust-mcp-stack/rust-mcp-sdk/main/assets/rust-mcp-icon.png",
                     mime_type = "image/png",
                     sizes = ["128x128"],
-                    theme = "dark"
+                    theme = "dark",
                 )
             ],
             website_url: Some("https://github.com/rust-mcp-stack/rust-mcp-sdk".to_string()),
         },
         capabilities: ServerCapabilities {
-            tools: Some(ServerCapabilitiesTools { list_changed: None }),
+            tools: Some(ServerCapabilitiesTools { list_changed: Some(true) }),
             ..Default::default()
         },
-        meta: None,
         instructions: None,
-        protocol_version: LATEST_PROTOCOL_VERSION.to_string(),
+        meta: None,
     }
 }
 

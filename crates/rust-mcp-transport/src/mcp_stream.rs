@@ -60,6 +60,7 @@ impl MCPStream {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "streamable-http")]
     pub fn create_with_ack<X, R>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         writable: tokio::sync::mpsc::Sender<(
@@ -101,7 +102,7 @@ impl MCPStream {
     /// Creates a new task that continuously reads from the readable stream.
     /// The received data is deserialized into a JsonrpcMessage. If the deserialization is successful,
     /// the object is transmitted. If the object is a response or error corresponding to a pending request,
-    /// the associated pending request will ber removed from pending_requests.
+    /// the associated pending request will be removed from pending_requests.
     fn spawn_reader<X>(
         readable: Pin<Box<dyn tokio::io::AsyncRead + Send + Sync>>,
         tx: tokio::sync::mpsc::Sender<X>,

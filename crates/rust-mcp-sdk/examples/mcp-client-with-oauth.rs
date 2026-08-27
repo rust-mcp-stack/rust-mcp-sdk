@@ -1,8 +1,7 @@
 use rust_mcp_sdk::auth::McpAuthConfig;
 use rust_mcp_sdk::mcp_client::client_runtime;
-use rust_mcp_sdk::schema::{
-    ClientCapabilities, Implementation, InitializeRequestParams, LATEST_PROTOCOL_VERSION,
-};
+use rust_mcp_sdk::schema::{ClientCapabilities, Implementation};
+use rust_mcp_sdk::ClientDetails;
 use rust_mcp_sdk::McpClient;
 use rust_mcp_sdk::{RequestOptions, StreamableTransportOptions};
 
@@ -29,6 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metadata = auth_client.discover_metadata().await?;
     tracing::info!("Discovered OAuth metadata from {}", metadata.issuer);
 
+    // DCR is deprecated; CIMD is preferred. Kept here to show the flow.
+    #[allow(deprecated)]
     let reg = auth_client.register().await?;
     tracing::info!("Registered client: {}", reg.client_id);
 
@@ -43,8 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    let client_details = InitializeRequestParams {
-        capabilities: ClientCapabilities::default(),
+    let client_details = ClientDetails {
         client_info: Implementation {
             name: "oauth-mcp-client".into(),
             version: "0.1.0".into(),
@@ -53,22 +53,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             icons: vec![],
             website_url: None,
         },
-        protocol_version: LATEST_PROTOCOL_VERSION.into(),
-        meta: None,
+        capabilities: ClientCapabilities::default(),
     };
 
     struct MyHandler;
     #[async_trait::async_trait]
     impl rust_mcp_sdk::mcp_client::ClientHandler for MyHandler {}
 
-    let client = client_runtime::with_transport_options(
-        client_details,
-        transport_options,
-        MyHandler,
-        None,
-        None,
-        None,
-    );
+    let client =
+        client_runtime::with_transport_options(client_details, transport_options, MyHandler, None);
 
     client.clone().start().await?;
 

@@ -2,63 +2,60 @@ use crate::common::resources::{BlobResource, PlainTextResource, PokemonImageReso
 
 use super::tools::GreetingTools;
 use async_trait::async_trait;
-use rust_mcp_schema::{CompleteResult, ListResourceTemplatesResult, ListResourcesResult};
 use rust_mcp_sdk::{
-    mcp_server::{enforce_compatible_protocol_version, ServerHandlerCore},
+    mcp_server::ServerHandlerCore,
     schema::{
-        schema_utils::CallToolError, ListToolsResult, NotificationFromClient, RequestFromClient,
-        ResultFromServer, RpcError,
+        schema_utils::CallToolError, CompleteResult, DiscoverResult, DiscoverResultCacheScope,
+        ListResourceTemplatesResult, ListResourceTemplatesResultCacheScope, ListResourcesResult,
+        ListResourcesResultCacheScope, ListToolsResult, ListToolsResultCacheScope,
+        NotificationFromClient, RequestFromClient, RpcError, ServerResult,
     },
-    McpServer,
+    McpServer, RequestContext,
 };
 use std::sync::Arc;
 
-// Custom Handler to handle MCP Messages
 pub struct ExampleServerHandlerCore;
-
-// To check out a list of all the methods in the trait that you can override, take a look at
-// https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-sdk/src/mcp_handlers/mcp_server_handler.rs
 
 #[async_trait]
 #[allow(unused)]
 impl ServerHandlerCore for ExampleServerHandlerCore {
-    // Process incoming requests from the client
     async fn handle_request(
         &self,
         request: RequestFromClient,
+        _context: &RequestContext,
         runtime: Arc<dyn McpServer>,
-    ) -> std::result::Result<ResultFromServer, RpcError> {
-        let method_name = &request.method().to_owned();
+    ) -> std::result::Result<ServerResult, RpcError> {
+        let method_name = request.method().to_owned();
         match request {
-            // Handle the initialization request
-            RequestFromClient::InitializeRequest(params) => {
-                let mut server_info = runtime.server_info().to_owned();
-                if let Some(updated_protocol_version) = enforce_compatible_protocol_version(
-                    &params.protocol_version,
-                    &server_info.protocol_version,
-                )
-                .map_err(|err| RpcError::internal_error().with_message(err.to_string()))?
-                {
-                    server_info.protocol_version = params.protocol_version;
-                }
-                return Ok(server_info.into());
+            RequestFromClient::DiscoverRequest(_params) => {
+                let details = runtime.server_details();
+                Ok(ServerResult::DiscoverResult(DiscoverResult {
+                    capabilities: details.capabilities.clone(),
+                    instructions: details.instructions.clone(),
+                    meta: details.meta.clone(),
+                    result_type: "complete".to_string(),
+                    cache_scope: DiscoverResultCacheScope::Private,
+                    ttl_ms: 0,
+                    supported_versions: vec![
+                        rust_mcp_sdk::schema::ProtocolVersion::V2026_07_28.to_string()
+                    ],
+                }))
             }
 
-            // Handle ListToolsRequest, return list of available tools
             RequestFromClient::ListToolsRequest(_params) => Ok(ListToolsResult {
+                cache_scope: ListToolsResultCacheScope::Private,
+                result_type: "complete".to_string(),
+                ttl_ms: 0,
                 meta: None,
                 next_cursor: None,
                 tools: GreetingTools::tools(),
             }
             .into()),
 
-            // Handles incoming CallToolRequest and processes it using the appropriate tool.
             RequestFromClient::CallToolRequest(params) => {
                 let tool_name = params.name.to_string();
-                // Attempt to convert request parameters into GreetingTools enum
                 let tool_params = GreetingTools::try_from(params)
                     .map_err(|_| CallToolError::unknown_tool(tool_name.clone()))?;
-                // Match the tool variant and execute its corresponding logic
                 let result = match tool_params {
                     GreetingTools::SayHelloTool(say_hello_tool) => say_hello_tool
                         .call_tool()
@@ -70,17 +67,21 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 Ok(result.into())
             }
 
-            // return list of available resources
-            RequestFromClient::ListResourcesRequest(params) => Ok(ListResourcesResult {
+            RequestFromClient::ListResourcesRequest(_params) => Ok(ListResourcesResult {
+                cache_scope: ListResourcesResultCacheScope::Private,
+                result_type: "complete".to_string(),
+                ttl_ms: 0,
                 meta: None,
                 next_cursor: None,
                 resources: vec![PlainTextResource::resource(), BlobResource::resource()],
             }
             .into()),
 
-            // return list of available resource templates
-            RequestFromClient::ListResourceTemplatesRequest(params) => {
+            RequestFromClient::ListResourceTemplatesRequest(_params) => {
                 Ok(ListResourceTemplatesResult {
+                    cache_scope: ListResourceTemplatesResultCacheScope::Private,
+                    result_type: "complete".to_string(),
+                    ttl_ms: 0,
                     meta: None,
                     next_cursor: None,
                     resource_templates: vec![PokemonImageResource::resource_template()],
@@ -95,13 +96,11 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 if BlobResource::resource_uri().starts_with(&params.uri) {
                     return BlobResource::get_resource().await.map(|r| r.into());
                 }
-
                 if PokemonImageResource::matches_url(&params.uri) {
                     return PokemonImageResource::get_resource(&params.uri)
                         .await
                         .map(|r| r.into());
                 }
-
                 Err(RpcError::invalid_request()
                     .with_message(format!("No resource was found for '{}'.", params.uri)))
             }
@@ -110,6 +109,7 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 if params.argument.name.eq("pokemon-id") {
                     Ok(CompleteResult {
                         completion: PokemonImageResource::completion(&params.argument.value),
+                        result_type: "complete".to_string(),
                         meta: None,
                     }
                     .into())
@@ -121,28 +121,22 @@ impl ServerHandlerCore for ExampleServerHandlerCore {
                 }
             }
 
-            // Return Method not found for any other requests
             _ => Err(RpcError::method_not_found()
                 .with_message(format!("No handler is implemented for '{method_name}'.",))),
-            // Handle custom requests
-            RequestFromClient::CustomRequest(_) => Err(RpcError::method_not_found()
-                .with_message("No handler is implemented for custom requests.".to_string())),
         }
     }
 
-    // Process incoming client notifications
     async fn handle_notification(
         &self,
-        notification: NotificationFromClient,
+        _notification: NotificationFromClient,
         _: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())
     }
 
-    // Process incoming client errors
     async fn handle_error(
         &self,
-        error: &RpcError,
+        _error: &RpcError,
         _: Arc<dyn McpServer>,
     ) -> std::result::Result<(), RpcError> {
         Ok(())

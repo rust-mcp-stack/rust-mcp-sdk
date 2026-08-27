@@ -1,20 +1,17 @@
 use super::ClientRuntime;
 use super::McpClientOptions;
 #[cfg(feature = "streamable-http")]
-use crate::task_store::ServerTaskStore;
-use crate::task_store::TaskCreator;
+use crate::mcp_traits::ClientDetails;
+use crate::schema::{
+    schema_utils::{
+        ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer, ResultFromClient,
+        ServerMessage, ServerMessages,
+    },
+    RpcError,
+};
+#[cfg(feature = "streamable-http")]
 use crate::McpObserver;
 use crate::{error::SdkResult, mcp_client::ClientHandler, mcp_traits::McpClientHandler, McpClient};
-use crate::{
-    schema::{
-        schema_utils::{
-            ClientMessage, ClientMessages, MessageFromClient, NotificationFromServer,
-            ResultFromClient, ServerMessage, ServerMessages,
-        },
-        InitializeRequestParams, RpcError,
-    },
-    task_store::ClientTaskStore,
-};
 use async_trait::async_trait;
 use rust_mcp_schema::schema_utils::ServerJsonrpcRequest;
 #[cfg(feature = "streamable-http")]
@@ -53,33 +50,49 @@ where
         ClientMessage,
     >,
 {
-    Arc::new(ClientRuntime::new(
+    let runtime = Arc::new(ClientRuntime::new(
         options.client_details,
         Arc::new(options.transport),
         options.handler,
-        options.task_store,
-        options.server_task_store,
         options.message_observer,
-    ))
+    ));
+    if let Some(cache_config) = options.response_cache_config {
+        runtime.init_response_cache(cache_config);
+    }
+    runtime
 }
 
 #[cfg(feature = "streamable-http")]
 pub fn with_transport_options(
-    client_details: InitializeRequestParams,
+    client_details: ClientDetails,
     transport_options: StreamableTransportOptions,
     handler: impl ClientHandler,
-    task_store: Option<Arc<ClientTaskStore>>,
-    server_task_store: Option<Arc<ServerTaskStore>>,
     message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
 ) -> Arc<ClientRuntime> {
     Arc::new(ClientRuntime::new_instance(
         client_details,
         transport_options,
         Box::new(ClientInternalHandler::new(Box::new(handler))),
-        task_store,
-        server_task_store,
         message_observer,
     ))
+}
+
+#[cfg(feature = "streamable-http")]
+pub fn with_transport_options_and_cache(
+    client_details: ClientDetails,
+    transport_options: StreamableTransportOptions,
+    handler: impl ClientHandler,
+    message_observer: Option<Arc<dyn McpObserver<ServerMessage, ClientMessage>>>,
+    cache_config: super::response_cache::ResponseCacheConfig,
+) -> Arc<ClientRuntime> {
+    let runtime = Arc::new(ClientRuntime::new_instance(
+        client_details,
+        transport_options,
+        Box::new(ClientInternalHandler::new(Box::new(handler))),
+        message_observer,
+    ));
+    runtime.init_response_cache(cache_config);
+    runtime
 }
 
 /// Internal handler that wraps a `ClientHandler` trait object.
@@ -103,90 +116,22 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
         server_jsonrpc_request: ServerJsonrpcRequest,
         runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
-        runtime
-            .capabilities()
-            .can_handle_request(&server_jsonrpc_request)?;
-        // prepare a TaskCreator in case request is task augmented and client is configured with a task_store
-        let task_creator = if server_jsonrpc_request.is_task_augmented() {
-            let Some(task_store) = runtime.task_store() else {
-                return Err(RpcError::invalid_request()
-                    .with_message("The server is not configured with a task store.".to_string()));
-            };
-
-            Some(TaskCreator {
-                request_id: server_jsonrpc_request.request_id().to_owned(),
-                request: server_jsonrpc_request.clone(),
-                task_store,
-                session_id: runtime.session_id().await,
-            })
-        } else {
-            None
-        };
-
         match server_jsonrpc_request {
-            ServerJsonrpcRequest::PingRequest(request) => self
+            ServerJsonrpcRequest::CreateMessageRequest { request, .. } => self
                 .handler
-                .handle_ping_request(request.params, runtime)
+                .handle_create_message_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            ServerJsonrpcRequest::CreateMessageRequest(request) => {
-                if request.params.is_task_augmented() {
-                    self.handler
-                        .handle_task_augmented_create_message(request.params, runtime)
-                        .await
-                        .map(|value| value.into())
-                } else {
-                    self.handler
-                        .handle_create_message_request(request.params, runtime)
-                        .await
-                        .map(|value| value.into())
-                }
-            }
-            ServerJsonrpcRequest::ListRootsRequest(request) => self
+            ServerJsonrpcRequest::ListRootsRequest { request, .. } => self
                 .handler
                 .handle_list_roots_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            ServerJsonrpcRequest::ElicitRequest(request) => {
-                if request.params.is_task_augmented() {
-                    let Some(task_creator) = task_creator else {
-                        return Err(RpcError::internal_error()
-                            .with_message("Error creating a task!".to_string()));
-                    };
-
-                    self.handler
-                        .handle_task_augmented_elicit_request(task_creator, request.params, runtime)
-                        .await
-                        .map(|value| value.into())
-                } else {
-                    self.handler
-                        .handle_elicit_request(request.params, runtime)
-                        .await
-                        .map(|value| value.into())
-                }
-            }
-
-            ServerJsonrpcRequest::GetTaskRequest(request) => self
+            ServerJsonrpcRequest::ElicitRequest { request, .. } => self
                 .handler
-                .handle_get_task_request(request.params, runtime)
+                .handle_elicit_request(request.params, runtime)
                 .await
                 .map(|value| value.into()),
-            ServerJsonrpcRequest::GetTaskPayloadRequest(request) => self
-                .handler
-                .handle_get_task_payload_request(request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ServerJsonrpcRequest::CancelTaskRequest(request) => self
-                .handler
-                .handle_cancel_task_request(request.params, runtime)
-                .await
-                .map(|value| value.into()),
-            ServerJsonrpcRequest::ListTasksRequest(request) => self
-                .handler
-                .handle_list_tasks_request(request.params, runtime)
-                .await
-                .map(|value| value.into()),
-
             ServerJsonrpcRequest::CustomRequest(custom_request) => self
                 .handler
                 .handle_custom_request(custom_request.into(), runtime)
@@ -257,17 +202,12 @@ impl McpClientHandler for ClientInternalHandler<Box<dyn ClientHandler>> {
                     .handle_logging_message_notification(logging_message_notification, runtime)
                     .await?;
             }
-            NotificationFromServer::TaskStatusNotification(task_status_notification) => {
-                self.handler
-                    .handle_task_status_notification(task_status_notification, runtime)
-                    .await?;
-            }
-            NotificationFromServer::ElicitationCompleteNotification(
-                elicitation_complete_notification,
+            NotificationFromServer::SubscriptionsAcknowledgedNotification(
+                subscriptions_acknowledged_notification,
             ) => {
                 self.handler
-                    .handle_elicitation_complete_notification(
-                        elicitation_complete_notification,
+                    .handle_subscriptions_acknowledged_notification(
+                        subscriptions_acknowledged_notification,
                         runtime,
                     )
                     .await?;

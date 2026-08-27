@@ -1,8 +1,9 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rust_mcp_macros::{mcp_resource, mcp_resource_template};
-use rust_mcp_schema::{CompleteResultCompletion, TextResourceContents};
-use rust_mcp_sdk::schema::{BlobResourceContents, McpMetaEx, ReadResourceResult, RpcError};
-use serde_json::Map;
+use rust_mcp_schema::{
+    BlobResourceContents, CompleteResultCompletion, MetaObject, TextResourceContents,
+};
+use rust_mcp_sdk::schema::{ReadResourceResult, ReadResourceResultCacheScope, RpcError};
 
 /// A static resource provider for a simple plain-text example.
 ///
@@ -24,27 +25,32 @@ pub struct PlainTextResource {}
 impl PlainTextResource {
     pub async fn get_resource() -> std::result::Result<ReadResourceResult, RpcError> {
         Ok(ReadResourceResult {
-            contents: vec![TextResourceContents::new(
-                "Resource 1: I'm gonna need a bigger boat",
-                Self::resource_uri(),
-            )
-            .with_mime_type("text/plain")
+            contents: vec![TextResourceContents {
+                text: "Resource 1: I'm gonna need a bigger boat".to_string(),
+                uri: Self::resource_uri().to_string(),
+                mime_type: Some("text/plain".to_string()),
+                meta: None,
+            }
             .into()],
+            cache_scope: ReadResourceResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
             meta: None,
         })
     }
 }
 
-/// A static resource provider for a binary/blob example demonstrating an embedded image.
+/// A static resource provider for a binary/blob example demonstrating base64-encoded content.
 ///
 /// This resource serves as a simple, self-contained example of how to expose arbitrary binary data
-/// (base64-encoded) via the MCP ReadResource request.
+/// (or base64-encoded text) via the MCP ReadResource request.
 ///
-/// The embedded payload is a PNG image of the rust-mcp-sdk logo, included at compile time.
+/// The embedded payload is the base64 encoding of the string:
+/// `"Resource 2: I'm gonna need a bigger boat"`
 #[mcp_resource(
     name = "Resource 2",
-    description = "An image blob resource",
-    title = "An image blob resource",
+    description = "A blob resource",
+    title = "A blob resource",
     mime_type = "image/png",
     uri="test://static/resource/2",
     icons = [
@@ -56,7 +62,7 @@ impl PlainTextResource {
 pub struct BlobResource {}
 impl BlobResource {
     pub async fn get_resource() -> std::result::Result<ReadResourceResult, RpcError> {
-        let bytes = include_bytes!("../../../../assets/rust-mcp-sdk.png");
+        let bytes = include_bytes!("../../assets/rust-mcp-sdk.png");
         Ok(ReadResourceResult {
             contents: vec![BlobResourceContents {
                 blob: BASE64.encode(bytes),
@@ -65,6 +71,9 @@ impl BlobResource {
                 meta: None,
             }
             .into()],
+            cache_scope: ReadResourceResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
             meta: None,
         })
     }
@@ -174,17 +183,32 @@ impl PokemonImageResource {
 
         let base64_content = BASE64.encode(&bytes);
 
-        let meta = Map::new()
-            .add("source", "PokeAPI")
-            .add("repository", "https://github.com/PokeAPI/sprites")
-            .add("attribution", "Data from PokeAPI - https://pokeapi.co/");
+        let mut meta_map = serde_json::Map::new();
+        meta_map.insert(
+            "source".to_string(),
+            serde_json::Value::String("PokeAPI".to_string()),
+        );
+        meta_map.insert(
+            "repository".to_string(),
+            serde_json::Value::String("https://github.com/PokeAPI/sprites".to_string()),
+        );
+        meta_map.insert(
+            "attribution".to_string(),
+            serde_json::Value::String("Data from PokeAPI - https://pokeapi.co/".to_string()),
+        );
 
         Ok(ReadResourceResult {
-            contents: vec![BlobResourceContents::new(base64_content, pokemon_uri)
-                .with_mime_type(mime_type)
-                .with_meta(meta.clone())
-                .into()],
-            meta: Some(meta.clone()),
+            cache_scope: ReadResourceResultCacheScope::Private,
+            result_type: "complete".to_string(),
+            ttl_ms: 0,
+            contents: vec![BlobResourceContents {
+                blob: base64_content,
+                uri: pokemon_uri,
+                mime_type: Some(mime_type),
+                meta: Some(MetaObject(meta_map.clone())),
+            }
+            .into()],
+            meta: None,
         })
     }
 }

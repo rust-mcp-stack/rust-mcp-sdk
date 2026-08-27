@@ -1,5 +1,16 @@
-use rust_mcp_macros::mcp_prompt;
-use rust_mcp_sdk::schema::{ContentBlock, GetPromptResult, Prompt, PromptMessage, Role};
+//! Conformance prompt fixtures.
+//!
+//! Every prompt is declared with the SDK's `mcp_prompt!` macro, which
+//! generates the `Prompt` value (name, description, arguments) and the
+//! `from_arguments` parser. Template prompts use the `messages` attribute and
+//! `render()`; prompts that produce non-template content (embedded resources,
+//! images) keep a hand-written `get_prompt` builder for the response.
+
+use rust_mcp_sdk::macros::mcp_prompt;
+use rust_mcp_sdk::schema::{
+    ContentBlock, EmbeddedResourceResource, GetPromptResult, Prompt, PromptMessage, Role,
+    TextResourceContents,
+};
 
 const IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
@@ -17,11 +28,15 @@ fn user_message(content: ContentBlock) -> PromptMessage {
 #[mcp_prompt(
     name = "test_simple_prompt",
     description = "A simple prompt for conformance testing.",
-    messages = [
-        (role = "user", content = "This is a simple prompt for testing."),
-    ]
+    messages = [(role = "user", content = "This is a simple prompt for testing.")]
 )]
 pub struct TestSimplePrompt {}
+
+impl TestSimplePrompt {
+    pub fn get_prompt() -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
+        Ok(Self::from_arguments(None)?.render())
+    }
+}
 
 // ---------------
 // 2. test_prompt_with_arguments
@@ -40,6 +55,19 @@ pub struct TestPromptWithArguments {
     pub arg2: String,
 }
 
+impl TestPromptWithArguments {
+    pub fn get_prompt(
+        arg1: &str,
+        arg2: &str,
+    ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
+        let prompt = Self::from_arguments(Some(&std::collections::BTreeMap::from([
+            ("arg1".to_string(), arg1.to_string()),
+            ("arg2".to_string(), arg2.to_string()),
+        ])))?;
+        Ok(prompt.render())
+    }
+}
+
 // ---------------
 // 3. test_prompt_with_embedded_resource
 // ---------------
@@ -47,10 +75,10 @@ pub struct TestPromptWithArguments {
     name = "test_prompt_with_embedded_resource",
     description = "A prompt with embedded resource for conformance testing."
 )]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 pub struct TestPromptWithEmbeddedResource {
-    #[serde(rename = "resourceUri")]
     #[prompt_argument(description = "URI of the resource to embed")]
+    #[serde(rename = "resourceUri")]
     pub resource_uri: String,
 }
 
@@ -60,17 +88,22 @@ impl TestPromptWithEmbeddedResource {
     ) -> Result<GetPromptResult, rust_mcp_sdk::schema::RpcError> {
         Ok(GetPromptResult {
             messages: vec![
-                user_message(ContentBlock::embedded_text_resource(
-                    resource_uri,
-                    "text/plain",
-                    "Embedded resource content for testing.",
+                user_message(ContentBlock::embedded_resource(
+                    EmbeddedResourceResource::TextResourceContents(
+                        TextResourceContents::new(
+                            "Embedded resource content for testing.",
+                            resource_uri,
+                        )
+                        .with_mime_type("text/plain".to_string()),
+                    ),
                 )),
                 user_message(ContentBlock::text_content(
                     "Please process the embedded resource above.".to_string(),
                 )),
             ],
             meta: None,
-            description: Self::prompt_description().map(String::from),
+            result_type: "complete".to_string(),
+            description: Some("A prompt with embedded resource for conformance testing.".into()),
         })
     }
 }
@@ -97,7 +130,8 @@ impl TestPromptWithImage {
                 )),
             ],
             meta: None,
-            description: Self::prompt_description().map(String::from),
+            result_type: "complete".to_string(),
+            description: Some("A prompt with image content for conformance testing.".into()),
         })
     }
 }

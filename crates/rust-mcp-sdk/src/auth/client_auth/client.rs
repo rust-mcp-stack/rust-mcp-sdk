@@ -53,6 +53,13 @@ pub struct McpAuthConfig {
     /// this URL is used as the `client_id` and dynamic client registration is
     /// skipped.
     pub client_metadata_url: Option<String>,
+    /// OAuth `application_type` sent during Dynamic Client Registration
+    /// ([SEP-837](https://modelcontextprotocol.io/specification/draft/basic/authorization) /
+    /// OpenID Connect Dynamic Client Registration 1.0 §2). MCP clients MUST
+    /// declare an appropriate application type; defaults to `"native"` (the
+    /// right value for CLI/desktop MCP clients) when unset. Set to `"web"` for
+    /// server-side web applications.
+    pub application_type: Option<String>,
 }
 
 impl McpAuthConfig {
@@ -76,6 +83,7 @@ pub struct McpAuthConfigBuilder {
     token_store: Option<Arc<dyn TokenStore>>,
     resource: Option<String>,
     client_metadata_url: Option<String>,
+    application_type: Option<String>,
 }
 
 impl McpAuthConfigBuilder {
@@ -135,6 +143,15 @@ impl McpAuthConfigBuilder {
         self
     }
 
+    /// OAuth `application_type` for Dynamic Client Registration (SEP-837).
+    ///
+    /// Defaults to `"native"` when unset — the appropriate value for CLI and
+    /// desktop MCP clients. Use `"web"` for server-side web applications.
+    pub fn application_type(mut self, application_type: impl Into<String>) -> Self {
+        self.application_type = Some(application_type.into());
+        self
+    }
+
     /// Provide a custom [`TokenStore`] backend.
     ///
     /// Defaults to [`InMemoryTokenStore`](crate::auth::InMemoryTokenStore) if not set.
@@ -161,6 +178,7 @@ impl McpAuthConfigBuilder {
                 metadata: self.metadata,
                 resource: self.resource,
                 client_metadata_url: self.client_metadata_url,
+                application_type: self.application_type,
             }),
             http_client: shared_http_client(),
             token_store: self
@@ -250,6 +268,16 @@ impl McpAuthClient {
         // Phase 1: try RFC 8414 / OIDC well-known URLs on the configured server URL
         for url in discovery::metadata_url_fallbacks(&self.config.server_url) {
             if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await {
+                // SEP-2468 / RFC 8414 §3.3: the metadata's `issuer` MUST match
+                // the authorization server URL used to construct the well-known
+                // URL; a mismatch means the document must be discarded.
+                if !discovery::metadata_issuer_matches(&meta, &self.config.server_url) {
+                    return Err(ClientError::MetadataIssuerMismatch {
+                        expected: discovery::expected_issuer_for_base_url(&self.config.server_url)
+                            .unwrap_or_default(),
+                        actual: meta.issuer.clone(),
+                    });
+                }
                 let mut lock = self.discovered_metadata.write().await;
                 *lock = Some(meta.clone());
                 return Ok(meta);
@@ -265,7 +293,9 @@ impl McpAuthClient {
             &self.config.server_url,
             explicit_prm.as_deref(),
         )
-        .await;
+        .await
+        // RFC 9728 / RFC 8707: the PRM's `resource` MUST identify this server.
+        .filter(|prm| discovery::prm_resource_matches(prm, &self.config.server_url));
 
         if let Some(prm) = prm.clone() {
             let mut prm_lock = self.discovered_resource_metadata.write().await;
@@ -277,6 +307,15 @@ impl McpAuthClient {
                 for url in discovery::metadata_url_fallbacks(&auth_url) {
                     if let Some(meta) = discovery::try_fetch_metadata(&self.http_client, &url).await
                     {
+                        // SEP-2468 / RFC 8414 §3.3: discard metadata whose
+                        // `issuer` does not match the authorization server URL.
+                        if !discovery::metadata_issuer_matches(&meta, &auth_url) {
+                            return Err(ClientError::MetadataIssuerMismatch {
+                                expected: discovery::expected_issuer_for_base_url(&auth_url)
+                                    .unwrap_or_default(),
+                                actual: meta.issuer.clone(),
+                            });
+                        }
                         let mut lock = self.discovered_metadata.write().await;
                         *lock = Some(meta.clone());
                         return Ok(meta);
@@ -357,6 +396,10 @@ impl McpAuthClient {
         )
     }
 
+    async fn issuer(&self) -> ClientResult<String> {
+        Ok(self.ensure_metadata().await?.issuer.clone())
+    }
+
     async fn ensure_metadata(&self) -> ClientResult<AuthorizationServerMetadata> {
         self.discover_metadata().await
     }
@@ -374,6 +417,10 @@ impl McpAuthClient {
     /// 3. Otherwise the client performs Dynamic Client Registration
     ///    ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) against
     ///    the metadata's `registration_endpoint`.
+    #[deprecated(
+        since = "2.0.0",
+        note = "DCR is deprecated in 2026-07-28 in favor of CIMD (Client ID Metadata Documents, SEP-991)"
+    )]
     pub async fn register(&self) -> ClientResult<RegistrationResponse> {
         if let Some(ref client_id) = self.config.client_id {
             let reg = RegistrationResponse {
@@ -415,6 +462,17 @@ impl McpAuthClient {
             "client_name".into(),
             serde_json::Value::String("rust-mcp-client".into()),
         );
+        // SEP-837 — MCP clients MUST declare an appropriate `application_type`
+        // during Dynamic Client Registration ("native" or "web").
+        body.insert(
+            "application_type".into(),
+            serde_json::Value::String(
+                self.config
+                    .application_type
+                    .clone()
+                    .unwrap_or_else(|| "native".into()),
+            ),
+        );
         // SEP-835 scope selection for DCR too — use the same resolution as the
         // token request so the registration captures all required scopes.
         if let Some(scope) = self.resolved_scope().await {
@@ -447,6 +505,7 @@ impl McpAuthClient {
         Ok(reg)
     }
 
+    #[allow(deprecated)]
     async fn ensure_registration(&self) -> ClientResult<(String, Option<String>)> {
         let reg = self.register().await?;
         Ok((reg.client_id, reg.client_secret))
@@ -539,7 +598,10 @@ impl McpAuthClient {
         }
 
         let token: TokenResponse = response.json().await?;
-        let _ = self.token_store.set_tokens(token.clone()).await;
+        let _ = self
+            .token_store
+            .set_tokens(&metadata.issuer, token.clone())
+            .await;
         Ok(token)
     }
 
@@ -570,6 +632,7 @@ impl McpAuthClient {
     /// 3. send the user to the URL and capture the returned `code`
     /// 4. call [`complete_authorization_code_flow`](Self::complete_authorization_code_flow)
     ///    to exchange the code for a token.
+    #[allow(deprecated)]
     pub async fn build_authorization_url(
         &self,
         pkce: &PkceParams,
@@ -603,6 +666,43 @@ impl McpAuthClient {
             }
         }
         Ok(url.into())
+    }
+
+    /// Validate the `iss` parameter of an authorization response (RFC 9207 /
+    /// MCP SEP-2468) before exchanging the authorization code.
+    ///
+    /// Rules:
+    /// - If the authorization server metadata advertises
+    ///   `authorization_response_iss_parameter_supported: true`, the parameter
+    ///   is REQUIRED — its absence is an error.
+    /// - If `iss` is present (regardless of advertisement), it MUST equal the
+    ///   recorded issuer using simple string comparison — no URL
+    ///   normalization (scheme/host case folding, default-port elision,
+    ///   trailing-slash or percent-encoding) is applied; a trailing-slash
+    ///   variant of the issuer is a mismatch.
+    ///
+    /// Call this with the raw `iss` query parameter received in the redirect
+    /// to your `redirect_uri`, before calling
+    /// [`complete_authorization_code_flow`](Self::complete_authorization_code_flow).
+    pub async fn validate_authorization_response_iss(&self, iss: Option<&str>) -> ClientResult<()> {
+        let metadata = self.ensure_metadata().await?;
+        match iss {
+            Some(actual) => {
+                if actual != metadata.issuer {
+                    return Err(ClientError::IssuerMismatch {
+                        expected: metadata.issuer.clone(),
+                        actual: actual.to_string(),
+                    });
+                }
+                Ok(())
+            }
+            None => {
+                if metadata.authorization_response_iss_parameter_supported == Some(true) {
+                    return Err(ClientError::MissingIssuerParameter);
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Exchange an authorization code (received via redirect) for an access
@@ -651,14 +751,16 @@ impl McpAuthClient {
     /// Returns the cached token if still valid. If expired, attempts a refresh.
     /// Falls back to full re-authentication if refresh fails.
     pub async fn get_token(&self) -> ClientResult<String> {
-        if let Some(token) = self.token_store.get_access_token().await {
+        let iss = self.issuer().await?;
+
+        if let Some(token) = self.token_store.get_access_token(&iss).await {
             return Ok(token);
         }
 
-        if let Some(refresh_token) = self.token_store.get_refresh_token().await {
+        if let Some(refresh_token) = self.token_store.get_refresh_token(&iss).await {
             match self.refresh(&refresh_token).await {
                 Ok(new_token) => {
-                    let _ = self.token_store.set_tokens(new_token.clone()).await;
+                    let _ = self.token_store.set_tokens(&iss, new_token.clone()).await;
                     return Ok(new_token.access_token);
                 }
                 Err(e) => {
@@ -667,7 +769,7 @@ impl McpAuthClient {
             }
         }
 
-        let _ = self.token_store.clear().await;
+        let _ = self.token_store.clear(&iss).await;
         let token = self.authenticate().await?;
         Ok(token.access_token)
     }
