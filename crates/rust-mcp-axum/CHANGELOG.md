@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v1.0.2...rust-mcp-axum-v2.0.0) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* migrate to MCP 2026-07-28 (stateless) ([#240](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/240))
+
+### 🚀 Features
+
+* Migrate to MCP 2026-07-28 (stateless) ([#240](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/240)) ([809faea](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/809faeae4ea4e636653026133f5836987377ab82))
+
 ## [1.0.2](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-axum-v1.0.1...rust-mcp-axum-v1.0.2) (2026-08-26)
 
 
