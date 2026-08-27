@@ -391,7 +391,7 @@ fn readme_example_tool() {
     assert_eq!(icons.len(), 2);
     assert_eq!(icons[0].src, "https:/mywebsite.com/write.png");
     assert_eq!(icons[0].mime_type, Some("image/png".to_string()));
-    assert_eq!(icons[0].theme, Some(rust_mcp_sdk::schema::IconTheme::Light));
+    assert_eq!(icons[0].theme, Some(mcp_sdk::schema::IconTheme::Light));
     assert_eq!(icons[0].sizes, vec!["128x128"]);
     assert_eq!(icons[1].mime_type, Some("image/svg+xml".to_string()));
 

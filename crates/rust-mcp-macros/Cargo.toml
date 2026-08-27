@@ -24,7 +24,7 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 rust-mcp-schema = { workspace = true, features=["latest", "schema_utils"] }
-rust-mcp-sdk = { workspace = true, features=["client", "server", "macros", "stdio", "streamable-http"] }
+mcp-sdk = { path = "../rust-mcp-sdk", package = "rust-mcp-sdk", default-features = false, features=["client", "server", "macros", "stdio", "streamable-http"] }
 reqwest = { workspace = true, default-features = false, features = ["json", "rustls-tls"] }
 
 [lints]
