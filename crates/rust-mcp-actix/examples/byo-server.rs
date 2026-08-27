@@ -4,7 +4,6 @@ use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_icon;
 use rust_mcp_sdk::mcp_server::ServerHandler;
-// 2026-07-28: InitializeResult replaced by ServerDetails
 use rust_mcp_sdk::schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools};
 use rust_mcp_sdk::ServerDetails;
 use rust_mcp_sdk::ToMcpServerHandler;
@@ -18,7 +17,6 @@ impl ServerHandler for HelloHandler {}
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt::init();
 
-    // 2026-07-28: InitializeResult → ServerDetails; InMemorySessionStore removed
     let state = Arc::new(McpAppState {
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),

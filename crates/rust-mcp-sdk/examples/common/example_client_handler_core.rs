@@ -13,7 +13,6 @@ impl ClientHandlerCore for ExampleClientHandlerCore {
         _runtime: &dyn McpClient,
     ) -> std::result::Result<ResultFromClient, RpcError> {
         match request {
-            // 2026-07-28: ServerJsonrpcRequest variants are now struct variants
             ServerJsonrpcRequest::CreateMessageRequest { .. } => Err(RpcError::internal_error()
                 .with_message("CreateMessageRequest handler is not implemented".to_string())),
             ServerJsonrpcRequest::ListRootsRequest { .. } => Err(RpcError::internal_error()

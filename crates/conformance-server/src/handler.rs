@@ -151,8 +151,6 @@ impl ServerHandler for ConformanceHandler {
         if let Some(result) = crate::mrtr_tools::handle_tool_call(&params) {
             return result;
         }
-        // 2026-07-28: standalone server→client requests removed; sampling/elicitation
-        // delivered via MRTR InputRequiredResult.  Dispatch these tools here.
         if params.name == "test_streaming_elicitation" {
             return Ok(ServerResult::InputRequiredResult(
                 rust_mcp_sdk::schema::InputRequiredResult {

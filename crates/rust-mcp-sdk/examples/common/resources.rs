@@ -24,7 +24,6 @@ use rust_mcp_sdk::schema::{ReadResourceResult, ReadResourceResultCacheScope, Rpc
 pub struct PlainTextResource {}
 impl PlainTextResource {
     pub async fn get_resource() -> std::result::Result<ReadResourceResult, RpcError> {
-        // 2026-07-28: TextResourceContents no longer has new()/with_*() builder methods
         Ok(ReadResourceResult {
             contents: vec![TextResourceContents {
                 text: "Resource 1: I'm gonna need a bigger boat".to_string(),
@@ -63,7 +62,6 @@ impl PlainTextResource {
 pub struct BlobResource {}
 impl BlobResource {
     pub async fn get_resource() -> std::result::Result<ReadResourceResult, RpcError> {
-        // 2026-07-28: BlobResourceContents no longer has new()/with_*() builder methods
         let bytes = include_bytes!("../../assets/rust-mcp-sdk.png");
         Ok(ReadResourceResult {
             contents: vec![BlobResourceContents {
@@ -185,7 +183,6 @@ impl PokemonImageResource {
 
         let base64_content = BASE64.encode(&bytes);
 
-        // 2026-07-28: MetaObject is a newtype wrapper, Map no longer supports chained .insert()
         let mut meta_map = serde_json::Map::new();
         meta_map.insert(
             "source".to_string(),

@@ -325,8 +325,6 @@ impl McpServerHandler for ServerRuntimeInternalHandler<Box<dyn ServerHandler>> {
                     .handle_cancelled_notification(cancelled_notification.params, runtime)
                     .await?;
             }
-            // NOTE (2026-07-28): the client→server notification vocabulary was reduced to
-            // `notifications/cancelled`; anything else arrives via this Custom channel.
             ClientJsonrpcNotification::CustomNotification(value) => {
                 self.handler
                     .handle_custom_notification(value.into())

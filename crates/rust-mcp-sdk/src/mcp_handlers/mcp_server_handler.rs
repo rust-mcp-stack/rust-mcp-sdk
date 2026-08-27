@@ -166,19 +166,19 @@ pub trait ServerHandler: Send + Sync + 'static {
     /// MRTR-aware variant of [`handle_call_tool_request`](Self::handle_call_tool_request)
     /// (SEP-2322).
     ///
-    /// Unlike the legacy method — whose `CallToolError` is always converted
-    /// into a `CallToolResult` with `isError: true` — this method returns a
-    /// protocol-level [`RpcError`], which becomes the JSON-RPC error response
-    /// of the request. Use it when a tool call must:
+    /// Unlike [`handle_call_tool_request`](Self::handle_call_tool_request) — whose
+    /// `CallToolError` is always converted into a `CallToolResult` with
+    /// `isError: true` — this method returns a protocol-level [`RpcError`], which
+    /// becomes the JSON-RPC error response of the request. Use it when a tool call must:
     ///
     /// - return an [`InputRequiredResult`] to drive a mid-request turn-around
     ///   (resolved `inputResponses` arrive on the retry via `params`), or
     /// - reject the call with a JSON-RPC error (e.g. `-32602` when an
     ///   integrity-protected `requestState` fails verification).
     ///
-    /// The default implementation preserves the legacy behavior exactly:
-    /// it delegates to [`handle_call_tool_request`](Self::handle_call_tool_request)
-    /// and converts a `CallToolError` into an `isError` result.
+    /// The default implementation delegates to
+    /// [`handle_call_tool_request`](Self::handle_call_tool_request) and converts a
+    /// `CallToolError` into an `isError` result.
     async fn handle_call_tool_request_mrtr(
         &self,
         params: CallToolRequestParams,

@@ -21,7 +21,6 @@ pub struct SayHelloTool {}
 #[derive(Default)]
 struct HelloHandler {}
 
-// 2026-07-28: updated to 4-param handler signatures, new result types
 #[async_trait]
 impl ServerHandler for HelloHandler {
     async fn handle_list_tools_request(
@@ -46,7 +45,6 @@ impl ServerHandler for HelloHandler {
         _runtime: std::sync::Arc<dyn McpServer>,
     ) -> std::result::Result<ServerResult, CallToolError> {
         if params.name == "say_hello" {
-            // 2026-07-28: TextContent no longer has new(), construct directly
             let text_content: ContentBlock =
                 TextContent::new("Hello from Rust MCP SDK!".to_string(), None, None).into();
             Ok(ServerResult::CallToolResult(CallToolResult {
@@ -66,7 +64,6 @@ impl ServerHandler for HelloHandler {
 async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
-    // 2026-07-28: InitializeResult → ServerDetails
     let server_info = ServerDetails {
         server_info: Implementation {
             name: "hello-rust-mcp".into(),
@@ -85,7 +82,6 @@ async fn main() -> SdkResult<()> {
     };
 
     let handler = HelloHandler {}.to_mcp_server_handler();
-    // 2026-07-28: event_store removed from AxumServerOptions
     let server = create_axum_server(
         server_info,
         handler,

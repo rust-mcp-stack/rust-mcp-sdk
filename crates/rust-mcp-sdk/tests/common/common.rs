@@ -8,7 +8,6 @@ pub const NPX_SERVER_EVERYTHING: &str = "@modelcontextprotocol/server-everything
 #[cfg(unix)]
 pub const UVX_SERVER_GIT: &str = "mcp-server-git";
 
-// 2026-07-28: InitializeRequestParams → ClientDetails
 pub fn test_client_info() -> rust_mcp_sdk::ClientDetails {
     rust_mcp_sdk::ClientDetails {
         capabilities: ClientCapabilities::default(),
@@ -65,7 +64,6 @@ pub mod sample_tools {
         pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
             let hello_message = format!("Hello, {}!", self.name);
 
-            // 2026-07-28: CallToolResult::text_content removed, construct directly
             Ok(CallToolResult {
                 content: vec![ContentBlock::TextContent(TextContent::new(
                     hello_message,
@@ -102,7 +100,6 @@ pub mod sample_tools {
         ) -> Result<CallToolResult, CallToolError> {
             let message = format!("{}", serde_json::to_string(&auth_info).unwrap());
 
-            // 2026-07-28: CallToolResult::text_content removed
             Ok(CallToolResult {
                 content: vec![ContentBlock::TextContent(TextContent::new(
                     message, None, None,
@@ -135,7 +132,6 @@ pub mod sample_tools {
         pub fn call_tool(&self) -> Result<CallToolResult, CallToolError> {
             let goodbye_message = format!("Goodbye, {}!", self.name);
 
-            // 2026-07-28: CallToolResult::text_content removed
             Ok(CallToolResult {
                 content: vec![ContentBlock::TextContent(TextContent::new(
                     goodbye_message,

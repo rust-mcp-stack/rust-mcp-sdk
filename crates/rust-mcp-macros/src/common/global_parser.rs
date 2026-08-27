@@ -1,5 +1,3 @@
-// NOTE(merge): PromptMessageDsl from main (mcp_prompt); ExecutionSupportDsl NOT
-// taken — it belongs to main's task system, removed on this branch.
 use crate::common::{ExprList, IconDsl, PromptMessageDsl};
 use quote::ToTokens;
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, ExprLit, Lit, Meta, Token};

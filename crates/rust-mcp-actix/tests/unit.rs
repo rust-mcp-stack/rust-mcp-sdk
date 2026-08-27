@@ -29,7 +29,6 @@ fn test_mount_options_custom() {
 #[test]
 fn test_create_actix_server_returns_server() {
     use rust_mcp_sdk::mcp_server::ServerHandler;
-    // 2026-07-28: InitializeResult → ServerDetails
     use rust_mcp_sdk::schema::{Implementation, ServerCapabilities};
     use rust_mcp_sdk::{ServerDetails, ToMcpServerHandler};
 

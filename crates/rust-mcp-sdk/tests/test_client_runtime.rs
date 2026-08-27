@@ -31,8 +31,6 @@ async fn tets_client_launch_npx_server() {
 
     client.clone().start().await.unwrap();
 
-    // 2026-07-28: server_capabilities() and server_info() removed;
-    // use request_discover() instead
     let discover = client
         .request_discover(RequestParams {
             meta: default_request_meta(),

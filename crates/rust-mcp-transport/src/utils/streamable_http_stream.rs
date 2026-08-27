@@ -52,7 +52,6 @@ impl StreamableHttpStream {
             ));
         }
 
-        //TODO: simplify
         let response = match http_post(
             &self.client,
             &self.mcp_url,
@@ -299,7 +298,6 @@ impl StreamableHttpStream {
         }
     }
 
-    // Pre-existing WIP (SEP-1699 standalone SSE reconnect); not wired up yet.
     #[allow(dead_code)]
     pub(crate) async fn run_standalone(
         &mut self,

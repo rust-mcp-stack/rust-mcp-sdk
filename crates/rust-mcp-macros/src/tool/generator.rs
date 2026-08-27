@@ -33,7 +33,6 @@ pub fn generate_tool_tokens(macro_attributes: McpToolMacroAttributes) -> ToolTok
             quote! { meta: Some(serde_json::from_str(#m).expect("Failed to parse meta JSON")), }
         });
 
-    //TODO: add support for output_schema
     let output_schema = quote! { output_schema: None,};
 
     let annotations = generate_annotations(&base_crate, &macro_attributes);

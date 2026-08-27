@@ -133,8 +133,6 @@ pub fn mcp_tool(attributes: TokenStream, input: TokenStream) -> TokenStream {
         icons,
     } = generate_tool_tokens(macro_attributes);
 
-    // TODO: add support for schema version to ToolInputSchema :
-    // it defaults to JSON Schema 2020-12 when no explicit $schema is provided.
     let tool_token = quote! {
         #base_crate::Tool {
             name: #tool_name.to_string(),
@@ -585,7 +583,6 @@ pub fn mcp_prompt(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     description: #description,
                     messages,
                     meta: #meta,
-                    // 2026-07-28: a fully rendered prompt is always a complete result.
                     result_type: "complete".to_string(),
                 }
             }

@@ -13,7 +13,6 @@ use rust_mcp_sdk::{
     ServerDetails,
 };
 
-// 2026-07-28: InitializeResult replaced by ServerDetails
 pub struct AppState<H: ServerHandler> {
     pub server_details: ServerDetails,
     pub handler: H,
@@ -24,7 +23,6 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // 2026-07-28: InitializeResult → ServerDetails
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server Streamable Http/SSE".into(),
@@ -52,7 +50,6 @@ async fn main() -> SdkResult<()> {
     // STEP 2: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandler {};
 
-    // 2026-07-28: event_store, task_store, client_task_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),

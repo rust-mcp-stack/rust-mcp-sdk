@@ -18,7 +18,6 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // 2026-07-28: InitializeResult replaced by ServerDetails, tasks field removed
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server".into(),
@@ -51,7 +50,6 @@ async fn main() -> SdkResult<()> {
     // STEP 3: instantiate our custom handler for handling MCP messages
     let handler = ExampleServerHandler {};
 
-    // 2026-07-28: task_store and client_task_store removed from McpServerOptions
     let server: Arc<ServerRuntime> = server_runtime::create_server(McpServerOptions {
         server_details,
         transport,

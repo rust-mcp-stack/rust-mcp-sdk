@@ -164,7 +164,6 @@ async fn create_sse_stream(
 ) -> McpHttpResult<http::Response<GenericBody>> {
     let payload_string = payload.map(|p| p.to_string());
 
-    // TODO: this logic should be moved out after refactoing the mcp_stream.rs
     let payload_contains_request = payload_string
         .as_ref()
         .map(|json_str| contains_request(json_str))
@@ -315,9 +314,6 @@ async fn create_sse_stream(
     Ok(response)
 }
 
-// TODO: this function will be removed after refactoring the readable stream of the transports
-// so we would deserialize the string syncronousely and have more control over the flow
-// this function may incur a slight runtime cost which could be avoided after refactoring
 fn contains_request(json_str: &str) -> Result<bool, serde_json::Error> {
     let value: serde_json::Value = serde_json::from_str(json_str)?;
     match value {
@@ -556,7 +552,7 @@ pub(crate) fn validate_mcp_protocol_version_header(headers: &HeaderMap) -> SdkRe
 ///
 /// Returns `Some((status, error, request_id))` when the request must be
 /// rejected, `None` when it may proceed. Notifications (no `id`) and
-/// unparseable payloads are passed through (the transport's own parse-error
+/// unparsable payloads are passed through (the transport's own parse-error
 /// handling covers those).
 ///
 /// Enforced rules:

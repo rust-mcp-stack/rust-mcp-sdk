@@ -36,7 +36,6 @@ async fn main() -> SdkResult<()> {
         AxumServerOptions {
             host: "127.0.0.1".to_string(),
             port: 8080,
-            // 2026-07-28: event_store removed from AxumServerOptions
             auth: Some(Arc::new(auth_provider)), // enable authentication
             sse_support: false,
             ..Default::default()

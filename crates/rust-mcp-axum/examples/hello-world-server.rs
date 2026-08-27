@@ -20,8 +20,6 @@ pub struct SayHelloTool {}
 #[derive(Default)]
 struct HelloHandler;
 
-// 2026-07-28: handlers now take context param; ListToolsResult requires new fields;
-// handle_call_tool_request returns ServerResult; CallToolResult::text_content removed
 #[async_trait]
 impl ServerHandler for HelloHandler {
     async fn handle_list_tools_request(
@@ -66,7 +64,6 @@ impl ServerHandler for HelloHandler {
 async fn main() -> SdkResult<()> {
     tracing_subscriber::fmt::init();
 
-    // 2026-07-28: InitializeResult → ServerDetails
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server (Axum)".into(),
@@ -89,7 +86,6 @@ async fn main() -> SdkResult<()> {
         instructions: Some("An axum-based hello-world MCP server.".into()),
     };
 
-    // 2026-07-28: event_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         HelloHandler.to_mcp_server_handler(),

@@ -71,7 +71,6 @@ async fn test_client_observer_receives_and_sends_messages() {
 
     client.clone().start().await.unwrap();
 
-    // 2026-07-28: server_capabilities() removed; verify via request_discover()
     let discover = client
         .request_discover(rust_mcp_sdk::schema::RequestParams {
             meta: rust_mcp_sdk::schema::RequestMetaObject {

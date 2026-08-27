@@ -239,10 +239,6 @@ impl ClientRuntime {
         }
     }
 
-    // NOTE(merge): main's `initialize_request` (legacy initialize handshake +
-    // `ensure_server_protocol_compatibility`) intentionally NOT taken — 2026-07-28
-    // is stateless (server/discover); the branch removed initialize on purpose.
-
     pub(crate) async fn handle_message(
         &self,
         message: ServerMessage,
@@ -344,7 +340,6 @@ impl ClientRuntime {
                 .with_message("transport stream does not exists or is closed!".to_string()),
         )?;
 
-        //TODO: improve the flow
         let mut stream = transport.start().await?;
 
         let mut error_io_stream = transport.error_stream().write().await;
@@ -412,8 +407,6 @@ impl ClientRuntime {
             Ok::<(), McpSdkError>(())
         });
 
-        // 2026-07-28: no `initialize` handshake — the message loop starts immediately;
-        // version/capability exchange happens per-request via `_meta` (Phase 3).
         let mut lock = self.handlers.lock().await;
         lock.push(main_task);
         lock.push(err_task);

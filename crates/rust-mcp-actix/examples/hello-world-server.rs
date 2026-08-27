@@ -13,7 +13,6 @@ use std::sync::Arc;
 struct HelloHandler;
 #[async_trait::async_trait]
 impl ServerHandler for HelloHandler {
-    // 2026-07-28: handle_list_tools_request now takes 4 params (added context)
     async fn handle_list_tools_request(
         &self,
         _request: Option<PaginatedRequestParams>,
@@ -24,14 +23,12 @@ impl ServerHandler for HelloHandler {
             tools: vec![],
             meta: None,
             next_cursor: None,
-            // 2026-07-28: ListToolsResult requires these new fields
             cache_scope: ListToolsResultCacheScope::Private,
             result_type: "complete".to_string(),
             ttl_ms: 0,
         })
     }
 
-    // 2026-07-28: handle_call_tool_request now takes 4 params (added context)
     async fn handle_call_tool_request(
         &self,
         params: CallToolRequestParams,
@@ -58,7 +55,6 @@ impl ServerHandler for HelloHandler {
 async fn main() -> SdkResult<()> {
     tracing_subscriber::fmt::init();
 
-    // 2026-07-28: InitializeResult replaced by ServerDetails
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server (Actix)".into(),

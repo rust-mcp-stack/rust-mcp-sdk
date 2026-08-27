@@ -16,7 +16,6 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // 2026-07-28: InitializeRequestParams removed — use ClientDetails directly
     let client_details = ClientDetails {
         client_info: Implementation {
             name: "simple-rust-mcp-client-stdio".into(),
@@ -45,7 +44,6 @@ async fn main() -> SdkResult<()> {
     // STEP 3: instantiate our custom handler that is responsible for handling MCP messages
     let handler = ExampleClientHandler {};
 
-    // 2026-07-28: task_store and server_task_store removed from McpClientOptions
     let client = client_runtime::create_client(McpClientOptions::new(
         client_details,
         transport,
@@ -61,7 +59,6 @@ async fn main() -> SdkResult<()> {
     utils.print_server_info();
     utils.print_server_capabilities();
 
-    // 2026-07-28: method names updated to match current InquiryUtils API
     utils.print_tools().await?;
     utils.print_prompts().await?;
     utils.print_resources().await?;
@@ -69,8 +66,6 @@ async fn main() -> SdkResult<()> {
 
     // Call get-sum tool, and print the result
     utils.call_test_tool(100, 25).await?;
-
-    // 2026-07-28: SetLevelRequest and PingRequest removed from the protocol
 
     client.shut_down().await?;
 

@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metadata = auth_client.discover_metadata().await?;
     tracing::info!("Discovered OAuth metadata from {}", metadata.issuer);
 
-    // DCR is deprecated in 2026-07-28 (CIMD, SEP-991); kept here to show the flow.
+    // DCR is deprecated; CIMD is preferred. Kept here to show the flow.
     #[allow(deprecated)]
     let reg = auth_client.register().await?;
     tracing::info!("Registered client: {}", reg.client_id);
@@ -44,7 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    // 2026-07-28: InitializeRequestParams replaced by ClientDetails
     let client_details = ClientDetails {
         client_info: Implementation {
             name: "oauth-mcp-client".into(),
@@ -61,7 +60,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[async_trait::async_trait]
     impl rust_mcp_sdk::mcp_client::ClientHandler for MyHandler {}
 
-    // 2026-07-28: task_store and server_task_store removed from with_transport_options
     let client =
         client_runtime::with_transport_options(client_details, transport_options, MyHandler, None);
 

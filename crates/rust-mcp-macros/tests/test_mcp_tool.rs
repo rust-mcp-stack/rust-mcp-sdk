@@ -145,7 +145,6 @@ fn meta_json_is_parsed_correctly() {
 
     let tool = Weather::tool();
     let meta = tool.meta.as_ref().unwrap();
-    // 2026-07-28: MetaObject is a newtype wrapper, access inner map via .0
     assert_eq!(meta.0["category"], "utility");
     assert_eq!(meta.0["version"], "1.0");
 }
@@ -283,9 +282,7 @@ fn input_schema_has_correct_required_fields() {
         tags: Vec<String>,
     }
 
-    // 2026-07-28: ToolInputSchema no longer has required field — schema stored as JSON Schema object
     let _tool: Tool = UserCreate::tool();
-    // Schema validation is no longer done via direct field access
     let _ = _tool;
 }
 
@@ -302,8 +299,6 @@ fn properties_are_correctly_mapped() {
     }
 
     let tool: Tool = TestProps::tool();
-    // 2026-07-28: ToolInputSchema properties are stored in the flattened `extra`
-    // map under the `properties` key.
     let schema = tool.input_schema;
     let extra = schema.extra.as_ref().unwrap();
     let props = extra.get("properties").unwrap().as_object().unwrap();
@@ -351,7 +346,6 @@ fn meta_is_ignored_when_feature_off() {
     let tool: Tool = OldTool::tool();
 
     assert_eq!(tool.name, "old_schema");
-    // 2026-07-28: MetaObject is a newtype wrapper
     let meta = tool.meta.unwrap();
     assert_eq!(
         meta.0,
@@ -397,20 +391,16 @@ fn readme_example_tool() {
     assert_eq!(icons.len(), 2);
     assert_eq!(icons[0].src, "https:/mywebsite.com/write.png");
     assert_eq!(icons[0].mime_type, Some("image/png".to_string()));
-    // 2026-07-28: IconTheme no longer implements From<&str> — use enum variants
     assert_eq!(icons[0].theme, Some(rust_mcp_sdk::schema::IconTheme::Light));
     assert_eq!(icons[0].sizes, vec!["128x128"]);
     assert_eq!(icons[1].mime_type, Some("image/svg+xml".to_string()));
 
-    // 2026-07-28: MetaObject is a newtype wrapper
     let meta = tool.meta.as_ref().unwrap();
     assert_eq!(
         meta.0.get("key").unwrap(),
         &serde_json::Value::String("value".to_string())
     );
 
-    // 2026-07-28: ToolInputSchema properties are stored in the flattened `extra`
-    // map under the `properties` key.
     let schema_properties = tool
         .input_schema
         .extra
@@ -460,8 +450,6 @@ fn test_alias() {
     type AliasType = TestProps;
 
     let tool: Tool = TestProps::tool();
-    // 2026-07-28: ToolInputSchema properties are stored in the flattened `extra`
-    // map under the `properties` key.
     let schema = tool.input_schema;
     let props = schema
         .extra

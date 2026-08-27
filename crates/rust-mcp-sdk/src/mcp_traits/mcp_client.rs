@@ -40,9 +40,6 @@ pub trait McpClient: Sync + Send {
         request: RequestFromClient,
         timeout: Option<Duration>,
     ) -> SdkResult<ServerResult> {
-        // 2026-07-28: stamp `_meta` on every outgoing request with the client's
-        // identity, capabilities and protocol version — the `initialize` handshake
-        // is gone and this per-request metadata replaces it.
         let details = self.client_details();
         let meta = RequestMetaObject::new(
             ProtocolVersion::latest().to_string(),
@@ -253,9 +250,6 @@ pub trait McpClient: Sync + Send {
 
     ///Send an out-of-band notification used to inform the receiver of a progress update for a long-running request.
     ///
-    /// 2026-07-28 note: the typed client→server notification vocabulary was reduced to
-    /// `notifications/cancelled`; progress is delivered through the custom channel under the
-    /// standard method name `notifications/progress`.
     async fn notify_progress(&self, params: ProgressNotificationParams) -> SdkResult<()> {
         let params = serde_json::to_value(params)
             .map_err(|err| {

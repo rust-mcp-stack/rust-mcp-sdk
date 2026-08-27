@@ -17,7 +17,6 @@ impl ClientHandler for MyClientHandler {
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    // 2026-07-28: InitializeRequestParams removed — use ClientDetails directly
     let client_details = ClientDetails {
         client_info: Implementation {
             name: "simple-rust-mcp-client".into(),
@@ -44,8 +43,6 @@ async fn main() -> SdkResult<()> {
     // instantiate our custom handler for handling MCP messages
     let handler = MyClientHandler {};
 
-    // 2026-07-28: task_store and server_task_store removed from McpClientOptions
-    // Tasks are no longer part of the MCP spec
     let client = client_runtime::create_client(McpClientOptions::new(
         client_details,
         transport,
@@ -55,7 +52,6 @@ async fn main() -> SdkResult<()> {
 
     // use client methods to communicate with the MCP Server as you wish:
 
-    // 2026-07-28: server_version() removed — use discover instead
     let _ = client.request_discover(Default::default()).await?;
 
     // Retrieve and display the list of tools available on the server
@@ -75,7 +71,6 @@ async fn main() -> SdkResult<()> {
         .as_object()
         .unwrap()
         .clone();
-    // 2026-07-28: CallToolRequestParams.task field removed, added input_responses, request_state, meta as RequestMetaObject
     let request = CallToolRequestParams {
         name: "add".to_string(),
         arguments: Some(params),

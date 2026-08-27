@@ -2,7 +2,6 @@ pub mod common;
 
 use crate::common::{initialize_tracing, ExampleServerHandlerCore};
 use rust_mcp_schema::ServerCapabilitiesResources;
-// 2026-07-28: InitializeResult → ServerDetails
 use rust_mcp_sdk::schema::{
     Implementation, JsonObject, ServerCapabilities, ServerCapabilitiesTools,
 };
@@ -13,7 +12,6 @@ use rust_mcp_sdk::{
     ToMcpServerHandlerCore,
 };
 
-// 2026-07-28: InitializeResult replaced by ServerDetails
 pub struct AppState<H: ServerHandlerCore> {
     pub server_details: ServerDetails,
     pub handler: H,
@@ -24,7 +22,6 @@ async fn main() -> SdkResult<()> {
     // Set up the tracing subscriber for logging
     initialize_tracing();
 
-    // 2026-07-28: InitializeResult → ServerDetails
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Hello World MCP Server (core) Streamable Http/SSE".into(),
@@ -51,7 +48,6 @@ async fn main() -> SdkResult<()> {
 
     let handler = ExampleServerHandlerCore {};
 
-    // 2026-07-28: event_store, task_store, client_task_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),

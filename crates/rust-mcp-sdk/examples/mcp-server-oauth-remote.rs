@@ -6,7 +6,6 @@ use mcp_axum::{create_axum_server, AxumServerOptions};
 use rust_mcp_extra::token_verifier::{
     GenericOauthTokenVerifier, TokenVerifierOptions, VerificationStrategies,
 };
-// 2026-07-28: InitializeResult removed — use ServerDetails instead
 use rust_mcp_sdk::schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools};
 use rust_mcp_sdk::{
     auth::{Audience, AuthMetadataBuilder, RemoteAuthProvider},
@@ -81,7 +80,6 @@ async fn main() -> SdkResult<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // 2026-07-28: InitializeResult replaced by ServerDetails — no protocol_version
     let server_details = ServerDetails {
         server_info: Implementation {
             name: "Remote Oauth Test MCP Server".into(),
@@ -109,7 +107,6 @@ async fn main() -> SdkResult<()> {
 
     let oauth_metadata_provider = create_oauth_provider().await?;
 
-    // 2026-07-28: event_store removed from AxumServerOptions
     let server = create_axum_server(
         server_details,
         handler.to_mcp_server_handler(),

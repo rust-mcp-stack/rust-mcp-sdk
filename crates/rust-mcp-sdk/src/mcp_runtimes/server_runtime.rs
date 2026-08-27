@@ -668,7 +668,6 @@ impl ServerRuntime {
         Ok(())
     }
 
-    //TODO: re-visit and simplify unnecessary hashmap
     #[cfg(any(feature = "sse", feature = "streamable-http"))]
     pub(crate) async fn remove_transport(
         &self,

@@ -291,7 +291,6 @@ impl TestSampling {
         &self,
         _runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        // 2026-07-28: standalone sampling removed; intercepted by handle_call_tool_request_mrtr.
         Ok(CallToolResult::text_content(vec![TextContent::new(
             "test_sampling: handled via MRTR InputRequiredResult".into(),
             None,
@@ -343,7 +342,6 @@ impl TestElicitationDefaults {
         &self,
         _runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        // 2026-07-28: standalone elicitation removed; intercepted by handle_call_tool_request_mrtr.
         Ok(CallToolResult::text_content(vec![TextContent::new(
             "elicitation tool: handled via MRTR InputRequiredResult".into(),
             None,
@@ -370,7 +368,6 @@ impl TestElicitationEnums {
         &self,
         _runtime: &std::sync::Arc<dyn rust_mcp_sdk::McpServer>,
     ) -> Result<CallToolResult, CallToolError> {
-        // 2026-07-28: standalone elicitation removed; intercepted by handle_call_tool_request_mrtr.
         Ok(CallToolResult::text_content(vec![TextContent::new(
             "elicitation tool: handled via MRTR InputRequiredResult".into(),
             None,

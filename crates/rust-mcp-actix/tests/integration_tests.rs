@@ -3,7 +3,6 @@ use rust_mcp_actix::{mcp_scope, McpMountOptions};
 use rust_mcp_sdk::id_generator::{FastIdGenerator, UuidGenerator};
 use rust_mcp_sdk::mcp_http::{McpAppState, McpHttpHandler};
 use rust_mcp_sdk::mcp_server::ServerHandler;
-// 2026-07-28: InitializeResult → ServerDetails; InMemorySessionStore removed
 use rust_mcp_sdk::schema::{Implementation, ServerCapabilities};
 use rust_mcp_sdk::{ServerDetails, ToMcpServerHandler};
 use std::sync::Arc;

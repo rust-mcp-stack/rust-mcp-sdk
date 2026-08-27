@@ -11,9 +11,7 @@ use rust_mcp_sdk::{
     mcp_icon,
     mcp_server::ServerHandler,
     schema::{Implementation, ServerCapabilities, ServerCapabilitiesTools},
-    // 2026-07-28: InMemorySessionStore removed
-    ServerDetails,
-    ToMcpServerHandler,
+    ServerDetails, ToMcpServerHandler,
 };
 use std::sync::Arc;
 
@@ -30,7 +28,6 @@ async fn main() -> std::io::Result<()> {
     let state = Arc::new(McpAppState {
         id_generator: Arc::new(UuidGenerator {}),
         stream_id_gen: Arc::new(FastIdGenerator::new(Some("s_"))),
-        // 2026-07-28: InitializeResult → ServerDetails
         server_details: Arc::new(ServerDetails {
             server_info: Implementation {
                 name: "MCP Server Axum BYO".into(),

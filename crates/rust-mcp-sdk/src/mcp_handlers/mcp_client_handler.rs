@@ -147,7 +147,7 @@ pub trait ClientHandler: Send + Sync + 'static {
 
     /// Handles a `notifications/subscriptions/acknowledged` notification, confirming the
     /// subscriptions a server honors for a prior `subscriptions/listen` request.
-    /// The default implementation does nothing (subscription tracking lands in Phase 4).
+    /// The default implementation does nothing.
     async fn handle_subscriptions_acknowledged_notification(
         &self,
         params: SubscriptionsAcknowledgedNotificationParams,
