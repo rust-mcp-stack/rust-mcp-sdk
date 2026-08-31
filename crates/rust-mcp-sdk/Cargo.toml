@@ -41,7 +41,7 @@ url = {workspace = true, optional=true, features=["serde"]}
 # to Phase 4 (needs code-level verification of the merged auth code).
 jsonwebtoken = {version="10.1", optional=true, features=["aws_lc_rs"]}
 sha2 = "0.10"
-hmac = "0.12"
+hmac = "0.13"
 reqwest = { workspace = true, default-features = false, features = [
     "stream",
     "rustls-tls",
