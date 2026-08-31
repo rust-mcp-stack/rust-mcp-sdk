@@ -39,7 +39,7 @@ Focus on your application logic, rust-mcp-sdk handles the protocol, transports, 
 > **Upgrading?** See the [upgrade guide](UPGRADING.md).
 
 **Key Features**
-- MCP 2026-07-28 (stateless protocol) - no initialize, no sessions
+- MCP 2026-07-28 (stateless protocol)
 - **100% MCP Conformance** - server 110/110, client 440/440 on 2026-07-28
 - Transports: Stdio, Streamable HTTP, and backward-compatible SSE support
 - Framework Agnostic: Axum, Actix, and BYO Server integrations
