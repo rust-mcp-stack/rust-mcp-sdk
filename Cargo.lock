@@ -1502,6 +1502,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonwebtoken"
+version = "11.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "881733cbc631fc9e472e24447ce32a64bedf2da498d6d8570b08edc87de71f65"
+dependencies = [
+ "aws-lc-rs",
+ "base64 0.22.1",
+ "getrandom 0.2.17",
+ "js-sys",
+ "pem",
+ "serde",
+ "serde_json",
+ "signature",
+ "simple_asn1",
+ "zeroize",
+]
+
+[[package]]
 name = "language-tags"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1773,7 +1791,7 @@ dependencies = [
  "envy",
  "futures",
  "http 1.5.0",
- "jsonwebtoken",
+ "jsonwebtoken 10.4.0",
  "once_cell",
  "rand 0.8.8",
  "reqwest",
@@ -2374,7 +2392,7 @@ dependencies = [
  "http 1.5.0",
  "http-body",
  "http-body-util",
- "jsonwebtoken",
+ "jsonwebtoken 11.0.0",
  "reqwest",
  "rust-mcp-axum",
  "rust-mcp-extra",
