@@ -78,7 +78,7 @@ WriteFileTool::request_params().with_arguments(
         .clone(),
 )
 
-// send a call_tool requeest:
+// send a call_tool request:
 let result = client.request_tool_call( WriteFileTool::request_params().with_arguments(
     json!({"path":"./test.txt","content":"hello tool"}).as_object().unwrap().clone(),
 ))?;
