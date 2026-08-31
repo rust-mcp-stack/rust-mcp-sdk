@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, Mac};
+use hmac::KeyInit;
 use sha2::Sha256;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

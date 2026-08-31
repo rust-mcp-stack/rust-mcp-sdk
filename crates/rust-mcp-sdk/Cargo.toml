@@ -39,9 +39,9 @@ url = {workspace = true, optional=true, features=["serde"]}
 # NOTE(merge): kept branch versions — branch's rewritten auth (jwk.rs, request_state_codec)
 # pairs hmac 0.12 with sha2 0.10 (shared digest). jsonwebtoken 11 / sha2 0.11 bumps deferred
 # to Phase 4 (needs code-level verification of the merged auth code).
-jsonwebtoken = {version="10.1", optional=true, features=["aws_lc_rs"]}
-sha2 = "0.10"
-hmac = "0.12"
+jsonwebtoken = {version="11", optional=true, features=["aws_lc_rs"]}
+sha2 = "0.11"
+hmac = "0.13"
 reqwest = { workspace = true, default-features = false, features = [
     "stream",
     "rustls-tls",
