@@ -38,7 +38,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/build
 
