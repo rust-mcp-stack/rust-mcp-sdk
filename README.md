@@ -9,6 +9,7 @@
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-rust_mcp_SDK-0ECDAB?style=for-the-badge&logo=docs.rs" height="22">](https://docs.rs/rust-mcp-sdk)
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/ci.yml?style=for-the-badge" height="22">](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/ci.yml)
 [<img alt="conformance" src="https://img.shields.io/badge/conformance-2026--07--28%20100%25-green?style=for-the-badge" height="22">](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml)
+[<img alt="tier-check" src="https://img.shields.io/github/actions/workflow/status/rust-mcp-stack/rust-mcp-sdk/tier-check.yml?style=for-the-badge" height="22">](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/tier-check.yml)
 
 A high-performance, asynchronous Rust toolkit for building MCP servers and clients.
 
@@ -17,46 +18,52 @@ A high-performance, asynchronous Rust toolkit for building MCP servers and clien
 
 </div>
 
-This SDK fully implements the [MCP 2026-07-28](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/) stateless protocol and passes **100% of official MCP conformance tests** (110/110 server, 440/440 client).
+------
+
+**🥇 Tier 1 SDK:** passes 100% of scored conformance scenarios, and the official MCP conformance tool's `tier-check` reports **Tier 1** under SEP-1730. [Tier-check runs](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/tier-check.yml) · [release reports](https://github.com/rust-mcp-stack/rust-mcp-sdk/releases)
+
+✅ This SDK fully implements the [MCP 2026-07-28](https://docs.rs/rust-mcp-schema/latest/rust_mcp_schema/) stateless protocol and passes **100% of official MCP conformance tests**.
 
 `rust-mcp-sdk` provides the necessary components for developing both servers and clients in the MCP ecosystem. It leverages the [rust-mcp-schema](https://crates.io/crates/rust-mcp-schema) crate for type-safe schema objects and includes powerful procedural macros.
 
 Focus on your application logic, rust-mcp-sdk handles the protocol, transports, and the rest.
 
-> ⚠️ **Version notice:** This is `rust-mcp-sdk` **2.x**, implementing the new **MCP 2026-07-28** (stateless) specification.
-> For the previous **MCP 2025-11-25** specification, use **`rust-mcp-sdk` 1.x**:
-> ```toml
-> rust-mcp-sdk = "1"
-> ```
-> See the [upgrade guide](UPGRADING.md) to migrate from 1.x to 2.0.
+----
 
-> **Version matrix:**
-> | SDK version | Protocol | Branch |
-> |---|---|---|
-> | 2.0 | MCP 2026-07-28 (stateless) | `main` |
-> | 1.x (LTS) | MCP 2025-11-25 | `release-1.x` |
->
-> **Upgrading?** See the [upgrade guide](UPGRADING.md).
+**Version notice:** This is `rust-mcp-sdk` **2.x**, implementing the new **MCP 2026-07-28** (stateless) specification.
+ For the previous **MCP 2025-11-25** specification, use **`rust-mcp-sdk` 1.x**. 
+ See the [upgrade guide](UPGRADING.md) to migrate from 1.x to 2.0.
+
+**Version matrix:**
+| SDK version | Protocol | Branch |
+|---|---|---|
+| 2.0 | MCP 2026-07-28 (stateless) | `main` |
+| 1.x (LTS) | MCP 2025-11-25 | `release-1.x` |
+
+----
+
+**Upgrading?** See the [upgrade guide](UPGRADING.md).
 
 **Key Features**
-- MCP 2026-07-28 (stateless protocol)
-- **100% MCP Conformance** - server 110/110, client 440/440 on 2026-07-28
-- Transports: Stdio, Streamable HTTP, and backward-compatible SSE support
-- Framework Agnostic: Axum, Actix, and BYO Server integrations
-- MRTR (Mid-Request Turn-Around) for server→client input requests
-- Response cache (SEP-2549) with principal-scoped privacy + auto-pagination
-- Per-request `_meta` with `RequestContext`
-- Multi-client concurrency
-- DNS Rebinding Protection
-- Message Observer (Telemetry & Monitoring)
-- HTTP Health Checks (for load balancers & container orchestration)
-- OAuth Authentication for MCP Servers
-  - [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs)
+- ✅ Latest MCP protocol specification supported: 2026-07-28 
+- **🥇 Tier 1 SDK** - official MCP conformance tool's `tier-check` reports **Tier 1** under SEP-1730. [see tier-check runs](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/tier-check.yml)·
+- ✅ **100% MCP Conformance** - passes all [official](https://github.com/modelcontextprotocol/conformance) client (254/254) and server (40/40) [conformance tests](https://github.com/rust-mcp-stack/rust-mcp-sdk/actions/workflows/conformance.yml)
+- ✅ Transports: Stdio, Streamable HTTP, and backward-compatible SSE support
+- ✅ Framework Agnostic: Axum, Actix, and BYO Server integrations
+- ✅ MRTR (Mid-Request Turn-Around) for server→client input requests
+- ✅ Response cache (SEP-2549) with principal-scoped privacy + auto-pagination
+- ✅ Per-request `_meta` with `RequestContext`
+- ✅ Multi-client concurrency
+- ✅ DNS Rebinding Protection
+- ✅ Message Observer (Telemetry & Monitoring)
+- ✅ HTTP Health Checks (for load balancers & container orchestration)
+- ✅ OAuth Authentication for MCP Servers
+  - ✅ [Remote Oauth Provider](crates/rust-mcp-sdk/src/auth/auth_provider/remote_auth_provider.rs)
     - **Keycloak** Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#keycloak))
     - **WorkOS** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#workos-authkit))
     - **Scalekit** Authkit Provider (via [rust-mcp-extra](crates/rust-mcp-extra/README.md#scalekit))
-- OAuth Authentication for MCP Clients (metadata discovery, CIMD, PKCE, token refresh, pluggable storage)
-- Issuer-bound credentials (SEP-2352), strict `iss` validation (SEP-2468)
+- ✅ OAuth Authentication for MCP Clients (metadata discovery, CIMD, PKCE, token refresh, pluggable storage)
+- ✅ Issuer-bound credentials (SEP-2352), strict `iss` validation (SEP-2468)
 
 ## Table of Contents
 - [Quick Start](#quick-start)
