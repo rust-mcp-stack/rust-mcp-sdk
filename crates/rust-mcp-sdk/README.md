@@ -13,7 +13,7 @@
 
 A high-performance, asynchronous Rust toolkit for building MCP servers and clients.
 
-[Documentation](https://rust-mcp-stack.github.io/rust-mcp-sdk/) · [Tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/tutorials/build-your-first-mcp-server) · [Examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) · [Upgrade Guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/UPGRADING.md) · [Changelog](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/CHANGELOG.md) <br/>
+[📖 Documentation](https://rust-mcp-stack.github.io/rust-mcp-sdk/) · [Tutorials](https://rust-mcp-stack.github.io/rust-mcp-sdk/docs/tutorials/build-your-first-mcp-server) · [Examples](https://github.com/rust-mcp-stack/rust-mcp-sdk/tree/main/crates/rust-mcp-sdk/examples) · [Upgrade Guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/UPGRADING.md) · [Changelog](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/CHANGELOG.md) <br/>
 [Contributing](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/CONTRIBUTING.md) · [Report a bug](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=bug_report.md) · [Request a Feature](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/new?template=feature_request.md)
 
 </div>
@@ -41,6 +41,7 @@ Focus on your application logic, rust-mcp-sdk handles the protocol, transports, 
 | 1.x (LTS) | MCP 2025-11-25 | `release-1.x` |
 
 **Upgrading?** See the [upgrade guide](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/UPGRADING.md).
+
 ----
 
 
@@ -64,6 +65,7 @@ Focus on your application logic, rust-mcp-sdk handles the protocol, transports, 
     - **Scalekit** Authkit Provider (via [rust-mcp-extra](https://github.com/rust-mcp-stack/rust-mcp-sdk/blob/main/crates/rust-mcp-extra/README.md#scalekit))
 - ✅ OAuth Authentication for MCP Clients (metadata discovery, CIMD, PKCE, token refresh, pluggable storage)
 - ✅ Issuer-bound credentials (SEP-2352), strict `iss` validation (SEP-2468)
+
 
 ## Table of Contents
 - [Quick Start](#quick-start)
