@@ -30,7 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.1"
 
       - uses: Swatinem/rust-cache@v2
         with:
