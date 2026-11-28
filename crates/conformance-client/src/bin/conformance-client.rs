@@ -33,6 +33,9 @@ async fn main() {
             client::scenarios::http_invalid_tool_headers::run(server_url).await
         }
         "http-standard-headers" => client::scenarios::http_standard_headers::run(server_url).await,
+        "json-schema-2020-12-preservation" => {
+            client::scenarios::json_schema_2020_12::run(server_url).await
+        }
         "json-schema-ref-no-deref" => {
             client::scenarios::json_schema_ref_no_deref::run(server_url).await
         }

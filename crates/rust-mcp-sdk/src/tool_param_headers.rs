@@ -19,8 +19,8 @@
 //! invalid when:
 //!
 //! - the header name is empty,
-//! - the annotated property is not a primitive (`string` / `number` /
-//!   `integer` / `boolean`),
+//! - the annotated property is not an allowed primitive (`string` /
+//!   `integer` / `boolean`, `number` is excluded by SEP-2243),
 //! - the same header name is declared twice on one tool (case-insensitive),
 //! - the header name contains characters outside the visible-ASCII range
 //!   (0x21–0x7E) or a colon.
@@ -114,10 +114,10 @@ fn parse_annotations(tool: &Tool) -> AnnotationParse {
             return AnnotationParse::Invalid;
         }
 
-        // The annotated property must be a primitive type.
+        // SEP-2243 allows only these primitive types.
         let primitive = matches!(
             prop_obj.get("type").and_then(|t| t.as_str()),
-            Some("string") | Some("number") | Some("integer") | Some("boolean")
+            Some("string") | Some("integer") | Some("boolean")
         );
         if !primitive {
             return AnnotationParse::Invalid;
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn non_primitive_types_are_invalid() {
-        for bad in ["object", "array", "null"] {
+        for bad in ["object", "array", "null", "number"] {
             let tool = tool_with_properties(json!({
                 "p": { "type": bad, "x-mcp-header": "X" }
             }));
@@ -526,5 +526,24 @@ mod tests {
             &registry
         )
         .is_none());
+    }
+
+    #[test]
+    fn input_schema_round_trip_preserves_keywords() {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "$defs": { "address": { "$anchor": "addressDef", "type": "object" } },
+            "additionalProperties": false,
+            "properties": { "street": { "type": "string" } }
+        });
+
+        let parsed: crate::schema::ToolInputSchema =
+            serde_json::from_value(schema.clone()).unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+
+        for key in ["$schema", "$defs", "additionalProperties"] {
+            assert_eq!(serialized.get(key), schema.get(key), "{key} must survive");
+        }
     }
 }

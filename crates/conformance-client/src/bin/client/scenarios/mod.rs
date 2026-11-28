@@ -7,6 +7,7 @@ pub mod http_custom_headers;
 pub mod http_invalid_tool_headers;
 pub mod http_standard_headers;
 pub mod initialize;
+pub mod json_schema_2020_12;
 pub mod json_schema_ref_no_deref;
 pub mod mrtr;
 pub mod request_metadata;

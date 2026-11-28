@@ -38,7 +38,7 @@ jobs:
 
       - name: Run conformance (2026-07-28)
         run: |
-          npx @modelcontextprotocol/conformance@0.2.0-alpha.10 server \
+          npx @modelcontextprotocol/conformance@0.2.0-alpha.12 server \
             --url http://127.0.0.1:3101/mcp \
             --spec-version 2026-07-28 \
             --suite all
@@ -62,7 +62,7 @@ jobs:
 
       - name: Run conformance (2026-07-28)
         run: |
-          npx @modelcontextprotocol/conformance@0.2.0-alpha.10 client \
+          npx @modelcontextprotocol/conformance@0.2.0-alpha.12 client \
             --command ./target/release/conformance-client \
             --spec-version 2026-07-28 \
             --suite all
