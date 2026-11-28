@@ -149,7 +149,7 @@ mod tests {
         let token = encode(
             &Header::new(Algorithm::HS256),
             &serde_json::json!({ "sub": "attacker" }),
-            &EncodingKey::from_secret(b"public-key-as-secret"),
+            &EncodingKey::from_secret(b"public-key-as-secret").unwrap(),
         )
         .unwrap();
 
@@ -167,7 +167,7 @@ mod tests {
         let token = encode(
             &Header::new(Algorithm::HS256),
             &serde_json::json!({ "sub": "attacker" }),
-            &EncodingKey::from_secret(b"public-key-as-secret"),
+            &EncodingKey::from_secret(b"public-key-as-secret").unwrap(),
         )
         .unwrap();
 
