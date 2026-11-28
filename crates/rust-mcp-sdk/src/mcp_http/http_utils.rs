@@ -211,7 +211,7 @@ async fn create_sse_stream(
         let body = Full::new(Bytes::from(
             r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Too many active subscription streams"}}"#,
         ))
-        .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        .map_err(|err| -> McpHttpError { match err {} })
         .boxed();
         let response = http::Response::builder()
             .status(StatusCode::TOO_MANY_REQUESTS)
@@ -416,7 +416,7 @@ async fn single_shot_stream(
                     .map(status_for_rpc_error_code)
                     .unwrap_or(StatusCode::OK);
                 let body = Full::new(Bytes::from(response_str))
-                    .map_err(|err| McpHttpError::HttpError(err.to_string()))
+                    .map_err(|err| -> McpHttpError { match err {} })
                     .boxed();
 
                 http::Response::builder()
@@ -427,7 +427,7 @@ async fn single_shot_stream(
             }
             Err(err) => {
                 let body = Full::new(Bytes::from(err.to_string()))
-                    .map_err(|err| McpHttpError::HttpError(err.to_string()))
+                    .map_err(|err| -> McpHttpError { match err {} })
                     .boxed();
                 http::Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -440,7 +440,7 @@ async fn single_shot_stream(
             let body = Full::new(Bytes::from(
                 "End of the transport stream reached.".to_string(),
             ))
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed();
             http::Response::builder()
                 .status(StatusCode::UNPROCESSABLE_ENTITY)
@@ -920,7 +920,7 @@ pub fn error_response(
 ) -> McpHttpResult<http::Response<GenericBody>> {
     let error_string = serde_json::to_string(&error).unwrap_or_default();
     let body = Full::new(Bytes::from(error_string))
-        .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        .map_err(|err| -> McpHttpError { match err {} })
         .boxed();
 
     http::Response::builder()
@@ -952,7 +952,7 @@ pub fn jsonrpc_error_response(
     });
     let error_string = serde_json::to_string(&envelope).unwrap_or_default();
     let body = Full::new(Bytes::from(error_string))
-        .map_err(|err| McpHttpError::HttpError(err.to_string()))
+        .map_err(|err| -> McpHttpError { match err {} })
         .boxed();
 
     http::Response::builder()

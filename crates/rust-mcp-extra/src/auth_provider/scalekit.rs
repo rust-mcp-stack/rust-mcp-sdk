@@ -187,7 +187,7 @@ impl ScalekitAuthProvider {
         response_str: String,
     ) -> McpHttpResult<http::Response<GenericBody>> {
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
@@ -203,7 +203,7 @@ impl ScalekitAuthProvider {
         use http_body_util::BodyExt;
 
         let body = Full::new(Bytes::from(response_str))
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed();
         http::Response::builder()
             .status(StatusCode::OK)
