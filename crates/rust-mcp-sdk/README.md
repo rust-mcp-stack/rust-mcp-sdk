@@ -99,7 +99,7 @@ Focus on your application logic, rust-mcp-sdk handles the protocol, transports, 
 Add to your Cargo.toml:
 ```toml
 [dependencies]
-rust-mcp-sdk = "2.0.0"  # Check crates.io for the latest version
+rust-mcp-sdk = "2.0.1"  # Check crates.io for the latest version
 ```
 <!-- x-release-please-end -->
 
@@ -501,7 +501,7 @@ All features are enabled by default:
 
 ```toml
 [dependencies]
-rust-mcp-sdk = "2.0.0"
+rust-mcp-sdk = "2.0.1"
 ```
 <!-- x-release-please-end -->
 
@@ -511,7 +511,7 @@ rust-mcp-sdk = "2.0.0"
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "2.0.0", default-features = false, features = ["server", "macros", "stdio"] }
+rust-mcp-sdk = { version = "2.0.1", default-features = false, features = ["server", "macros", "stdio"] }
 ```
 <!-- x-release-please-end -->
 
@@ -521,7 +521,7 @@ rust-mcp-sdk = { version = "2.0.0", default-features = false, features = ["serve
 
 ```toml
 [dependencies]
-rust-mcp-sdk = { version = "2.0.0", default-features = false, features = ["client", "stdio"] }
+rust-mcp-sdk = { version = "2.0.1", default-features = false, features = ["client", "stdio"] }
 ```
 <!-- x-release-please-end -->
 

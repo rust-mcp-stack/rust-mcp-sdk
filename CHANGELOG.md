@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v2.0.0...rust-mcp-sdk-v2.0.1) (2026-11-28)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** Adapt to Rust 1.100 Infallible lint and pin toolchain ([#298](https://github.com/rust-mcp-stack/rust-mcp-sdk/issues/298)) ([340065c](https://github.com/rust-mcp-stack/rust-mcp-sdk/commit/340065c8175495c93121981c53c38432b9f9f9af))
+
 ## [2.0.0](https://github.com/rust-mcp-stack/rust-mcp-sdk/compare/rust-mcp-sdk-v1.1.0...rust-mcp-sdk-v2.0.0) (2026-08-27)
 
 
