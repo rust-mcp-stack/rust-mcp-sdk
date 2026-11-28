@@ -331,6 +331,22 @@ impl OauthProtectedResourceMetadata {
             dpop_bound_access_tokens_required: Default::default(),
         })
     }
+
+    /// Identifier to send in RFC 8707 `resource` parameters.
+    ///
+    /// `Url` normalizes an origin-only identifier to a trailing slash
+    pub fn resource_identifier(&self) -> String {
+        let origin_only = matches!(self.resource.scheme(), "http" | "https")
+            && self.resource.path() == "/"
+            && self.resource.query().is_none()
+            && self.resource.fragment().is_none();
+        let resource = self.resource.as_str();
+        if origin_only {
+            resource.trim_end_matches('/').to_string()
+        } else {
+            resource.to_string()
+        }
+    }
 }
 
 pub fn create_protected_resource_metadata_url(path: &str) -> String {
@@ -539,5 +555,28 @@ mod tests {
         assert_eq!(round.grant_types_supported, Some(vec![]));
         assert_eq!(round.response_modes_supported, None);
         let _ = serde_json::to_string(&round).unwrap();
+    }
+
+    #[test]
+    fn resource_identifier_drops_synthetic_trailing_slash() {
+        let prm = OauthProtectedResourceMetadata::new(
+            "https://example.com",
+            vec!["https://as.example"],
+            None,
+        )
+        .unwrap();
+        assert_eq!(prm.resource.as_str(), "https://example.com/");
+        assert_eq!(prm.resource_identifier(), "https://example.com");
+    }
+
+    #[test]
+    fn resource_identifier_keeps_paths() {
+        let prm = OauthProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://as.example"],
+            None,
+        )
+        .unwrap();
+        assert_eq!(prm.resource_identifier(), "https://example.com/mcp");
     }
 }

@@ -27,7 +27,7 @@ The 2026-07-28 protocol is stateless and POST-only. No GET, SSE, `/sse`, or `/me
 
 ```bash
 cargo run -p conformance-server &
-npx @modelcontextprotocol/conformance@0.2.0-alpha.10 server --url http://127.0.0.1:3101/mcp --spec-version 2026-07-28 --suite all
+npx @modelcontextprotocol/conformance@0.2.0-alpha.12 server --url http://127.0.0.1:3101/mcp --spec-version 2026-07-28 --suite all
 ```
 
 ## Implemented Features

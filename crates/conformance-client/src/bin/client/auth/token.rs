@@ -27,7 +27,7 @@ pub(super) fn build_auth_client(
 ) -> Result<McpAuthClient, String> {
     let mut builder = McpAuthConfig::builder()
         .server_url(discovery.auth_server_url())
-        .resource(server_url)
+        .resource(resource_for(discovery, server_url))
         .redirect_uri(REDIRECT_URI)
         .client_metadata_url(CIMD_URL);
 
@@ -43,6 +43,17 @@ pub(super) fn build_auth_client(
     }
 
     builder.build().map_err(|e| format!("{e}"))
+}
+
+/// Prefer the resource identifier published in the PRM, fall back to the MCP
+/// server URL when the server has no PRM.
+fn resource_for(discovery: &Discovery, server_url: &str) -> String {
+    discovery
+        .server_info
+        .resource_metadata
+        .as_ref()
+        .map(|prm| prm.resource_identifier())
+        .unwrap_or_else(|| server_url.to_string())
 }
 
 /// Acquire a bearer-token header map for the initial connection. Returns
@@ -182,4 +193,51 @@ pub(super) fn bearer_headers(access_token: &str) -> HashMap<String, String> {
         format!("Bearer {}", access_token),
     );
     h
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_mcp_sdk::auth::{
+        AuthorizationServerMetadata, OauthProtectedResourceMetadata, OauthServerInfo,
+    };
+
+    fn discovery(prm: Option<OauthProtectedResourceMetadata>) -> Discovery {
+        Discovery {
+            server_info: OauthServerInfo {
+                authorization_server_url: "https://as.example".to_string(),
+                authorization_server_metadata: AuthorizationServerMetadata::new(
+                    "https://as.example",
+                    "https://as.example/authorize",
+                    "https://as.example/token",
+                )
+                .unwrap(),
+                resource_metadata: prm,
+            },
+            selected_scope: None,
+            supports_auth_code: false,
+        }
+    }
+
+    #[test]
+    fn resource_uses_prm_identifier() {
+        let prm = OauthProtectedResourceMetadata::new(
+            "https://example.com",
+            vec!["https://as.example"],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            resource_for(&discovery(Some(prm)), "https://example.com/mcp"),
+            "https://example.com"
+        );
+    }
+
+    #[test]
+    fn resource_falls_back_to_server_url() {
+        assert_eq!(
+            resource_for(&discovery(None), "https://example.com/mcp"),
+            "https://example.com/mcp"
+        );
+    }
 }

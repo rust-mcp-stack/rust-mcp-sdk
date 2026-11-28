@@ -26,7 +26,8 @@ jobs:
     env:
       MCP_CONFORMANCE_PORT: "3101"
       # Stable 0.1.16 predates MCP 2026-07-28. Keep this aligned with conformance.yml.
-      CONFORMANCE_VERSION: "0.2.0-alpha.10"
+      # alpha.12 fixes stable-release detection for component-prefixed tags (e.g. rust-mcp-sdk-v2.0.1).
+      CONFORMANCE_VERSION: "0.2.0-alpha.12"
     steps:
       - uses: actions/checkout@v7
 
