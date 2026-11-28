@@ -43,7 +43,7 @@ pub trait GenericBodyExt {
 impl GenericBodyExt for GenericBody {
     fn from_string(s: String) -> Self {
         Full::new(Bytes::from(s))
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed()
     }
 
@@ -53,13 +53,13 @@ impl GenericBodyExt for GenericBody {
             Err(_) => Bytes::from_static(b"{\"error\":\"internal_error\"}"),
         };
         Full::new(bytes)
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed()
     }
 
     fn empty() -> Self {
         Full::new(Bytes::new())
-            .map_err(|err| McpHttpError::HttpError(err.to_string()))
+            .map_err(|err| -> McpHttpError { match err {} })
             .boxed()
     }
 
